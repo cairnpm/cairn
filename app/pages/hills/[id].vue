@@ -1,0 +1,3 @@
+<template>
+  <HillsScreen />
+</template>
