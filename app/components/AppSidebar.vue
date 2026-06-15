@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const bike = useBicycle()
-const { screen, team } = bike
+const { screen, team, author } = bike
 
 const nav = [
   { id: 'intake' as const, label: 'Intake', to: '/' },
@@ -53,16 +53,18 @@ const nav = [
       </NuxtLink>
     </nav>
 
-    <!-- Team -->
+    <!-- Team / current user — click an avatar to act as that person (collaborative attribution) -->
     <div style="padding: 12px 16px; border-top: 1px solid #e4e4e7; flex-shrink: 0;">
-      <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px;">Équipe</div>
-      <div style="display: flex;">
-        <div
+      <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px;">Connecté en tant que</div>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button
           v-for="m in team"
           :key="m.init"
-          :title="m.name"
-          :style="{ width: '30px', height: '30px', borderRadius: '50%', background: m.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 600, border: '2px solid white', marginRight: '2px' }"
-        >{{ m.init }}</div>
+          :title="`Agir en tant que ${m.name}`"
+          :style="{ width: '30px', height: '30px', borderRadius: '50%', background: m.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 600, cursor: 'pointer', padding: 0, border: author === m.name ? '2px solid #18181b' : '2px solid transparent', outline: author === m.name ? '2px solid white' : 'none', outlineOffset: '-4px' }"
+          @click="bike.setAuthor(m.name)"
+        >{{ m.init }}</button>
+        <span style="font-size: 12px; color: #71717a; margin-left: 4px;">{{ author }}</span>
       </div>
     </div>
   </aside>

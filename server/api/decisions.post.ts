@@ -1,4 +1,5 @@
 import { get, run, tx } from '~~/server/db/client'
+import { logEvent } from '~~/server/db/events'
 import { ensureSchema } from '~~/server/db/schema'
 import type { Verdict } from '~~/server/domain/types'
 import { newId } from '~~/server/utils/id'
@@ -38,6 +39,8 @@ export default defineEventHandler(async (event) => {
       run('UPDATE features SET status = ?, hill_id = ?, stale = 0, updated_at = ? WHERE id = ?', 'bet', hillId, now, featureId)
     }
     // pass / defer: feature stays `shaped` and is a candidate for stale (no auto-carry).
+    const label = verdict === 'bet' ? 'Parié (bet)' : verdict === 'defer' ? 'Reporté (defer)' : 'Écarté (pass)'
+    logEvent(featureId, decidedBy, verdict, `${label} par ${decidedBy || 'inconnu'}`, { rationale, hill_id: hillId })
   })
 
   return { id, feature_id: featureId, verdict, decided_at: now }

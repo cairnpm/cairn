@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { all, get, run, tx } from '../db/client'
+import { logEvent } from '../db/events'
 import { ensureSchema } from '../db/schema'
 import type {
   Candidate, Feature, IntakeSessionData, Proposal, TurnResponse,
@@ -8,7 +9,8 @@ import { getLlm } from '../llm/provider'
 import { cosine, decodeEmbedding, encodeEmbedding, localEmbed } from '../utils/embedding'
 import { newId } from '../utils/id'
 
-const MAX_TURNS = 5          // bounded loop — must converge to a commit
+const MAX_TURNS = 18         // bounded loop — the agent decides how many shaping turns it needs;
+                            // this is only a safety ceiling that forces a proposal so it always converges
 const CANDIDATE_FLOOR = 0.15 // ignore near-zero similarities in the candidate list
 const TOP_K = 5
 
@@ -144,16 +146,18 @@ export async function intakeCommit(sessionId: string): Promise<CommitResult> {
         'UPDATE features SET signal_count = signal_count + 1, stale = 0, embedding = ?, updated_at = ? WHERE id = ?',
         encodeEmbedding(localEmbed(merged)), now, featureId,
       )
+      logEvent(featureId, data.captured_by, 'signal_added', `Signal rattaché par ${data.captured_by || 'inconnu'}`, { content: data.raw })
     } else {
       // create_feature
       featureId = newId()
       const spec = proposal.proposed_spec
       run(
-        `INSERT INTO features (id, title, problem, appetite, out_of_bounds, status, stale, signal_count, embedding, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'shaped', 0, 1, ?, ?, ?)`,
-        featureId, spec.title, spec.problem, spec.appetite, spec.out_of_bounds || null,
-        encodeEmbedding(localEmbed([spec.title, spec.problem].join(' \n '))), now, now,
+        `INSERT INTO features (id, title, problem, appetite, solution, rabbit_holes, out_of_bounds, status, stale, signal_count, embedding, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'shaped', 0, 1, ?, ?, ?)`,
+        featureId, spec.title, spec.problem, spec.appetite, spec.solution || null, spec.rabbit_holes || null, spec.out_of_bounds || null,
+        encodeEmbedding(localEmbed([spec.title, spec.problem, spec.solution].join(' \n '))), now, now,
       )
+      logEvent(featureId, data.captured_by, 'created', `Feature créée par ${data.captured_by || 'inconnu'}`, { title: spec.title })
     }
 
     run(

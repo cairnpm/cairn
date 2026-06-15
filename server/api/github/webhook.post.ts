@@ -1,4 +1,5 @@
 import { get, run, tx } from '~~/server/db/client'
+import { logEvent } from '~~/server/db/events'
 import { ensureSchema } from '~~/server/db/schema'
 
 // GitHub PR webhook → update pr_links → autoclose the linked feature on merge.
@@ -28,6 +29,7 @@ export default defineEventHandler(async (event) => {
     )
     if (status === 'merged' && link.auto_close) {
       run('UPDATE features SET status = ?, updated_at = ? WHERE id = ?', 'done', now, link.feature_id)
+      logEvent(link.feature_id, 'github', 'pr_merged', `PR ${repo}#${number} mergée → feature passée en done`, { repo, pr_number: number }, 'system')
     }
   })
 

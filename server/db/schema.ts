@@ -24,9 +24,11 @@ export function ensureSchema(): void {
     CREATE TABLE IF NOT EXISTS features (
       id             TEXT PRIMARY KEY,
       title          TEXT NOT NULL,
-      problem        TEXT NOT NULL,
+      problem        TEXT NOT NULL,                  -- what actually breaks today
       appetite       TEXT,                           -- small | big
-      out_of_bounds  TEXT,
+      solution       TEXT,                           -- shaped approach (the pitch's core idea)
+      rabbit_holes   TEXT,                           -- risks / pitfalls to avoid
+      out_of_bounds  TEXT,                           -- no-gos: explicitly excluded
       status         TEXT NOT NULL DEFAULT 'shaped', -- raw | shaped | bet | building | done | archived
       stale          INTEGER NOT NULL DEFAULT 0,
       hill_id        TEXT REFERENCES hills(id),
@@ -82,6 +84,20 @@ export function ensureSchema(): void {
       model             TEXT,
       created_at        TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    -- Append-only activity log per feature (collaborative audit: who changed what, when).
+    -- actor–action–object–timestamp; 'detail' carries before/after for replacements.
+    CREATE TABLE IF NOT EXISTS feature_events (
+      seq         INTEGER PRIMARY KEY AUTOINCREMENT, -- monotonic ordering
+      feature_id  TEXT NOT NULL REFERENCES features(id),
+      actor       TEXT NOT NULL,                     -- who (requester / decider / 'github')
+      actor_type  TEXT NOT NULL DEFAULT 'user',      -- user | agent | system
+      action      TEXT NOT NULL,                     -- created | signal_added | field_updated | bet | pass | defer | pr_linked | pr_merged
+      summary     TEXT NOT NULL,                     -- human-readable line
+      detail      TEXT,                              -- JSON: { field, before, after, content, ... }
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS events_by_feature ON feature_events (feature_id, seq);
 
     -- Conversational intake session (state lives here, not a definitive write)
     CREATE TABLE IF NOT EXISTS intake_session (

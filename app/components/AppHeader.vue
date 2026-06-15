@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const bike = useBicycle()
-const { screen, pageMeta, ticketCount, selectedHill } = bike
+const { screen, pageMeta, selectedHill } = bike
 
 const btnDark = 'padding: 7px 14px; background: #18181b; color: white; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;'
 const btnLight = 'padding: 7px 14px; background: white; color: #18181b; border: 1px solid #e4e4e7; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit;'
@@ -14,11 +14,11 @@ const btnLight = 'padding: 7px 14px; background: white; color: #18181b; border: 
     </div>
 
     <div style="display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
-      <!-- Intake -->
-      <span v-if="screen === 'intake'" style="font-size: 12px; color: #71717a; background: #f4f4f5; padding: 4px 12px; border-radius: 99px; font-weight: 500;">{{ ticketCount }} tickets</span>
-
-      <!-- Backlog -->
-      <button v-if="screen === 'backlog'" :style="btnDark" @click="bike.goTo('intake')">+ Nouveau ticket</button>
+      <!-- Backlog: the only way to add is the gateway -->
+      <template v-if="screen === 'backlog'">
+        <span style="font-size: 12px; color: #71717a; background: #f4f4f5; padding: 4px 12px; border-radius: 99px; font-weight: 500;">🔒 read-only</span>
+        <button :style="btnDark" @click="bike.goTo('intake')">+ Via l'Intake →</button>
+      </template>
 
       <!-- Betting -->
       <template v-if="screen === 'betting'">
@@ -26,14 +26,11 @@ const btnLight = 'padding: 7px 14px; background: white; color: #18181b; border: 
           <div style="width: 20px; height: 20px; border-radius: 50%; background: #18181b; color: white; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700;">C</div>
           CEO
         </div>
-        <button :style="btnLight">↻ Regénérer</button>
-        <button :style="btnDark">Confirmer →</button>
       </template>
 
-      <!-- Hills (detail only) -->
+      <!-- Hills (detail) -->
       <template v-if="screen === 'hills' && selectedHill !== null">
         <button :style="btnLight" @click="bike.clearHill()">← Toutes les Hills</button>
-        <button :style="btnDark" @click="bike.goTo('betting')">Ouvrir Betting →</button>
       </template>
     </div>
   </header>

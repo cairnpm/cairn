@@ -7,9 +7,8 @@ const { screen } = bike
 
 // Closing panels (Sheets) when navigating between pages.
 watch(() => route.path, () => {
-  bike.clearTicket()
-  bike.clearCandidate()
-  bike.clearHillFeature()
+  bike.clearFeature()
+  bike.clearBet()
 })
 
 const contentPad = computed(() => (screen.value === 'intake' ? '0' : '24px'))
@@ -23,7 +22,7 @@ const contentOverflow = computed(() => (screen.value === 'intake' ? 'hidden' : '
     <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
       <AppHeader />
 
-      <div :style="{ flex: 1, overflow: contentOverflow, padding: contentPad }">
+      <div :style="{ flex: 1, minHeight: 0, overflow: contentOverflow, padding: contentPad }">
         <slot />
       </div>
     </div>

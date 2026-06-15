@@ -25,6 +25,8 @@ export interface Feature {
   title: string
   problem: string
   appetite: Appetite | null
+  solution: string | null
+  rabbit_holes: string | null
   out_of_bounds: string | null
   status: FeatureStatus
   stale: number
@@ -80,6 +82,8 @@ export interface ProposedSpec {
   title: string
   problem: string
   appetite: Appetite
+  solution: string
+  rabbit_holes: string
   out_of_bounds: string
 }
 

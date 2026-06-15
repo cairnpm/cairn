@@ -38,14 +38,22 @@ export function createStubProvider(): LlmProvider {
     classify: async (content: string) => heuristicClassify(content),
 
     clarify: async ({ raw, transcript }) => {
-      const askedBefore = transcript.some(t => t.role === 'agent' && t.text.includes('?'))
-      // Only ever ask once, and only when the brut is too thin to shape.
-      if (askedBefore) return null
-      if (wordCount(raw) < 6) {
-        return 'Peux-tu préciser le problème concret rencontré, et l’appétit (small = quelques jours, big = quelques semaines) ?'
+      // Shaping discipline (§4): force a real problem statement + appetite + out-of-bounds
+      // rather than a reworded request. Ask at most twice, then converge to a proposal.
+      const agentQuestions = transcript.filter(t => t.role === 'agent' && t.text.includes('?')).length
+      if (agentQuestions >= 3) return null
+
+      const userText = [raw, ...transcript.filter(t => t.role === 'user').map(t => t.text)].join(' ')
+      const hasAppetite = BIG.test(userText) || /\b(small|petit|rapide|jour|jours|semaine|semaines)\b/i.test(userText)
+      const thin = wordCount(userText) < 12
+
+      if (agentQuestions === 0) {
+        return 'Pour bien shaper : qu\'est-ce qui ne va vraiment pas / qu\'est-ce qui casse aujourd\'hui ? '
+          + 'Décris le problème concret, pas la solution.'
       }
-      if (!BIG.test(raw) && !/\b(small|petit|rapide|jour|jours)\b/i.test(raw)) {
-        return 'Quel appétit pour ça — small (quelques jours) ou big (quelques semaines) ?'
+      if (!hasAppetite || thin) {
+        return 'Et l\'appétit — small (quelques jours) ou big (quelques semaines) ? '
+          + 'Y a-t-il un hors-périmètre explicite (ce qu\'on ne fera PAS) ?'
       }
       return null
     },
@@ -64,7 +72,7 @@ export function createStubProvider(): LlmProvider {
             classification,
             confidence: Number(top.similarity.toFixed(2)),
             rationale: `Forte similarité (${(top.similarity * 100).toFixed(0)}%) avec « ${top.title} ». Rattachement proposé par défaut — créer une nouvelle feature reste une action délibérée.`,
-            proposed_spec: { title: top.title, problem: raw.trim(), appetite, out_of_bounds: '' },
+            proposed_spec: { title: top.title, problem: raw.trim(), appetite, solution: '', rabbit_holes: '', out_of_bounds: '' },
             candidates,
           }
         : {
@@ -75,7 +83,7 @@ export function createStubProvider(): LlmProvider {
             rationale: top
               ? `Meilleur candidat « ${top.title} » à ${(top.similarity * 100).toFixed(0)}% (< seuil ${DEDUP_STRONG * 100}%). Nouvelle feature proposée.`
               : 'Aucun doublon proche trouvé. Nouvelle feature proposée.',
-            proposed_spec: { title: makeTitle(raw), problem: raw.trim(), appetite, out_of_bounds: '' },
+            proposed_spec: { title: makeTitle(raw), problem: raw.trim(), appetite, solution: '', rabbit_holes: '', out_of_bounds: '' },
             candidates,
           }
       return proposal
