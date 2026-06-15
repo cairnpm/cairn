@@ -1,0 +1,25 @@
+# Nuxt dev/build outputs
+.nuxt
+.output
+.nitro
+.cache
+dist
+
+# Node dependencies
+node_modules
+*.log*
+.npmrc
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Misc
+.DS_Store
+.fleet
+.idea
+*.tsbuildinfo
+
+# Local data (SQLite file)
+.data
