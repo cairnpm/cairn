@@ -70,7 +70,9 @@ export interface PrLink {
 }
 
 // ── Intake conversation ──────────────────────────────────────────────────────
-export type IntakeState = 'gather' | 'clarify' | 'reflect' | 'propose' | 'committed' | 'pending_review'
+export type IntakeMode = 'signal' | 'query' | 'refine' | 'merge'
+export type IntakeState = 'gather' | 'clarify' | 'reflect' | 'propose' | 'committed' | 'pending_review' | 'answered'
+export interface Intent { intent: IntakeMode; target: string | null; target2?: string | null }
 
 export interface Candidate {
   feature_id: string
@@ -90,6 +92,7 @@ export interface ProposedSpec {
 export interface Proposal {
   action: Exclude<RoutingAction, 'pending'>
   target_feature_id: string | null
+  merge_from_feature_id?: string | null   // for action='merge': the absorbed feature
   classification: Classification
   confidence: number
   rationale: string
@@ -103,6 +106,11 @@ export interface IntakeSessionData {
   raw: string                 // the original brut input
   source: string
   captured_by: string | null
+  mode: IntakeMode
+  target_feature_id: string | null   // pinned target for `refine`
+  merge_from_id: string | null       // absorbed feature for `merge`
+  initial_action: string | null      // agent's first proposed action (quality metric)
+  initial_target: string | null      // agent's first proposed target (quality metric)
   transcript: TranscriptEntry[]
   proposal: Proposal | null
   candidates: Candidate[]

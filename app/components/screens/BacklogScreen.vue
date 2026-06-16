@@ -98,15 +98,14 @@ interface Detail {
   routing_log: { id: string; action: string; confidence: number; rationale: string; created_at: string }[]
 }
 
-function eventDetailText(e: FeatureEvent): string {
-  if (!e.detail) return ''
-  try {
-    const d = JSON.parse(e.detail) as Record<string, unknown>
-    if (typeof d.content === 'string') return d.content
-    if (typeof d.rationale === 'string') return d.rationale
-    if (typeof d.before === 'string' || typeof d.after === 'string') return `« ${d.before ?? '∅'} » → « ${d.after ?? '∅'} »`
-    return ''
-  } catch { return '' }
+interface FieldChange { field: string; label: string; before: string; after: string }
+interface ParsedDetail { content?: string; rationale?: string; before?: string; after?: string; changes?: FieldChange[] }
+function parseDetail(detail: string | null): ParsedDetail {
+  if (!detail) return {}
+  try { return JSON.parse(detail) as ParsedDetail } catch { return {} }
+}
+function trunc(s: string, n = 200): string {
+  return s.length > n ? s.slice(0, n).trimEnd() + '…' : s
 }
 const detail = ref<Detail | null>(null)
 watch(selectedFeatureId, async (id) => {
@@ -117,6 +116,13 @@ const open = computed({
   get: () => selectedFeatureId.value !== null,
   set: (v: boolean) => { if (!v) bike.clearFeature() },
 })
+
+// Pre-parse events; pitch refinements stay collapsed by default (digest).
+const eventsView = computed(() => (detail.value?.events || []).map(e => ({ ...e, parsed: parseDetail(e.detail) })))
+const expanded = ref<number[]>([])
+function toggleEvent(seq: number) {
+  expanded.value = expanded.value.includes(seq) ? expanded.value.filter(s => s !== seq) : [...expanded.value, seq]
+}
 </script>
 
 <template>
@@ -250,16 +256,36 @@ const open = computed({
             <a v-for="p in detail.pr_links" :key="p.id" :href="p.pr_url" style="display: block; font-size: 13px; color: #2563eb; text-decoration: none; font-family: 'Courier New', monospace; padding: 2px 0;">{{ p.repo }}#{{ p.pr_number }} · {{ p.status }}</a>
           </div>
 
-          <!-- Collaborative activity feed: who changed what, when -->
-          <div v-if="detail.events.length" style="padding: 14px 20px;">
+          <!-- Collaborative activity feed: one entry per contribution, refinements collapsed -->
+          <div v-if="eventsView.length" style="padding: 14px 20px;">
             <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 14px;">Activité</div>
-            <div v-for="(e, i) in detail.events" :key="e.seq" style="display: flex; gap: 10px; padding-bottom: 14px; position: relative;">
-              <!-- timeline rail -->
-              <div v-if="i < detail.events.length - 1" style="position: absolute; left: 13px; top: 28px; bottom: 0; width: 1px; background: #f0f0f0;" />
+            <div v-for="(e, i) in eventsView" :key="e.seq" style="display: flex; gap: 10px; padding-bottom: 14px; position: relative;">
+              <div v-if="i < eventsView.length - 1" style="position: absolute; left: 13px; top: 28px; bottom: 0; width: 1px; background: #f0f0f0;" />
               <div :style="{ width: '28px', height: '28px', borderRadius: '50%', background: actorAvatar(e.actor).bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, flexShrink: 0, zIndex: 1 }">{{ actorAvatar(e.actor).init }}</div>
               <div style="flex: 1; min-width: 0;">
                 <div style="font-size: 13px; color: #18181b; line-height: 1.45;">{{ e.summary }}</div>
-                <div v-if="eventDetailText(e)" style="font-size: 12px; color: #71717a; line-height: 1.45; margin-top: 2px; border-left: 2px solid #f0f0f0; padding-left: 8px;">{{ eventDetailText(e) }}</div>
+
+                <!-- signal content / rationale -->
+                <div v-if="e.parsed.content" style="font-size: 12px; color: #71717a; line-height: 1.45; margin-top: 3px; border-left: 2px solid #f0f0f0; padding-left: 8px;">{{ e.parsed.content }}</div>
+                <div v-else-if="e.parsed.rationale" style="font-size: 12px; color: #71717a; line-height: 1.45; margin-top: 3px; border-left: 2px solid #f0f0f0; padding-left: 8px;">{{ e.parsed.rationale }}</div>
+
+                <!-- grouped pitch refinements: collapsed by default -->
+                <template v-if="e.parsed.changes && e.parsed.changes.length">
+                  <button
+                    style="margin-top: 6px; font-size: 12px; color: #2563eb; background: none; border: none; padding: 0; cursor: pointer; font-family: inherit;"
+                    @click.stop="toggleEvent(e.seq)"
+                  >
+                    {{ expanded.includes(e.seq) ? '▾' : '▸' }} {{ e.parsed.changes.length }} champ{{ e.parsed.changes.length > 1 ? 's' : '' }} affiné{{ e.parsed.changes.length > 1 ? 's' : '' }}
+                  </button>
+                  <div v-if="expanded.includes(e.seq)" style="margin-top: 6px; display: flex; flex-direction: column; gap: 10px; border-left: 2px solid #f0f0f0; padding-left: 8px;">
+                    <div v-for="c in e.parsed.changes" :key="c.field">
+                      <div style="font-size: 12px; font-weight: 600; color: #18181b; margin-bottom: 2px;">{{ c.label }}</div>
+                      <div style="font-size: 12px; color: #a1a1aa; line-height: 1.4; text-decoration: line-through; text-decoration-color: #e4e4e7;">{{ trunc(c.before) || '∅' }}</div>
+                      <div style="font-size: 12px; color: #18181b; line-height: 1.4; margin-top: 2px;">{{ trunc(c.after) }}</div>
+                    </div>
+                  </div>
+                </template>
+
                 <div style="font-size: 11px; color: #a1a1aa; margin-top: 3px;">{{ relTime(e.created_at) }}</div>
               </div>
             </div>

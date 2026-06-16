@@ -82,6 +82,7 @@ export function ensureSchema(): void {
       confidence        REAL,
       rationale         TEXT,
       model             TEXT,
+      corrected         INTEGER NOT NULL DEFAULT 0,  -- human changed the agent's first proposal
       created_at        TEXT NOT NULL DEFAULT (datetime('now'))
     );
 

@@ -30,11 +30,47 @@ function wordCount(s: string): number {
   return s.trim().split(/\s+/).filter(Boolean).length
 }
 
+const REFINE_RE = /\b(sur (le |la )?(ticket|feature|pitch)|affiner|affine|pr[ée]cise|pr[ée]ciser|raffine|mets? [àa] jour|modifie|enrichi[rs]?)\b/i
+const QUERY_RE = /\b(o[ùu] en (est|sommes|sont)|avancement|statut|status|[ée]tat|combien|c'est quoi|qu'en est|on en est)\b/i
+const MERGE_RE = /\b(fusionne|fusionner|fusion|merge|doublon de)\b/i
+
+/** Extract a feature-name search string from a refine/query message. */
+function extractTarget(message: string): string {
+  const m = message.match(/(?:ticket|feature|pitch)\s+«?\s*([^,.?»\n]+)/i)
+  return (m ? m[1] : message).trim()
+}
+
+/** Extract (absorbed, surviving) feature names from a merge instruction. */
+function extractMergePair(message: string): { target: string | null, target2: string | null } {
+  // "X est un doublon de Y" → absorb X into Y
+  const dup = message.match(/(.+?)\s+est un doublon de\s+(.+)/i)
+  if (dup) return { target: dup[1].replace(MERGE_RE, '').trim(), target2: dup[2].trim() }
+  // "fusionne X et Y" / "fusionne X dans Y"
+  const pair = message.replace(MERGE_RE, '').match(/(.+?)\s+(?:et|dans|avec)\s+(.+)/i)
+  if (pair) return { target: pair[1].trim(), target2: pair[2].trim() }
+  return { target: extractTarget(message), target2: null }
+}
+
 /** Deterministic, offline provider. No network. */
 export function createStubProvider(): LlmProvider {
   return {
     name: 'stub',
     embed: async (text: string) => localEmbed(text),
+
+    detectIntent: async (message: string) => {
+      if (MERGE_RE.test(message)) {
+        const { target, target2 } = extractMergePair(message)
+        return { intent: 'merge', target, target2 }
+      }
+      if (REFINE_RE.test(message)) return { intent: 'refine', target: extractTarget(message), target2: null }
+      if (QUERY_RE.test(message) || (message.trim().endsWith('?') && /\b(feature|ticket|pitch)\b/i.test(message))) {
+        return { intent: 'query', target: extractTarget(message), target2: null }
+      }
+      return { intent: 'signal', target: null, target2: null }
+    },
+
+    answerQuery: async (_question: string, context: string) => `Voici l'état actuel :\n\n${context}`,
+
     classify: async (content: string) => heuristicClassify(content),
 
     clarify: async ({ raw, transcript }) => {

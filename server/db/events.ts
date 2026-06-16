@@ -1,6 +1,6 @@
 import { run } from './client'
 
-export type EventAction = 'created' | 'signal_added' | 'field_updated' | 'bet' | 'pass' | 'defer' | 'pr_linked' | 'pr_merged'
+export type EventAction = 'created' | 'signal_added' | 'field_updated' | 'bet' | 'pass' | 'defer' | 'pr_linked' | 'pr_merged' | 'stale' | 'merged' | 'discarded'
 export type ActorType = 'user' | 'agent' | 'system'
 
 /**

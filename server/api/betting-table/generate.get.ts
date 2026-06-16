@@ -1,5 +1,6 @@
 import { all, get } from '~~/server/db/client'
 import { ensureSchema } from '~~/server/db/schema'
+import { markStaleFeatures } from '~~/server/db/stale'
 import type { Feature } from '~~/server/domain/types'
 import { cosine, decodeEmbedding } from '~~/server/utils/embedding'
 
@@ -8,6 +9,7 @@ const CLUSTER_THRESHOLD = 0.4
 // On-demand betting-table generation. Returns a RANKED MENU, never a decision.
 export default defineEventHandler((event) => {
   ensureSchema()
+  markStaleFeatures()
   const now = Date.now()
 
   const features = all<Feature>(`SELECT * FROM features WHERE status = 'shaped'`)

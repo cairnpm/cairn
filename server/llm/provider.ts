@@ -1,10 +1,12 @@
-import type { Candidate, Classification, Proposal, TranscriptEntry } from '../domain/types'
+import type { Candidate, Classification, Intent, Proposal, TranscriptEntry } from '../domain/types'
 
 export interface ProposeInput {
   raw: string
   transcript: TranscriptEntry[]
   candidates: Candidate[]
   classification: Classification
+  /** Present when refining a known feature — its current pitch, to merge into. */
+  existing?: { title: string; problem: string; solution: string; rabbit_holes: string; out_of_bounds: string; appetite: string }
 }
 
 /**
@@ -15,6 +17,10 @@ export interface ProposeInput {
 export interface LlmProvider {
   name: string
   embed: (text: string) => Promise<number[]>
+  /** Route the input: a read-only question, a refine of a named feature, or a raw signal. */
+  detectIntent: (message: string) => Promise<Intent>
+  /** Answer a read-only question about a feature from its current DB state (no writing). */
+  answerQuery: (question: string, context: string) => Promise<string>
   classify: (content: string) => Promise<Classification>
   /** A single targeted question, or null when the spec is complete enough. */
   clarify: (input: { raw: string; transcript: TranscriptEntry[] }) => Promise<string | null>
