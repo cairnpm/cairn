@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { all, get, run, tx } from '../db/client'
+import { getAttachment, linkAttachments, uploadsDir } from '../db/attachments'
 import { logEvent } from '../db/events'
 import { ensureSchema } from '../db/schema'
 import type {
   Candidate, Feature, IntakeSessionData, IntakeState, Proposal, TurnResponse,
 } from '../domain/types'
 import { getLlm } from '../llm/provider'
+import type { AttachmentForLlm, LlmProvider } from '../llm/provider'
 import { cosine, decodeEmbedding, encodeEmbedding, localEmbed } from '../utils/embedding'
 import { newId } from '../utils/id'
 
@@ -102,13 +106,34 @@ function saveSession(id: string, state: string, turns: number, data: IntakeSessi
 }
 
 // ── A single intake turn (the conversational loop) ───────────────────────────
-export async function intakeTurn(sessionId: string | null, message: string, source = 'manual', capturedBy: string | null = null): Promise<TurnResponse> {
+/** Read uploaded files and turn them into French context text (vision for images, inline for text). */
+async function extractAttachmentContext(ids: string[], llm: LlmProvider): Promise<string> {
+  if (!ids.length || !llm.extractAttachments) return ''
+  const items: AttachmentForLlm[] = []
+  for (const id of ids) {
+    const a = getAttachment(id)
+    if (!a) continue
+    try {
+      const buf = readFileSync(join(uploadsDir(), a.storage_path))
+      if (a.kind === 'image') items.push({ kind: 'image', mime: a.mime, filename: a.filename, base64: buf.toString('base64') })
+      else if (a.kind === 'text') items.push({ kind: 'text', mime: a.mime, filename: a.filename, text: buf.toString('utf8') })
+    } catch { /* skip unreadable */ }
+  }
+  return items.length ? llm.extractAttachments(items) : ''
+}
+
+export async function intakeTurn(sessionId: string | null, message: string, source = 'manual', capturedBy: string | null = null, attachmentIds: string[] = []): Promise<TurnResponse> {
   ensureSchema()
   const llm = await getLlm()
-  const text = message.trim()
+  let text = message.trim()
 
   // First turn — detect intent (query / refine / signal) and open a session.
   if (!sessionId) {
+    // Fold attached files into the raw signal as context before routing/shaping.
+    if (attachmentIds.length) {
+      const extracted = await extractAttachmentContext(attachmentIds, llm)
+      if (extracted) text = `${text}\n\n[Contexte des pièces jointes]\n${extracted}`
+    }
     const id = newId()
     const intent = await llm.detectIntent(text)
     const data: IntakeSessionData = {
@@ -116,6 +141,7 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
       mode: intent.intent, target_feature_id: null, merge_from_id: null,
       initial_action: null, initial_target: null,
       transcript: [{ role: 'user', text }], proposal: null, candidates: [],
+      attachment_ids: attachmentIds,
     }
 
     // Read-only question → answer from current state, no write.
@@ -264,9 +290,17 @@ async function advance(
         ? { title: target.title, problem: target.problem, solution: target.solution || '', rabbit_holes: target.rabbit_holes || '', out_of_bounds: target.out_of_bounds || '', appetite: target.appetite || 'small' }
         : undefined,
     })
-    proposal.action = 'append'
-    proposal.target_feature_id = data.target_feature_id
-    reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose d'affiner la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
+    if (target && (target.status === 'done' || target.status === 'archived')) {
+      // Don't reopen a shipped/archived solution — shape a NEW iteration linked to it.
+      proposal.action = 'create_feature'
+      proposal.target_feature_id = null
+      proposal.supersedes_id = target.id
+      reflect = `« ${target.title} » est déjà ${target.status === 'done' ? 'livrée' : 'archivée'} — pas de réouverture. Je propose une NOUVELLE itération « ${proposal.proposed_spec.title} » liée à la version précédente. Tu confirmes, ou tu corriges ?`
+    } else {
+      proposal.action = 'append'
+      proposal.target_feature_id = data.target_feature_id
+      reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose d'affiner la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
+    }
   } else {
     proposal = await llm.propose({ raw: data.raw, transcript: data.transcript, candidates, classification })
     if (proposal.action === 'append') {
@@ -306,12 +340,14 @@ export interface CommitResult {
   idempotent: boolean
 }
 
-export async function intakeCommit(sessionId: string): Promise<CommitResult> {
+export async function intakeCommit(sessionId: string, committedBy: string | null = null): Promise<CommitResult> {
   ensureSchema()
   const loaded = loadSession(sessionId)
   if (!loaded) throw createError({ statusCode: 404, statusMessage: 'Unknown intake session' })
   if (loaded.row.committed) throw createError({ statusCode: 409, statusMessage: 'Session already committed' })
   const { data } = loaded
+  // Attribution reflects who actually commits (their authenticated session), not who opened it.
+  if (committedBy) data.captured_by = committedBy
   const proposal = data.proposal
   if (!proposal) throw createError({ statusCode: 400, statusMessage: 'No proposal to commit — run /api/intake/turn first' })
 
@@ -436,13 +472,17 @@ export async function intakeCommit(sessionId: string): Promise<CommitResult> {
       // create_feature
       featureId = newId()
       const spec = proposal.proposed_spec
+      const supersedes = proposal.supersedes_id ?? null
       run(
-        `INSERT INTO features (id, title, problem, appetite, solution, rabbit_holes, out_of_bounds, status, stale, signal_count, embedding, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'shaped', 0, 1, ?, ?, ?)`,
+        `INSERT INTO features (id, title, problem, appetite, solution, rabbit_holes, out_of_bounds, status, stale, signal_count, supersedes_id, embedding, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'shaped', 0, 1, ?, ?, ?, ?)`,
         featureId, spec.title, spec.problem, spec.appetite, spec.solution || null, spec.rabbit_holes || null, spec.out_of_bounds || null,
-        encodeEmbedding(localEmbed([spec.title, spec.problem, spec.solution].join(' \n '))), now, now,
+        supersedes, encodeEmbedding(localEmbed([spec.title, spec.problem, spec.solution].join(' \n '))), now, now,
       )
-      logEvent(featureId, data.captured_by, 'created', `Feature créée par ${data.captured_by || 'inconnu'}`, { title: spec.title })
+      const createdSummary = supersedes
+        ? `Nouvelle itération créée par ${data.captured_by || 'inconnu'} (remplace une version livrée)`
+        : `Feature créée par ${data.captured_by || 'inconnu'}`
+      logEvent(featureId, data.captured_by, 'created', createdSummary, { title: spec.title, supersedes })
     }
 
     run(
@@ -451,6 +491,9 @@ export async function intakeCommit(sessionId: string): Promise<CommitResult> {
       feedbackId, data.raw, data.source, data.captured_by, proposal.classification, feedbackStatus, featureId, contentHash,
       encodeEmbedding(fbEmbedding), now,
     )
+
+    // Link any files uploaded with this signal to the resulting feature + feedback.
+    linkAttachments(data.attachment_ids || [], featureId, feedbackId)
 
     // Quality metric: did the human change the agent's FIRST proposal?
     const corrected = (data.initial_action !== null

@@ -1,30 +1,41 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { watch } from 'vue'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { Separator } from '@/components/ui/separator'
+import {
+  Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb'
 
 const route = useRoute()
 const bike = useBicycle()
-const { screen } = bike
+const { pageMeta } = bike
 
-// Closing panels (Sheets) when navigating between pages.
 watch(() => route.path, () => {
   bike.clearFeature()
   bike.clearBet()
 })
-
-const contentPad = computed(() => (screen.value === 'intake' ? '0' : '24px'))
-const contentOverflow = computed(() => (screen.value === 'intake' ? 'hidden' : 'auto'))
 </script>
 
 <template>
-  <div style="display: flex; height: 100vh; overflow: hidden; background: #f4f4f5;">
+  <SidebarProvider>
     <AppSidebar />
-
-    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
-      <AppHeader />
-
-      <div :style="{ flex: 1, minHeight: 0, overflow: contentOverflow, padding: contentPad }">
+    <SidebarInset class="min-w-0 overflow-hidden">
+      <header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+        <SidebarTrigger class="-ml-1" />
+        <Separator orientation="vertical" class="mr-2 h-4" />
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem class="hidden md:block text-muted-foreground">Workspace</BreadcrumbItem>
+            <BreadcrumbSeparator class="hidden md:block" />
+            <BreadcrumbItem>
+              <BreadcrumbPage>{{ pageMeta.title }}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+      </header>
+      <main class="flex-1 min-h-0 overflow-hidden">
         <slot />
-      </div>
-    </div>
-  </div>
+      </main>
+    </SidebarInset>
+  </SidebarProvider>
 </template>

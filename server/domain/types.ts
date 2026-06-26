@@ -93,6 +93,7 @@ export interface Proposal {
   action: Exclude<RoutingAction, 'pending'>
   target_feature_id: string | null
   merge_from_feature_id?: string | null   // for action='merge': the absorbed feature
+  supersedes_id?: string | null           // new iteration of a shipped/archived feature
   classification: Classification
   confidence: number
   rationale: string
@@ -114,6 +115,7 @@ export interface IntakeSessionData {
   transcript: TranscriptEntry[]
   proposal: Proposal | null
   candidates: Candidate[]
+  attachment_ids: string[]            // files uploaded with the first turn, linked at commit
 }
 
 export interface TurnResponse {

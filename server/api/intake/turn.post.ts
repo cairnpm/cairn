@@ -7,7 +7,9 @@ export default defineEventHandler(async (event) => {
 
   const sessionId = typeof body?.session_id === 'string' ? body.session_id : null
   const source = typeof body?.source === 'string' ? body.source : 'manual'
-  const capturedBy = typeof body?.captured_by === 'string' ? body.captured_by : null
+  const attachmentIds = Array.isArray(body?.attachment_ids) ? body.attachment_ids.filter((x: unknown) => typeof x === 'string') : []
+  // Attribution comes from the authenticated session, never the request body.
+  const { user } = await requireUserSession(event)
 
-  return intakeTurn(sessionId, message, source, capturedBy)
+  return intakeTurn(sessionId, message, source, user.name as string, attachmentIds)
 })

@@ -18,7 +18,8 @@ export default defineEventHandler((event) => {
 
   return all<FeatureRow>(
     `SELECT f.id, f.title, f.problem, f.appetite, f.status, f.stale, f.hill_id,
-            h.name AS hill_name, f.signal_count, f.created_at, f.updated_at
+            h.name AS hill_name, f.signal_count, f.created_at, f.updated_at,
+            (SELECT e.actor FROM feature_events e WHERE e.feature_id = f.id ORDER BY e.seq DESC LIMIT 1) AS last_actor
      FROM features f
      LEFT JOIN hills h ON h.id = f.hill_id
      ${where}

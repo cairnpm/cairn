@@ -1,111 +1,116 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ChevronDown, ChevronsUpDown, ChevronUp, Columns3, Table as TableIcon } from 'lucide-vue-next'
+import {
+  type ColumnDef, type ColumnFiltersState, type SortingState, type VisibilityState,
+  getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useVueTable,
+} from '@tanstack/vue-table'
+import {
+  ArrowDown, ArrowUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
+  ChevronsUpDown, Columns3, ExternalLink,
+} from 'lucide-vue-next'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 
 interface Feature {
   id: string; title: string; problem: string; appetite: string | null
   status: string; stale: number; hill_id: string | null; hill_name: string | null
-  signal_count: number; updated_at: string
+  signal_count: number; updated_at: string; last_actor: string | null
 }
 
 const bike = useBicycle()
-const { statusFilter, view, sortKey, sortDir, selectedFeatureId } = bike
+const { statusFilter, selectedFeatureId } = bike
+const { data: features } = await useFetch<Feature[]>('/api/features', { default: () => [], getCachedData: getFreshData })
 
-// Always refetch on navigation (the backlog changes whenever the gateway writes).
-const { data: features } = await useFetch<Feature[]>('/api/features', { getCachedData: () => undefined })
-
-const S_COLORS: Record<string, [string, string]> = {
-  shaped: ['#eff6ff', '#1d4ed8'], bet: ['#fef9c3', '#854d0e'],
-  building: ['#fff7ed', '#c2410c'], done: ['#f0fdf4', '#15803d'],
-  raw: ['#f4f4f5', '#71717a'], archived: ['#f4f4f5', '#a1a1aa'],
-}
-const sc = (s: string) => S_COLORS[s] || ['#f4f4f5', '#71717a']
-
-const STATUSES = ['all', 'shaped', 'bet', 'building', 'done']
-const STATUS_RANK: Record<string, number> = { raw: 0, shaped: 1, bet: 2, building: 3, done: 4, archived: 5 }
-const APPETITE_RANK: Record<string, number> = { small: 0, big: 1 }
-
-// Relative time (collaborative feeds read better as "il y a 3h" than ISO).
 function relTime(iso: string): string {
   const d = Date.parse(iso)
   if (Number.isNaN(d)) return '—'
   const s = Math.floor((Date.now() - d) / 1000)
-  if (s < 60) return 'à l\'instant'
-  if (s < 3600) return `il y a ${Math.floor(s / 60)} min`
-  if (s < 86400) return `il y a ${Math.floor(s / 3600)} h`
-  if (s < 2592000) return `il y a ${Math.floor(s / 86400)} j`
-  return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m`
+  if (s < 86400) return `${Math.floor(s / 3600)}h`
+  if (s < 2592000) return `${Math.floor(s / 86400)}j`
+  return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
-const stats = computed(() => {
-  const f = features.value || []
-  return [
-    { label: 'Total', count: f.length },
-    { label: 'Shaped', count: f.filter(x => x.status === 'shaped').length },
-    { label: 'Bet', count: f.filter(x => x.status === 'bet').length },
-    { label: 'Done', count: f.filter(x => x.status === 'done').length },
-  ]
+const counts = computed(() => {
+  const f = features.value
+  const by = (s: string) => f.filter(x => x.status === s).length
+  return { all: f.length, shaped: by('shaped'), bet: by('bet'), building: by('building'), done: by('done') }
 })
 
-const visible = computed(() => {
-  let list = (features.value || []).slice()
-  if (statusFilter.value !== 'all') list = list.filter(f => f.status === statusFilter.value)
-  if (sortKey.value) {
-    const dir = sortDir.value === 'asc' ? 1 : -1
-    list.sort((a, b) => {
-      const k = sortKey.value!
-      let r = 0
-      if (k === 'title') r = a.title.localeCompare(b.title)
-      else if (k === 'status') r = (STATUS_RANK[a.status] ?? 0) - (STATUS_RANK[b.status] ?? 0)
-      else if (k === 'appetite') r = (APPETITE_RANK[a.appetite || 'small'] ?? 0) - (APPETITE_RANK[b.appetite || 'small'] ?? 0)
-      else if (k === 'signal') r = a.signal_count - b.signal_count
-      else if (k === 'hill') r = (a.hill_name || '').localeCompare(b.hill_name || '', undefined, { numeric: true })
-      else if (k === 'updated') r = a.updated_at.localeCompare(b.updated_at)
-      return r * dir
-    })
-  }
-  return list
-})
+// ── @tanstack/vue-table ───────────────────────────────────────────────────
+function valueUpdater<T>(updaterOrValue: T | ((old: T) => T), ref: { value: T }) {
+  ref.value = typeof updaterOrValue === 'function' ? (updaterOrValue as (o: T) => T)(ref.value) : updaterOrValue
+}
+const sorting = ref<SortingState>([{ id: 'updated_at', desc: true }])
+const columnFilters = ref<ColumnFiltersState>([])
+const columnVisibility = ref<VisibilityState>({})
+const rowSelection = ref({})
 
-const PIPELINE = ['shaped', 'bet', 'building', 'done']
-const pipeline = computed(() => PIPELINE
-  .filter(s => statusFilter.value === 'all' || statusFilter.value === s)
-  .map(status => ({ status, items: visible.value.filter(f => f.status === status) })))
-
-const columns = [
-  { key: 'title', label: 'Feature' },
-  { key: 'status', label: 'Statut' },
-  { key: 'appetite', label: 'Appétit' },
-  { key: 'signal', label: 'Signaux' },
-  { key: 'hill', label: 'Hill' },
-  { key: 'updated', label: 'Modifié' },
+const COL_LABEL: Record<string, string> = { title: 'Feature', status: 'Statut', signal_count: 'Signaux', hill: 'Hill', updated_at: 'Modifié', actor: 'Auteur' }
+const columns: ColumnDef<Feature>[] = [
+  { id: 'title', accessorKey: 'title', header: 'Feature', enableHiding: false },
+  { id: 'status', accessorKey: 'status', header: 'Statut' },
+  { id: 'signal_count', accessorKey: 'signal_count', header: 'Signaux' },
+  { id: 'hill', accessorFn: r => r.hill_name || '', header: 'Hill' },
+  { id: 'updated_at', accessorKey: 'updated_at', header: 'Modifié' },
+  { id: 'actor', accessorFn: r => r.last_actor || '', header: 'Auteur', enableSorting: false },
 ]
 
-// Detail Sheet
-interface FeatureFull extends Feature {
-  solution: string | null; rabbit_holes: string | null; out_of_bounds: string | null; created_at: string
+const table = useVueTable({
+  get data() { return features.value },
+  columns,
+  state: {
+    get sorting() { return sorting.value },
+    get columnFilters() { return columnFilters.value },
+    get columnVisibility() { return columnVisibility.value },
+    get rowSelection() { return rowSelection.value },
+  },
+  getRowId: row => row.id,
+  enableRowSelection: true,
+  onSortingChange: u => valueUpdater(u, sorting),
+  onColumnFiltersChange: u => valueUpdater(u, columnFilters),
+  onColumnVisibilityChange: u => valueUpdater(u, columnVisibility),
+  onRowSelectionChange: u => valueUpdater(u, rowSelection),
+  getCoreRowModel: getCoreRowModel(),
+  getSortedRowModel: getSortedRowModel(),
+  getFilteredRowModel: getFilteredRowModel(),
+  getPaginationRowModel: getPaginationRowModel(),
+  initialState: { pagination: { pageSize: 10 } },
+})
+
+// Status filter Tabs drive the 'status' column filter.
+watch(statusFilter, (v) => {
+  table.getColumn('status')?.setFilterValue(v === 'all' ? undefined : v)
+}, { immediate: true })
+
+const hideableCols = computed(() => table.getAllColumns().filter(c => c.getCanHide()))
+function sortIcon(id: string) {
+  const s = table.getColumn(id)?.getIsSorted()
+  return s === 'asc' ? ArrowUp : s === 'desc' ? ArrowDown : ChevronsUpDown
 }
-interface FeatureEvent { seq: number; actor: string; actor_type: string; action: string; summary: string; detail: string | null; created_at: string }
+function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
+
+// ── Detail Sheet ──────────────────────────────────────────────────────────
+interface FeatureFull extends Feature { solution: string | null; rabbit_holes: string | null; out_of_bounds: string | null }
+interface FeatureEvent { seq: number; actor: string; summary: string; created_at: string }
 interface Detail {
-  feature: FeatureFull & { hill_name: string | null }
-  feedback: { id: string; content: string; source: string; classification: string; created_at: string }[]
+  feature: FeatureFull
+  feedback: { id: string; content: string; source: string; classification: string }[]
   decisions: { id: string; verdict: string; rationale: string; decided_by: string | null; decided_at: string }[]
   pr_links: { id: string; repo: string; pr_number: number; pr_url: string; status: string }[]
   events: FeatureEvent[]
-  routing_log: { id: string; action: string; confidence: number; rationale: string; created_at: string }[]
-}
-
-interface FieldChange { field: string; label: string; before: string; after: string }
-interface ParsedDetail { content?: string; rationale?: string; before?: string; after?: string; changes?: FieldChange[] }
-function parseDetail(detail: string | null): ParsedDetail {
-  if (!detail) return {}
-  try { return JSON.parse(detail) as ParsedDetail } catch { return {} }
-}
-function trunc(s: string, n = 200): string {
-  return s.length > n ? s.slice(0, n).trimEnd() + '…' : s
+  attachments: { id: string; filename: string; kind: string }[]
 }
 const detail = ref<Detail | null>(null)
 watch(selectedFeatureId, async (id) => {
@@ -116,188 +121,204 @@ const open = computed({
   get: () => selectedFeatureId.value !== null,
   set: (v: boolean) => { if (!v) bike.clearFeature() },
 })
-
-// Pre-parse events; pitch refinements stay collapsed by default (digest).
-const eventsView = computed(() => (detail.value?.events || []).map(e => ({ ...e, parsed: parseDetail(e.detail) })))
-const expanded = ref<number[]>([])
-function toggleEvent(seq: number) {
-  expanded.value = expanded.value.includes(seq) ? expanded.value.filter(s => s !== seq) : [...expanded.value, seq]
-}
+const PITCH = [
+  { key: 'problem', label: 'Problème' },
+  { key: 'solution', label: 'Solution esquissée' },
+  { key: 'rabbit_holes', label: 'Rabbit holes' },
+  { key: 'out_of_bounds', label: 'No-gos' },
+] as const
 </script>
 
 <template>
-  <div style="display: flex; flex-direction: column; gap: 16px;">
-    <!-- Stats -->
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
-      <div v-for="s in stats" :key="s.label" style="background: white; border: 1px solid #e4e4e7; border-radius: 8px; padding: 16px 18px;">
-        <div style="font-size: 12px; color: #71717a; font-weight: 500; margin-bottom: 6px;">{{ s.label }}</div>
-        <div style="font-size: 28px; font-weight: 700; color: #18181b; line-height: 1;">{{ s.count }}</div>
-      </div>
-    </div>
-
-    <!-- Filter + view selector -->
-    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+  <div class="flex h-full flex-col gap-4 overflow-hidden p-4">
+    <!-- Toolbar -->
+    <div class="flex items-center justify-between gap-2">
       <Tabs :model-value="statusFilter" @update:model-value="bike.setStatusFilter(String($event))">
         <TabsList>
-          <TabsTrigger v-for="s in STATUSES" :key="s" :value="s">{{ s === 'all' ? 'Tous' : s.charAt(0).toUpperCase() + s.slice(1) }}</TabsTrigger>
+          <TabsTrigger value="all">Tous <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.all }}</span></TabsTrigger>
+          <TabsTrigger value="shaped">Shaped <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.shaped }}</span></TabsTrigger>
+          <TabsTrigger value="bet">Bet <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.bet }}</span></TabsTrigger>
+          <TabsTrigger value="building">Building <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.building }}</span></TabsTrigger>
+          <TabsTrigger value="done">Done <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.done }}</span></TabsTrigger>
         </TabsList>
       </Tabs>
-      <Tabs :model-value="view" @update:model-value="bike.setView($event === 'pipeline' ? 'pipeline' : 'table')">
-        <TabsList>
-          <TabsTrigger value="table"><TableIcon /> Tableau</TabsTrigger>
-          <TabsTrigger value="pipeline"><Columns3 /> Pipeline</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Button variant="outline" size="sm"><Columns3 class="size-4" /> Colonnes <ChevronsUpDown class="size-4 opacity-50" /></Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" class="w-40">
+          <DropdownMenuCheckboxItem
+            v-for="col in hideableCols" :key="col.id"
+            class="capitalize" :model-value="col.getIsVisible()"
+            @update:model-value="(v: boolean) => col.toggleVisibility(!!v)"
+          >{{ COL_LABEL[col.id] || col.id }}</DropdownMenuCheckboxItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
 
     <!-- Table -->
-    <div v-if="view === 'table'" style="background: white; border: 1px solid #e4e4e7; border-radius: 8px; overflow: hidden;">
+    <div class="flex-1 overflow-auto rounded-lg border">
       <Table>
-        <TableHeader>
-          <TableRow style="background: #fafafa;" class="hover:bg-transparent">
-            <TableHead v-for="col in columns" :key="col.key" class="select-none cursor-pointer" style="padding: 11px 16px; font-size: 11px; font-weight: 500; color: #71717a; letter-spacing: 0.05em; text-transform: uppercase; height: auto;" @click="bike.toggleSort(col.key)">
-              <span style="display: inline-flex; align-items: center; gap: 4px;">
-                {{ col.label }}
-                <ChevronUp v-if="sortKey === col.key && sortDir === 'asc'" style="width: 13px; height: 13px;" />
-                <ChevronDown v-else-if="sortKey === col.key && sortDir === 'desc'" style="width: 13px; height: 13px;" />
-                <ChevronsUpDown v-else style="width: 13px; height: 13px; color: #d4d4d8;" />
-              </span>
+        <TableHeader class="bg-muted/50 sticky top-0">
+          <TableRow>
+            <TableHead class="w-10">
+              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" aria-label="Tout sélectionner" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
             </TableHead>
+            <TableHead>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('title')?.toggleSorting()">Feature <component :is="sortIcon('title')" class="size-3.5 opacity-60" /></button>
+            </TableHead>
+            <TableHead v-if="vis('status')" class="w-28">
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">Statut <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
+            </TableHead>
+            <TableHead v-if="vis('signal_count')" class="w-24 text-right">
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('signal_count')?.toggleSorting()">Signaux <component :is="sortIcon('signal_count')" class="size-3.5 opacity-60" /></button>
+            </TableHead>
+            <TableHead v-if="vis('hill')" class="w-44">
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('hill')?.toggleSorting()">Hill <component :is="sortIcon('hill')" class="size-3.5 opacity-60" /></button>
+            </TableHead>
+            <TableHead v-if="vis('updated_at')" class="w-20 text-right">
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('updated_at')?.toggleSorting()">Modifié <component :is="sortIcon('updated_at')" class="size-3.5 opacity-60" /></button>
+            </TableHead>
+            <TableHead v-if="vis('actor')" class="w-12" />
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableRow v-for="f in visible" :key="f.id" class="bk-row" :style="{ cursor: 'pointer', borderBottom: '1px solid #f4f4f5' }" @click="bike.selectFeature(f.id)">
-            <TableCell style="padding: 14px 16px;">
-              <div style="font-weight: 500; color: #18181b; margin-bottom: 2px; display: flex; align-items: center; gap: 6px;">
-                {{ f.title }}
-                <span v-if="f.stale" style="font-size: 10px; padding: 1px 6px; background: #fef2f2; color: #dc2626; border-radius: 4px;">stale</span>
-              </div>
-              <div style="font-size: 12px; color: #a1a1aa; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ f.problem }}</div>
+          <TableRow
+            v-for="row in table.getRowModel().rows" :key="row.id"
+            :data-state="row.getIsSelected() ? 'selected' : undefined"
+            class="cursor-pointer"
+            @click="bike.selectFeature(row.original.id)"
+          >
+            <TableCell @click.stop>
+              <Checkbox :model-value="row.getIsSelected()" aria-label="Sélectionner la ligne" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
             </TableCell>
-            <TableCell style="padding: 14px 16px;"><span :style="{ display: 'inline-flex', padding: '3px 9px', borderRadius: '99px', fontSize: '12px', fontWeight: 500, background: sc(f.status)[0], color: sc(f.status)[1] }">{{ f.status }}</span></TableCell>
-            <TableCell style="padding: 14px 16px;"><span style="display: inline-flex; padding: 3px 8px; border-radius: 5px; font-size: 12px; font-weight: 600; background: #f4f4f5; color: #71717a; font-family: 'Courier New', monospace;">{{ f.appetite || '—' }}</span></TableCell>
-            <TableCell style="padding: 14px 16px; font-size: 13px; color: #18181b; font-weight: 600;">{{ f.signal_count }}</TableCell>
-            <TableCell style="padding: 14px 16px; font-size: 13px; color: #71717a;">{{ f.hill_name || '—' }}</TableCell>
-            <TableCell style="padding: 14px 16px; font-size: 13px; color: #a1a1aa; white-space: nowrap;">{{ relTime(f.updated_at) }}</TableCell>
+            <TableCell>
+              <div class="flex items-center gap-2 font-medium">
+                {{ row.original.title }}
+                <Badge v-if="row.original.stale" variant="outline" class="text-destructive border-destructive/30">stale</Badge>
+              </div>
+              <div class="text-xs text-muted-foreground truncate max-w-md">{{ row.original.problem }}</div>
+            </TableCell>
+            <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
+            <TableCell v-if="vis('signal_count')" class="text-right tabular-nums">{{ row.original.signal_count }}</TableCell>
+            <TableCell v-if="vis('hill')" class="text-muted-foreground truncate">{{ row.original.hill_name || '—' }}</TableCell>
+            <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground tabular-nums">{{ relTime(row.original.updated_at) }}</TableCell>
+            <TableCell v-if="vis('actor')"><UserAvatar :name="row.original.last_actor" /></TableCell>
+          </TableRow>
+          <TableRow v-if="!table.getRowModel().rows.length">
+            <TableCell :colspan="7" class="h-24 text-center text-muted-foreground">Aucune feature.</TableCell>
           </TableRow>
         </TableBody>
       </Table>
     </div>
 
-    <!-- Pipeline -->
-    <div v-else style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: start;">
-      <div v-for="col in pipeline" :key="col.status" style="background: #fafafa; border: 1px solid #e4e4e7; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span :style="{ display: 'inline-flex', padding: '3px 9px', borderRadius: '99px', fontSize: '12px', fontWeight: 500, background: sc(col.status)[0], color: sc(col.status)[1] }">{{ col.status }}</span>
-          <span style="font-size: 12px; color: #a1a1aa; font-weight: 500;">{{ col.items.length }}</span>
+    <!-- Footer / pagination -->
+    <div class="flex items-center justify-between gap-4 text-sm">
+      <div class="text-muted-foreground">
+        {{ table.getFilteredSelectedRowModel().rows.length }} / {{ table.getFilteredRowModel().rows.length }} ligne(s) sélectionnée(s)
+      </div>
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-2">
+          <span class="text-muted-foreground hidden sm:inline">Lignes / page</span>
+          <Select :model-value="String(table.getState().pagination.pageSize)" @update:model-value="(v: any) => table.setPageSize(Number(v))">
+            <SelectTrigger size="sm" class="w-16"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="n in [10, 20, 30, 50]" :key="n" :value="String(n)">{{ n }}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <div v-for="f in col.items" :key="f.id" class="bk-pcard" style="background: white; border: 1px solid #e4e4e7; border-radius: 8px; padding: 14px; cursor: pointer; transition: box-shadow 0.15s, border-color 0.15s;" @click="bike.selectFeature(f.id)">
-          <div style="font-size: 14px; font-weight: 600; color: #18181b; line-height: 1.35; margin-bottom: 8px;">{{ f.title }}</div>
-          <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
-            <span style="display: inline-flex; padding: 3px 8px; border-radius: 5px; font-size: 12px; font-weight: 600; background: #f4f4f5; color: #71717a; font-family: 'Courier New', monospace;">{{ f.appetite || '—' }}</span>
-            <span style="font-size: 12px; color: #71717a;">{{ f.signal_count }} signaux</span>
-            <span style="margin-left: auto; font-size: 12px; color: #71717a;">{{ f.hill_name || '' }}</span>
-          </div>
+        <div class="text-muted-foreground tabular-nums">Page {{ table.getState().pagination.pageIndex + 1 }} / {{ Math.max(1, table.getPageCount()) }}</div>
+        <div class="flex items-center gap-1">
+          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.setPageIndex(0)"><ChevronFirst class="size-4" /></Button>
+          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.previousPage()"><ChevronLeft class="size-4" /></Button>
+          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanNextPage()" @click="table.nextPage()"><ChevronRight class="size-4" /></Button>
+          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanNextPage()" @click="table.setPageIndex(table.getPageCount() - 1)"><ChevronLast class="size-4" /></Button>
         </div>
-        <div v-if="!col.items.length" style="font-size: 13px; color: #a1a1aa; text-align: center; padding: 16px 0;">—</div>
       </div>
     </div>
 
     <!-- Detail Sheet -->
     <Sheet v-model:open="open">
-      <SheetContent class="w-full sm:max-w-md p-0 gap-0" style="overflow-y: auto;">
+      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]">
         <template v-if="detail">
-          <SheetHeader style="padding: 16px 20px; border-bottom: 1px solid #f4f4f5;">
-            <SheetTitle style="font-size: 15px; font-weight: 600; color: #18181b; line-height: 1.4; padding-right: 24px;">{{ detail.feature.title }}</SheetTitle>
-            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
-              <span :style="{ display: 'inline-flex', padding: '3px 9px', borderRadius: '99px', fontSize: '12px', fontWeight: 500, background: sc(detail.feature.status)[0], color: sc(detail.feature.status)[1] }">{{ detail.feature.status }}</span>
-              <span style="font-size: 12px; padding: 3px 8px; background: #f4f4f5; color: #71717a; border-radius: 5px; font-family: 'Courier New', monospace;">{{ detail.feature.appetite || '—' }}</span>
-              <span v-if="detail.feature.hill_name" style="font-size: 12px; color: #71717a; padding: 3px 0;">{{ detail.feature.hill_name }}</span>
+          <!-- Header (border-b) -->
+          <SheetHeader class="gap-2 border-b px-6 py-4">
+            <SheetTitle class="text-base leading-snug">{{ detail.feature.title }}</SheetTitle>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <StatusBadge :status="detail.feature.status" />
+              <Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge>
+              <Badge v-if="detail.feature.hill_name" variant="secondary">{{ detail.feature.hill_name }}</Badge>
             </div>
-            <div style="font-size: 12px; color: #a1a1aa; margin-top: 6px;">Modifié {{ relTime(detail.feature.updated_at) }}</div>
           </SheetHeader>
 
-          <!-- Shape Up pitch -->
-          <div style="padding: 14px 20px; border-bottom: 1px solid #f4f4f5;">
-            <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px;">Problème</div>
-            <div style="font-size: 14px; color: #18181b; line-height: 1.6;">{{ detail.feature.problem }}</div>
-          </div>
-          <div v-if="detail.feature.solution" style="padding: 14px 20px; border-bottom: 1px solid #f4f4f5;">
-            <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px;">Solution esquissée</div>
-            <div style="font-size: 14px; color: #18181b; line-height: 1.6;">{{ detail.feature.solution }}</div>
-          </div>
-          <div v-if="detail.feature.rabbit_holes" style="padding: 14px 20px; border-bottom: 1px solid #f4f4f5;">
-            <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px;">Rabbit holes</div>
-            <div style="font-size: 14px; color: #18181b; line-height: 1.6;">{{ detail.feature.rabbit_holes }}</div>
-          </div>
-          <div v-if="detail.feature.out_of_bounds" style="padding: 14px 20px; border-bottom: 1px solid #f4f4f5;">
-            <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px;">No-gos (hors-périmètre)</div>
-            <div style="font-size: 14px; color: #18181b; line-height: 1.6;">{{ detail.feature.out_of_bounds }}</div>
-          </div>
-
-          <div style="padding: 14px 20px; border-bottom: 1px solid #f4f4f5;">
-            <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px;">Signaux ({{ detail.feedback.length }})</div>
-            <div v-for="fb in detail.feedback" :key="fb.id" style="padding: 8px 0; border-top: 1px solid #f9f9f9;">
-              <div style="font-size: 13px; color: #18181b; line-height: 1.5;">{{ fb.content }}</div>
-              <div style="font-size: 11px; color: #a1a1aa; margin-top: 2px;">{{ fb.source }} · {{ fb.classification }}</div>
-            </div>
-          </div>
-
-          <div v-if="detail.decisions.length" style="padding: 14px 20px; border-bottom: 1px solid #f4f4f5;">
-            <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px;">Décisions</div>
-            <div v-for="d in detail.decisions" :key="d.id" style="padding: 8px 0; border-top: 1px solid #f9f9f9;">
-              <div style="font-size: 13px; color: #18181b;"><strong>{{ d.verdict }}</strong> — {{ d.rationale }}</div>
-              <div style="font-size: 11px; color: #a1a1aa; margin-top: 2px;">{{ d.decided_by || '—' }}</div>
-            </div>
-          </div>
-
-          <div v-if="detail.pr_links.length" style="padding: 14px 20px; border-bottom: 1px solid #f4f4f5;">
-            <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 8px;">PR GitHub</div>
-            <a v-for="p in detail.pr_links" :key="p.id" :href="p.pr_url" style="display: block; font-size: 13px; color: #2563eb; text-decoration: none; font-family: 'Courier New', monospace; padding: 2px 0;">{{ p.repo }}#{{ p.pr_number }} · {{ p.status }}</a>
-          </div>
-
-          <!-- Collaborative activity feed: one entry per contribution, refinements collapsed -->
-          <div v-if="eventsView.length" style="padding: 14px 20px;">
-            <div style="font-size: 11px; font-weight: 500; color: #a1a1aa; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 14px;">Activité</div>
-            <div v-for="(e, i) in eventsView" :key="e.seq" style="display: flex; gap: 10px; padding-bottom: 14px; position: relative;">
-              <div v-if="i < eventsView.length - 1" style="position: absolute; left: 13px; top: 28px; bottom: 0; width: 1px; background: #f0f0f0;" />
-              <div :style="{ width: '28px', height: '28px', borderRadius: '50%', background: actorAvatar(e.actor).bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, flexShrink: 0, zIndex: 1 }">{{ actorAvatar(e.actor).init }}</div>
-              <div style="flex: 1; min-width: 0;">
-                <div style="font-size: 13px; color: #18181b; line-height: 1.45;">{{ e.summary }}</div>
-
-                <!-- signal content / rationale -->
-                <div v-if="e.parsed.content" style="font-size: 12px; color: #71717a; line-height: 1.45; margin-top: 3px; border-left: 2px solid #f0f0f0; padding-left: 8px;">{{ e.parsed.content }}</div>
-                <div v-else-if="e.parsed.rationale" style="font-size: 12px; color: #71717a; line-height: 1.45; margin-top: 3px; border-left: 2px solid #f0f0f0; padding-left: 8px;">{{ e.parsed.rationale }}</div>
-
-                <!-- grouped pitch refinements: collapsed by default -->
-                <template v-if="e.parsed.changes && e.parsed.changes.length">
-                  <button
-                    style="margin-top: 6px; font-size: 12px; color: #2563eb; background: none; border: none; padding: 0; cursor: pointer; font-family: inherit;"
-                    @click.stop="toggleEvent(e.seq)"
-                  >
-                    {{ expanded.includes(e.seq) ? '▾' : '▸' }} {{ e.parsed.changes.length }} champ{{ e.parsed.changes.length > 1 ? 's' : '' }} affiné{{ e.parsed.changes.length > 1 ? 's' : '' }}
-                  </button>
-                  <div v-if="expanded.includes(e.seq)" style="margin-top: 6px; display: flex; flex-direction: column; gap: 10px; border-left: 2px solid #f0f0f0; padding-left: 8px;">
-                    <div v-for="c in e.parsed.changes" :key="c.field">
-                      <div style="font-size: 12px; font-weight: 600; color: #18181b; margin-bottom: 2px;">{{ c.label }}</div>
-                      <div style="font-size: 12px; color: #a1a1aa; line-height: 1.4; text-decoration: line-through; text-decoration-color: #e4e4e7;">{{ trunc(c.before) || '∅' }}</div>
-                      <div style="font-size: 12px; color: #18181b; line-height: 1.4; margin-top: 2px;">{{ trunc(c.after) }}</div>
-                    </div>
-                  </div>
-                </template>
-
-                <div style="font-size: 11px; color: #a1a1aa; margin-top: 3px;">{{ relTime(e.created_at) }}</div>
+          <!-- Body: two columns -->
+          <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_360px]">
+            <!-- Left column: pitch + signaux + décisions + PR -->
+            <ScrollArea class="min-h-0">
+              <div class="flex flex-col gap-6 p-6 text-sm">
+              <div v-for="p in PITCH" :key="p.key" v-show="detail.feature[p.key]">
+                <div class="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ p.label }}</div>
+                <p class="leading-relaxed">{{ detail.feature[p.key] }}</p>
               </div>
-            </div>
+              <div v-if="detail.attachments.length">
+                <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Pièces jointes</div>
+                <div class="flex flex-wrap gap-2">
+                  <a v-for="a in detail.attachments" :key="a.id" :href="`/api/attachments/${a.id}`" target="_blank">
+                    <img v-if="a.kind === 'image'" :src="`/api/attachments/${a.id}`" :title="a.filename" class="size-16 rounded-md border object-cover">
+                    <Badge v-else variant="outline" class="gap-1">📄 {{ a.filename }}</Badge>
+                  </a>
+                </div>
+              </div>
+              <div v-if="detail.feedback.length">
+                <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Signaux ({{ detail.feedback.length }})</div>
+                <div class="flex flex-col gap-2">
+                  <div v-for="fb in detail.feedback" :key="fb.id" class="rounded-md border bg-muted/40 p-3">
+                    <div class="font-medium">{{ fb.content }}</div>
+                    <div class="mt-1 text-xs text-muted-foreground">{{ fb.source }} · {{ fb.classification }}</div>
+                  </div>
+                </div>
+              </div>
+              <div v-if="detail.decisions.length">
+                <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Décisions</div>
+                <div v-for="d in detail.decisions" :key="d.id" class="mb-2 rounded-md border bg-muted/40 p-3">
+                  <div class="mb-1 flex items-center gap-2"><Badge variant="secondary" class="capitalize">{{ d.verdict }}</Badge><span class="text-xs text-muted-foreground">{{ relTime(d.decided_at) }}</span></div>
+                  <p>{{ d.rationale }}</p>
+                  <div class="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><UserAvatar :name="d.decided_by" class="size-4" />{{ d.decided_by }}</div>
+                </div>
+              </div>
+              <div v-if="detail.pr_links.length">
+                <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">PR GitHub</div>
+                <a v-for="p in detail.pr_links" :key="p.id" :href="p.pr_url" target="_blank" class="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground">
+                  <ExternalLink class="size-3" />{{ p.repo }}#{{ p.pr_number }} · {{ p.status }}
+                </a>
+              </div>
+              </div>
+            </ScrollArea>
+
+            <!-- Right column: activity history -->
+            <aside class="min-h-0 border-t bg-muted/20 md:border-l md:border-t-0">
+              <ScrollArea class="h-full">
+                <div class="p-6">
+              <div class="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">Activité ({{ detail.events.length }})</div>
+              <div class="relative flex flex-col gap-4">
+                <div v-for="(e, i) in detail.events" :key="e.seq" class="flex gap-2.5">
+                  <div class="relative flex flex-col items-center">
+                    <UserAvatar :name="e.actor" class="size-6 shrink-0" />
+                    <div v-if="i < detail.events.length - 1" class="mt-1 w-px flex-1 bg-border" />
+                  </div>
+                  <div class="min-w-0 pb-1 text-sm">
+                    <div class="leading-snug">{{ e.summary }}</div>
+                    <div class="mt-0.5 text-xs text-muted-foreground">{{ relTime(e.created_at) }}</div>
+                  </div>
+                </div>
+                <div v-if="!detail.events.length" class="text-sm text-muted-foreground">Aucune activité.</div>
+              </div>
+                </div>
+              </ScrollArea>
+            </aside>
           </div>
         </template>
       </SheetContent>
     </Sheet>
   </div>
 </template>
-
-<style scoped>
-.bk-row:hover { background: #fafafa !important; }
-.bk-pcard:hover { border-color: #d4d4d8 !important; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-a:hover { text-decoration: underline !important; }
-</style>

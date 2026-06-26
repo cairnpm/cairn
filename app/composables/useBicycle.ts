@@ -4,12 +4,12 @@
  */
 import { computed } from 'vue'
 
-export type Screen = 'intake' | 'backlog' | 'betting' | 'hills'
+export type Screen = 'intake' | 'backlog' | 'betting' | 'hills' | 'settings'
 
 export const TEAM = [
-  { name: 'CEO (vous)', init: 'C', bg: '#18181b' },
-  { name: 'Alex', init: 'A', bg: '#2563eb' },
-  { name: 'Sam', init: 'S', bg: '#16a34a' },
+  { name: 'CEO', init: 'C' },
+  { name: 'Alex', init: 'A' },
+  { name: 'Sam', init: 'S' },
 ]
 
 const SCREEN_PATH: Record<Screen, string> = {
@@ -17,32 +17,36 @@ const SCREEN_PATH: Record<Screen, string> = {
   backlog: '/backlog',
   betting: '/betting',
   hills: '/hills',
+  settings: '/settings',
 }
 
-/** Avatar initial + colour for an actor name (collaborative attribution). */
-export function actorAvatar(name: string | null | undefined): { init: string; bg: string } {
-  const n = (name || '').trim()
-  const t = TEAM.find(m => m.name.toLowerCase().startsWith(n.toLowerCase()) || m.init === n[0]?.toUpperCase())
-  if (t) return { init: t.init, bg: t.bg }
-  if (/github/i.test(n)) return { init: '⎇', bg: '#3f3f46' }
-  return { init: (n[0] || '?').toUpperCase(), bg: '#a1a1aa' }
+/** Initial for an actor name — used by the shared UserAvatar fallback. */
+export function actorInitial(name: string | null | undefined): string {
+  return (name || '?').trim()[0]?.toUpperCase() || '?'
 }
 
 export function useBicycle() {
   const route = useRoute()
 
-  // Current user (collaborative attribution) — persisted in a cookie, sent to the gateway.
-  const author = useCookie<string>('bike-author', { default: () => 'CEO', sameSite: 'lax' })
+  // Current user (collaborative attribution) — derived from the authenticated session.
+  const { user, clear: clearSession } = useUserSession()
+  const author = computed<string>(() => (user.value?.name as string) || '—')
+  const role = computed<string>(() => (user.value?.role as string) || 'member')
 
   const screen = computed<Screen>(() => {
     const p = route.path
     if (p.startsWith('/backlog')) return 'backlog'
     if (p.startsWith('/betting')) return 'betting'
     if (p.startsWith('/hills')) return 'hills'
+    if (p.startsWith('/settings')) return 'settings'
     return 'intake'
   })
   const selectedHill = computed<string | null>(() => {
     const m = route.path.match(/^\/hills\/(.+)$/)
+    return m ? decodeURIComponent(m[1]) : null
+  })
+  const selectedBettingTable = computed<string | null>(() => {
+    const m = route.path.match(/^\/betting\/(.+)$/)
     return m ? decodeURIComponent(m[1]) : null
   })
 
@@ -63,6 +67,7 @@ export function useBicycle() {
       backlog: { title: 'Backlog Produit', sub: 'Read-only — modifiable uniquement via la gateway' },
       betting: { title: 'Betting Table', sub: 'Menu généré — le pari reste humain' },
       hills: { title: has ? 'Hill' : 'Hills', sub: has ? 'Détail · paris & avancement' : 'Cycles passés, en cours et planifiés' },
+      settings: { title: 'Réglages', sub: 'Clé Anthropic, modèle & membres' },
     }[screen.value]
   })
 
@@ -71,9 +76,16 @@ export function useBicycle() {
     else { sortKey.value = key; sortDir.value = 'asc' }
   }
 
+  async function logout() {
+    await clearSession()
+    await navigateTo('/login')
+  }
+
   return {
-    screen, selectedHill, pageMeta, team: TEAM,
-    author, setAuthor: (n: string) => { author.value = n },
+    screen, selectedHill, selectedBettingTable, pageMeta, team: TEAM,
+    author, role, logout,
+    selectBettingTable: (id: string) => navigateTo(`/betting/${encodeURIComponent(id)}`),
+    clearBettingTable: () => navigateTo('/betting'),
     statusFilter, view, sortKey, sortDir, toggleSort,
     setStatusFilter: (v: string) => { statusFilter.value = v },
     setView: (v: 'table' | 'pipeline') => { view.value = v },

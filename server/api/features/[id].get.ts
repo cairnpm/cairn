@@ -21,5 +21,6 @@ export default defineEventHandler((event) => {
     pr_links: all('SELECT id, repo, pr_number, pr_url, status, auto_close, linked_at, closed_at FROM pr_links WHERE feature_id = ? ORDER BY linked_at DESC', id),
     events: all('SELECT seq, actor, actor_type, action, summary, detail, created_at FROM feature_events WHERE feature_id = ? ORDER BY seq DESC', id),
     routing_log: all('SELECT id, action, confidence, rationale, model, created_at FROM routing_log WHERE target_feature_id = ? ORDER BY created_at DESC', id),
+    attachments: all('SELECT id, filename, mime, bytes, kind, created_at FROM attachments WHERE feature_id = ? ORDER BY created_at', id),
   }
 })

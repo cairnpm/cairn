@@ -11,48 +11,11 @@ import { createStubProvider, DEDUP_STRONG } from './stub'
  * falls back to the deterministic stub so the gateway never wedges.
  */
 const API_URL = 'https://api.anthropic.com/v1/messages'
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5'
 const MAX_CLARIFY = 8
-
-// Opus 4.x / Fable / Mythos reject `temperature`; everything else (Haiku/Sonnet) accepts it.
-const ACCEPTS_TEMPERATURE = !/(opus-4|fable|mythos)/i.test(MODEL)
 
 interface CallOpts { temperature?: number, schema?: object }
 
-async function callClaude(system: string, user: string, maxTokens = 512, opts: CallOpts = {}): Promise<string | null> {
-  const base: Record<string, unknown> = {
-    model: MODEL, max_tokens: maxTokens, system,
-    messages: [{ role: 'user', content: user }],
-  }
-  if (opts.temperature !== undefined && ACCEPTS_TEMPERATURE) base.temperature = opts.temperature
-
-  const attempt = async (withSchema: boolean): Promise<string | null> => {
-    const body = withSchema && opts.schema
-      ? { ...base, output_config: { format: { type: 'json_schema', schema: opts.schema } } }
-      : base
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) return null
-    const data = await res.json() as { content?: { type: string, text?: string }[] }
-    return data.content?.find(b => b.type === 'text')?.text ?? null
-  }
-
-  try {
-    let t = await attempt(true)
-    // Structured outputs may be unsupported for the model/version → degrade to plain JSON-in-text.
-    if (t === null && opts.schema) t = await attempt(false)
-    return t
-  } catch {
-    return null
-  }
-}
+export interface AnthropicConfig { apiKey: string, model: string }
 
 /** Parse a JSON object from a model reply (structured output is already valid; this also handles fences). */
 function parseJson<T>(text: string | null): T | null {
@@ -100,12 +63,85 @@ const PROPOSE_SCHEMA = {
   required: ['action', 'target_feature_id', 'confidence', 'rationale', 'proposed_spec'],
 }
 
-export function createAnthropicProvider(): LlmProvider {
+export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
   const stub = createStubProvider()
+  const { apiKey, model } = cfg
+  // Opus 4.x / Fable / Mythos reject `temperature`; everything else (Haiku/Sonnet) accepts it.
+  const acceptsTemperature = !/(opus-4|fable|mythos)/i.test(model)
+
+  async function callClaude(system: string, user: string, maxTokens = 512, opts: CallOpts = {}): Promise<string | null> {
+    const base: Record<string, unknown> = {
+      model, max_tokens: maxTokens, system,
+      messages: [{ role: 'user', content: user }],
+    }
+    if (opts.temperature !== undefined && acceptsTemperature) base.temperature = opts.temperature
+
+    const attempt = async (withSchema: boolean): Promise<string | null> => {
+      const body = withSchema && opts.schema
+        ? { ...base, output_config: { format: { type: 'json_schema', schema: opts.schema } } }
+        : base
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) return null
+      const data = await res.json() as { content?: { type: string, text?: string }[] }
+      return data.content?.find(b => b.type === 'text')?.text ?? null
+    }
+
+    try {
+      let t = await attempt(true)
+      // Structured outputs may be unsupported for the model/version → degrade to plain JSON-in-text.
+      if (t === null && opts.schema) t = await attempt(false)
+      return t
+    } catch {
+      return null
+    }
+  }
+
+  async function describeImage(b64: string, mime: string): Promise<string | null> {
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model, max_tokens: 300,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+              { type: 'text', text: 'Décris en 2-3 phrases ce que montre cette image, dans un contexte produit/logiciel (FR). Sois factuel.' },
+            ],
+          }],
+        }),
+      })
+      if (!res.ok) return null
+      const data = await res.json() as { content?: { type: string, text?: string }[] }
+      return data.content?.find(b => b.type === 'text')?.text ?? null
+    } catch { return null }
+  }
 
   return {
-    name: `anthropic:${MODEL}`,
+    name: `anthropic:${model}`,
     embed: async (text: string) => localEmbed(text),
+
+    extractAttachments: async (items) => {
+      const chunks: string[] = []
+      for (const it of items) {
+        if (it.kind === 'image' && it.base64) {
+          const desc = await describeImage(it.base64, it.mime)
+          if (desc) chunks.push(`Image jointe « ${it.filename} » : ${desc}`)
+        } else if (it.text) {
+          chunks.push(`Fichier joint « ${it.filename} » :\n${it.text.slice(0, 6000)}`)
+        }
+      }
+      return chunks.join('\n\n')
+    },
 
     detectIntent: async (message: string) => {
       const text = await callClaude(

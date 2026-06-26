@@ -1,6 +1,14 @@
-import { db } from './client'
+import { all, db } from './client'
 
 let _ready = false
+
+// `CREATE TABLE IF NOT EXISTS` can't add a column to an already-created table — editing the
+// CREATE statement is silently ignored on an existing DB. Every NEW column on an EXISTING table
+// must go through this idempotent guard (safe on the Fly volume as in dev).
+function addColumnIfMissing(table: string, col: string, ddl: string): void {
+  const cols = all<{ name: string }>(`PRAGMA table_info(${table})`)
+  if (!cols.some(c => c.name === col)) db().exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`)
+}
 
 /** Create all tables once. Idempotent. Mirrors the brief (§3) + intake_session. */
 export function ensureSchema(): void {
@@ -100,6 +108,96 @@ export function ensureSchema(): void {
     );
     CREATE INDEX IF NOT EXISTS events_by_feature ON feature_events (feature_id, seq);
 
+    -- Team members (auth + role). Audit columns elsewhere store the display NAME, not this id,
+    -- so existing rows + actorAvatar() keep working unchanged.
+    CREATE TABLE IF NOT EXISTS users (
+      id            TEXT PRIMARY KEY,
+      name          TEXT NOT NULL,
+      email         TEXT UNIQUE,
+      password_hash TEXT NOT NULL,
+      role          TEXT NOT NULL DEFAULT 'member',   -- owner | member
+      avatar_bg     TEXT,
+      avatar_init   TEXT,
+      created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Uploaded files (attached to a feature and/or the feedback that introduced them).
+    CREATE TABLE IF NOT EXISTS attachments (
+      id           TEXT PRIMARY KEY,
+      feature_id   TEXT REFERENCES features(id),
+      feedback_id  TEXT REFERENCES feedback(id),
+      filename     TEXT NOT NULL,
+      mime         TEXT NOT NULL,
+      bytes        INTEGER NOT NULL,
+      kind         TEXT NOT NULL,                    -- image | text | other
+      storage_path TEXT NOT NULL,                    -- relative to the uploads dir
+      uploaded_by  TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Runtime key/value config (Anthropic API key, model, …) — editable in the Settings screen.
+    CREATE TABLE IF NOT EXISTS settings (
+      key        TEXT PRIMARY KEY,
+      value      TEXT,
+      updated_by TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Betting tables: a persisted, collaborative deliberation. Members vote; the owner validates
+    -- → it produces/activates a hill and bets the selected features.
+    CREATE TABLE IF NOT EXISTS betting_tables (
+      id           TEXT PRIMARY KEY,
+      title        TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'open',     -- open | validated | cancelled
+      owner_id     TEXT REFERENCES users(id),
+      owner_name   TEXT,
+      hill_id      TEXT REFERENCES hills(id),        -- produced cycle; null until validated
+      generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      validated_at TEXT,
+      validated_by TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Frozen menu snapshot (denormalized so the table renders stably as features change).
+    CREATE TABLE IF NOT EXISTS betting_candidates (
+      id                TEXT PRIMARY KEY,
+      table_id          TEXT NOT NULL REFERENCES betting_tables(id),
+      feature_id        TEXT NOT NULL REFERENCES features(id),
+      theme             TEXT,
+      score             REAL,
+      title_snap        TEXT NOT NULL,
+      problem_snap      TEXT,
+      appetite_snap     TEXT,
+      signal_count_snap INTEGER,
+      selected          INTEGER NOT NULL DEFAULT 0,  -- owner's final pick at validation
+      created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(table_id, feature_id)
+    );
+
+    -- One vote per (candidate, voter); toggling = delete + insert.
+    CREATE TABLE IF NOT EXISTS betting_votes (
+      id           TEXT PRIMARY KEY,
+      table_id     TEXT NOT NULL REFERENCES betting_tables(id),
+      candidate_id TEXT NOT NULL REFERENCES betting_candidates(id),
+      voter_name   TEXT NOT NULL,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(table_id, candidate_id, voter_name)
+    );
+
+    -- Append-only betting-table audit (who did what, when) — mirrors feature_events.
+    CREATE TABLE IF NOT EXISTS betting_events (
+      seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+      table_id   TEXT NOT NULL REFERENCES betting_tables(id),
+      actor      TEXT NOT NULL,
+      actor_type TEXT NOT NULL DEFAULT 'user',
+      action     TEXT NOT NULL,                      -- generated | vote_cast | vote_cleared | validated | cancelled
+      summary    TEXT NOT NULL,
+      detail     TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS betting_votes_by_table ON betting_votes (table_id, candidate_id);
+    CREATE INDEX IF NOT EXISTS betting_cands_by_table ON betting_candidates (table_id);
+
     -- Conversational intake session (state lives here, not a definitive write)
     CREATE TABLE IF NOT EXISTS intake_session (
       id          TEXT PRIMARY KEY,
@@ -116,6 +214,13 @@ export function ensureSchema(): void {
     CREATE INDEX IF NOT EXISTS features_by_status  ON features (status, stale);
     CREATE INDEX IF NOT EXISTS decisions_by_feature ON decisions (feature_id, decided_at);
     CREATE INDEX IF NOT EXISTS routing_by_feedback  ON routing_log (feedback_id, created_at);
+    CREATE INDEX IF NOT EXISTS attachments_by_feature  ON attachments (feature_id);
+    CREATE INDEX IF NOT EXISTS attachments_by_feedback ON attachments (feedback_id);
   `)
+
+  // Migrations: add new columns to existing tables (idempotent). New TABLES go in the exec above.
+  // A new feature iteration links back to the shipped feature it supersedes (no reopening 'done').
+  addColumnIfMissing('features', 'supersedes_id', 'supersedes_id TEXT REFERENCES features(id)')
+
   _ready = true
 }

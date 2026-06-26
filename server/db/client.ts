@@ -22,6 +22,13 @@ export function db(): DatabaseSync {
   return _db
 }
 
+/** Directory holding the DB — uploads live alongside it so they share the Fly volume. */
+export function dataDir(): string {
+  const raw = process.env.NUXT_DB_URL || 'file:.data/app.db'
+  const path = raw.startsWith('file:') ? raw.slice('file:'.length).split('?')[0] : raw
+  return dirname(path)
+}
+
 type Arg = string | number | bigint | null | Uint8Array
 export function run(sql: string, ...args: Arg[]) {
   return db().prepare(sql).run(...args)

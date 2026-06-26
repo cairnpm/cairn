@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
+import { ArrowUp, Paperclip, Sparkles, X } from 'lucide-vue-next'
+import { Card, CardContent } from '@/components/ui/card'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 
 interface Candidate { feature_id: string; title: string; similarity: number }
 interface Proposal {
   action: 'create_feature' | 'append' | 'merge' | 'discard'
-  target_feature_id: string | null
-  merge_from_feature_id?: string | null
-  classification: string
-  confidence: number
-  rationale: string
+  target_feature_id: string | null; merge_from_feature_id?: string | null
+  classification: string; confidence: number; rationale: string
   proposed_spec: { title: string; problem: string; appetite: string; solution: string; rabbit_holes: string; out_of_bounds: string }
   candidates: Candidate[]
 }
@@ -21,22 +24,33 @@ const { author } = bike
 const sessionId = ref<string | null>(null)
 const messages = ref<Msg[]>([])
 const proposal = ref<Proposal | null>(null)
-const state = ref<string>('')
+const state = ref('')
 const draft = ref('')
 const pending = ref(false)
 const committed = ref<{ action: string; feature_id: string | null } | null>(null)
 const chatEl = ref<HTMLElement | null>(null)
 
-function scrollDown() {
-  // Double rAF: let the (possibly long) proposal card lay out before scrolling to it.
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    if (chatEl.value) chatEl.value.scrollTop = chatEl.value.scrollHeight
-  }))
+interface Att { id: string; filename: string; kind: string }
+const attachments = ref<Att[]>([])
+const uploading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+async function onFiles(e: Event) {
+  const files = (e.target as HTMLInputElement).files
+  if (!files?.length) return
+  uploading.value = true
+  try {
+    const fd = new FormData()
+    for (const f of Array.from(files)) fd.append('files', f)
+    const r = await $fetch<{ attachments: Att[] }>('/api/uploads', { method: 'POST', body: fd })
+    attachments.value.push(...r.attachments)
+  } finally { uploading.value = false; if (fileInput.value) fileInput.value.value = '' }
 }
-watch([() => messages.value.length, proposal, committed], async () => {
-  await nextTick()
-  scrollDown()
-})
+function removeAttachment(id: string) { attachments.value = attachments.value.filter(a => a.id !== id) }
+
+function scrollDown() {
+  requestAnimationFrame(() => requestAnimationFrame(() => { if (chatEl.value) chatEl.value.scrollTop = chatEl.value.scrollHeight }))
+}
+watch([() => messages.value.length, proposal, committed], async () => { await nextTick(); scrollDown() })
 
 async function send() {
   const text = draft.value.trim()
@@ -47,179 +61,147 @@ async function send() {
   try {
     const r = await $fetch<TurnResponse>('/api/intake/turn', {
       method: 'POST',
-      body: { session_id: sessionId.value, message: text, captured_by: author.value },
+      body: { session_id: sessionId.value, message: text, captured_by: author.value, attachment_ids: attachments.value.map(a => a.id) },
     })
+    attachments.value = []
     sessionId.value = r.session_id
     proposal.value = r.proposal
     state.value = r.state
     messages.value.push({ role: 'agent', text: r.agent_message })
-  } finally {
-    pending.value = false
-  }
+  } finally { pending.value = false }
 }
-
-// Arbitration helper (pending_review): send a templated correction turn.
-function pick(text: string) {
-  draft.value = text
-  send()
-}
-
+function pick(text: string) { draft.value = text; send() }
 async function accept() {
   if (!sessionId.value || pending.value) return
   pending.value = true
   try {
-    const r = await $fetch<{ action: string; feature_id: string; idempotent: boolean }>('/api/intake/commit', {
-      method: 'POST',
-      body: { session_id: sessionId.value },
-    })
+    const r = await $fetch<{ action: string; feature_id: string }>('/api/intake/commit', { method: 'POST', body: { session_id: sessionId.value } })
     committed.value = { action: r.action, feature_id: r.feature_id }
     proposal.value = null
-  } finally {
-    pending.value = false
-  }
+  } finally { pending.value = false }
 }
-
 function reset() {
-  sessionId.value = null
-  messages.value = []
-  proposal.value = null
-  state.value = ''
-  committed.value = null
-  draft.value = ''
+  sessionId.value = null; messages.value = []; proposal.value = null
+  state.value = ''; committed.value = null; draft.value = ''; attachments.value = []
 }
-
-function onKey(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
-}
-
-const suggestions = [
-  'Les utilisateurs se plaignent que l\'export PDF est très lent (~30s)',
-  'Où en est la feature Slack notifications ?',
-  'Sur le ticket Slack notifications, précise qu\'il faut aussi notifier les nouveaux commentaires',
-  'Bug critique : crash de l\'app sur export en batch avec +50 fichiers',
-]
-const chips = ['📝 Signal : export PDF lent', '🔎 Où en est Slack ?', '✏️ Affiner Slack notifications', '🐛 Bug critique prod']
+function onKey(e: KeyboardEvent) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
 
 const ACTION_LABEL: Record<string, string> = {
-  create_feature: 'Créer une nouvelle feature',
-  append: 'Rattacher à une feature existante',
-  merge: 'Fusionner des features',
-  discard: 'Écarter (doublon / hors-scope)',
+  create_feature: 'Créer une nouvelle feature', append: 'Rattacher à une feature',
+  merge: 'Fusionner des features', discard: 'Écarter (doublon / hors-scope)',
 }
+const QUICK = [
+  'Les utilisateurs se plaignent que ',
+  'Où en est-on sur ',
+  'Sur le ticket …, précise que ',
+  'Bug critique : ',
+]
 </script>
 
 <template>
-  <div style="height: 100%; display: flex; flex-direction: column; background: white;">
-    <!-- Empty / welcome -->
-    <div v-if="messages.length === 0" style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px 32px;">
-      <div style="width: 100%; max-width: 600px; display: flex; flex-direction: column; align-items: center; gap: 32px;">
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
-          <div style="width: 56px; height: 56px; background: #18181b; border-radius: 14px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
-            <span style="color: white; font-size: 26px; font-weight: 800; letter-spacing: -1px;">B</span>
-          </div>
-          <div style="text-align: center;">
-            <div style="font-size: 26px; font-weight: 700; color: #18181b; margin-bottom: 10px; letter-spacing: -0.5px;">Comment puis-je vous aider ?</div>
-            <div style="font-size: 15px; color: #71717a; line-height: 1.65; max-width: 480px;">Décrivez un signal, posez une question (« où en est… ? ») ou affinez un ticket (« sur…, précise… »).<br>Je détecte les doublons ; l'écriture n'a lieu qu'à la confirmation.</div>
+  <div class="flex h-full flex-col">
+    <!-- EMPTY -->
+    <div v-if="messages.length === 0" class="flex flex-1 items-center justify-center overflow-auto p-6">
+      <div class="w-full max-w-2xl">
+        <div class="mb-6 flex flex-col items-center gap-3 text-center">
+          <div class="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Sparkles class="size-5" /></div>
+          <div>
+            <h1 class="text-xl font-semibold tracking-tight">Comment puis-je vous aider ?</h1>
+            <p class="mt-1 text-sm text-muted-foreground">Décrivez un signal, posez une question, ou affinez un ticket. L'écriture n'a lieu qu'à la confirmation.</p>
           </div>
         </div>
 
-        <div style="width: 100%; border: 1.5px solid #e4e4e7; border-radius: 14px; background: white; overflow: hidden; box-shadow: 0 2px 16px rgba(0,0,0,0.06);">
-          <textarea
-            v-model="draft"
-            placeholder="Ex: les utilisateurs se plaignent que l'export PDF est très lent..."
-            style="width: 100%; min-height: 108px; padding: 18px 18px 10px; border: none; font-family: inherit; font-size: 15px; color: #18181b; resize: none; line-height: 1.65; background: transparent;"
-            @keydown="onKey"
-          />
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-top: 1px solid #f4f4f5; background: #fafafa;">
-            <span style="font-size: 12px; color: #a1a1aa;">Shift+Entrée pour une nouvelle ligne</span>
-            <button class="bk-dark" :disabled="pending || !draft.trim()" style="padding: 8px 20px; background: #18181b; color: white; border: none; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit;" @click="send">Envoyer ↑</button>
-          </div>
-        </div>
+        <Card class="py-0">
+          <CardContent class="p-2">
+            <Textarea v-model="draft" placeholder="Ex: l'export PDF est très lent pour les rapports >100Mo, 5 plaintes cette semaine…" class="min-h-28 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
+            <div v-if="attachments.length" class="flex flex-wrap gap-1.5 px-2 pb-2">
+              <Badge v-for="a in attachments" :key="a.id" variant="secondary" class="gap-1">{{ a.kind === 'image' ? '🖼️' : '📄' }} {{ a.filename }}<button @click="removeAttachment(a.id)"><X class="size-3" /></button></Badge>
+            </div>
+            <div class="flex items-center justify-between px-1 pb-1">
+              <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log" class="hidden" @change="onFiles">
+              <Button variant="ghost" size="sm" :disabled="uploading" @click="fileInput?.click()"><Paperclip class="size-4" /> {{ uploading ? 'Envoi…' : 'Joindre' }}</Button>
+              <Button size="sm" :disabled="pending || !draft.trim()" @click="send">Envoyer <ArrowUp class="size-4" /></Button>
+            </div>
+          </CardContent>
+        </Card>
 
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
-          <button v-for="(chip, i) in chips" :key="chip" class="bk-chip" style="padding: 7px 16px; border: 1px solid #e4e4e7; background: white; color: #71717a; border-radius: 99px; font-size: 13px; cursor: pointer; font-family: inherit;" @click="draft = suggestions[i]">{{ chip }}</button>
+        <div class="mt-3 flex flex-wrap justify-center gap-2">
+          <Button v-for="q in QUICK" :key="q" variant="outline" size="sm" class="text-muted-foreground" @click="draft = q">{{ q.trim() }}…</Button>
         </div>
       </div>
     </div>
 
-    <!-- Chat -->
+    <!-- CHAT -->
     <template v-else>
-      <div ref="chatEl" style="flex: 1; min-height: 0; overflow-y: auto; padding: 32px; display: flex; flex-direction: column; gap: 20px;">
-        <div v-for="(m, i) in messages" :key="i" :style="{ display: 'flex', gap: '10px', justifyContent: m.role === 'agent' ? 'flex-start' : 'flex-end', alignItems: 'flex-end', maxWidth: '720px', width: '100%', margin: '0 auto', boxSizing: 'border-box' }">
-          <div v-if="m.role === 'agent'" style="width: 28px; height: 28px; background: #18181b; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-            <span style="color: white; font-size: 11px; font-weight: 700;">B</span>
+      <div ref="chatEl" class="flex-1 min-h-0 overflow-y-auto">
+        <div class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+          <div v-for="(m, i) in messages" :key="i" class="flex gap-2.5" :class="m.role === 'user' ? 'justify-end' : ''">
+            <div v-if="m.role === 'agent'" class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"><Sparkles class="size-3.5" /></div>
+            <div class="max-w-[80%] whitespace-pre-wrap rounded-lg px-3.5 py-2.5 text-sm leading-relaxed" :class="m.role === 'agent' ? 'bg-muted' : 'bg-primary text-primary-foreground'">{{ m.text }}</div>
           </div>
-          <div :style="{ maxWidth: '72%', padding: '12px 16px', fontSize: '14px', lineHeight: '1.65', background: m.role === 'agent' ? '#f4f4f5' : '#18181b', color: m.role === 'agent' ? '#18181b' : '#fff', borderRadius: m.role === 'agent' ? '4px 14px 14px 14px' : '14px 4px 14px 14px', whiteSpace: 'pre-wrap' }">{{ m.text }}</div>
-        </div>
 
-        <!-- Proposal card — in the conversation flow -->
-        <div v-if="proposal" :style="{ flexShrink: 0, maxWidth: '720px', width: '100%', margin: '0 auto', border: `1.5px solid ${state === 'pending_review' ? '#f59e0b' : '#18181b'}`, borderRadius: '12px', overflow: 'hidden' }">
-          <div :style="{ padding: '12px 16px', background: state === 'pending_review' ? '#b45309' : '#18181b', color: 'white', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600 }">
-            <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.8;">{{ state === 'pending_review' ? '⚠ Arbitrage requis' : 'Décision de routing' }}</span>
-            <span style="margin-left: auto; font-size: 12px; padding: 2px 8px; border-radius: 99px; background: rgba(255,255,255,0.15);">{{ (proposal.confidence * 100) | 0 }}%</span>
+          <div v-if="pending" class="flex gap-2.5">
+            <div class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"><Sparkles class="size-3.5" /></div>
+            <div class="flex items-center gap-1 rounded-lg bg-muted px-3.5 py-3"><span class="bk-dot" /><span class="bk-dot" /><span class="bk-dot" /></div>
           </div>
-          <div style="padding: 16px;">
-            <!-- Low-confidence arbitration: explicit human choice -->
-            <div v-if="state === 'pending_review'" style="margin-bottom: 12px; padding: 10px 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;">
-              <div style="font-size: 12px; color: #92400e; margin-bottom: 8px;">Confiance faible — choisis le routing :</div>
-              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                <button class="bk-choice" :disabled="pending" style="padding: 6px 12px; border: 1px solid #e4e4e7; background: white; color: #18181b; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;" @click="pick('Crée une nouvelle feature pour ça.')">+ Créer une nouvelle feature</button>
-                <button v-for="c in proposal.candidates" :key="c.feature_id" class="bk-choice" :disabled="pending" style="padding: 6px 12px; border: 1px solid #e4e4e7; background: white; color: #18181b; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;" @click="pick(`Rattache plutôt à la feature « ${c.title} ».`)">→ Rattacher à « {{ c.title }} »</button>
-              </div>
-            </div>
 
-            <!-- The decision: create / append / merge / discard -->
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; background: #f4f4f5; border-radius: 8px;">
-              <span style="font-size: 13px; font-weight: 600; color: #18181b;">{{ ACTION_LABEL[proposal.action] || proposal.action }}</span>
-              <span v-if="proposal.target_feature_id" style="font-size: 11px; color: #71717a; font-family: 'Courier New', monospace;">→ {{ proposal.target_feature_id.slice(0, 8) }}</span>
-              <span v-if="proposal.merge_from_feature_id" style="font-size: 11px; color: #71717a; font-family: 'Courier New', monospace;">⊕ absorbe {{ proposal.merge_from_feature_id.slice(0, 8) }}</span>
+          <!-- Routing proposal -->
+          <Card v-if="proposal" class="ml-8 gap-0 overflow-hidden py-0">
+            <div class="flex items-center justify-between border-b px-4 py-2.5">
+              <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ state === 'pending_review' ? 'Arbitrage requis' : 'Décision de routing' }}</span>
+              <Badge variant="outline" class="font-mono">conf. {{ (proposal.confidence * 100) | 0 }}%</Badge>
             </div>
-            <div v-if="proposal.rationale" style="font-size: 12px; color: #71717a; font-style: italic; line-height: 1.5; margin-bottom: 12px;">{{ proposal.rationale }}</div>
+            <CardContent class="flex flex-col gap-3 p-4">
+              <div v-if="state === 'pending_review'" class="flex flex-wrap gap-2 rounded-md border border-dashed p-2.5">
+                <Button variant="outline" size="sm" :disabled="pending" @click="pick('Crée une nouvelle feature pour ça.')">+ Nouvelle feature</Button>
+                <Button v-for="c in proposal.candidates" :key="c.feature_id" variant="outline" size="sm" :disabled="pending" @click="pick(`Rattache plutôt à la feature « ${c.title} ».`)">→ {{ c.title }}</Button>
+              </div>
 
-            <template v-if="proposal.action !== 'discard'">
-              <div style="font-size: 15px; font-weight: 600; color: #18181b; margin-bottom: 4px;">{{ proposal.proposed_spec.title }}</div>
-              <div style="font-size: 13px; color: #71717a; line-height: 1.55; margin-bottom: 8px;">{{ proposal.proposed_spec.problem }}</div>
-              <div v-if="proposal.proposed_spec.solution" style="font-size: 12px; color: #71717a; line-height: 1.5; margin-bottom: 6px;">
-                <strong style="color: #18181b;">Solution :</strong> {{ proposal.proposed_spec.solution }}
+              <div class="flex items-center gap-2">
+                <Badge>{{ ACTION_LABEL[proposal.action] || proposal.action }}</Badge>
+                <span v-if="proposal.target_feature_id" class="font-mono text-xs text-muted-foreground">{{ proposal.target_feature_id.slice(0, 8) }}</span>
               </div>
-              <div v-if="proposal.proposed_spec.rabbit_holes" style="font-size: 12px; color: #71717a; line-height: 1.5; margin-bottom: 6px;">
-                <strong style="color: #18181b;">Rabbit holes :</strong> {{ proposal.proposed_spec.rabbit_holes }}
-              </div>
-              <div v-if="proposal.proposed_spec.out_of_bounds" style="font-size: 12px; color: #a1a1aa; line-height: 1.5; margin-bottom: 10px;">
-                <strong style="color: #71717a;">No-gos :</strong> {{ proposal.proposed_spec.out_of_bounds }}
-              </div>
-              <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
-                <span style="font-size: 12px; padding: 2px 8px; background: #f4f4f5; color: #71717a; border-radius: 4px; font-weight: 500;">appétit · {{ proposal.proposed_spec.appetite }}</span>
-                <span style="font-size: 12px; padding: 2px 8px; background: #f4f4f5; color: #71717a; border-radius: 4px; font-weight: 500;">{{ proposal.classification }}</span>
-              </div>
-            </template>
-            <div v-if="proposal.candidates.length" style="font-size: 12px; color: #a1a1aa; margin-bottom: 6px;">Doublons proches détectés :</div>
-            <div v-for="c in proposal.candidates" :key="c.feature_id" style="font-size: 12px; color: #71717a; display: flex; justify-content: space-between; padding: 3px 0;">
-              <span>{{ c.title }}</span><span style="font-family: 'Courier New', monospace;">{{ (c.similarity * 100) | 0 }}%</span>
-            </div>
-            <div style="display: flex; gap: 8px; margin-top: 14px;">
-              <button class="bk-dark" :disabled="pending" style="flex: 1; padding: 9px; background: #18181b; color: white; border: none; border-radius: 7px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: inherit;" @click="accept">{{ proposal.action === 'discard' ? '✓ Écarter (archiver)' : proposal.action === 'merge' ? '✓ Confirmer la fusion' : '✓ Confirmer & écrire' }}</button>
-              <span style="flex: 1; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #a1a1aa; text-align: center;">…ou corrige ci-dessous</span>
-            </div>
-          </div>
-        </div>
+              <p v-if="proposal.rationale" class="text-sm italic text-muted-foreground">{{ proposal.rationale }}</p>
 
-        <!-- Committed banner — in flow -->
-        <div v-if="committed" style="flex-shrink: 0; max-width: 720px; width: 100%; margin: 0 auto; border: 1px solid #bbf7d0; background: #f0fdf4; border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 12px;">
-          <span style="font-size: 18px;">✓</span>
-          <div style="flex: 1; font-size: 13px; color: #15803d;">
-            <template v-if="committed.action === 'discard'">Signal écarté — archivé, aucune feature créée.</template>
-            <template v-else-if="committed.action === 'merge'">Features fusionnées — survivante <code>{{ committed.feature_id?.slice(0, 8) }}</code>.</template>
-            <template v-else>Écrit en base — {{ committed.action === 'append' ? 'rattaché à' : 'nouvelle feature' }} <code>{{ committed.feature_id?.slice(0, 8) }}</code>.</template>
-          </div>
-          <button style="padding: 6px 12px; background: white; border: 1px solid #bbf7d0; color: #15803d; border-radius: 6px; font-size: 13px; cursor: pointer; font-family: inherit;" @click="reset">Nouveau signal</button>
+              <Card v-if="proposal.action !== 'discard'" class="gap-1.5 py-0">
+                <CardContent class="p-3">
+                  <div class="font-medium">{{ proposal.proposed_spec.title }}</div>
+                  <p class="mt-1 text-sm text-muted-foreground">{{ proposal.proposed_spec.problem }}</p>
+                  <div v-if="proposal.proposed_spec.solution" class="mt-1.5 text-sm"><span class="font-medium">Solution :</span> {{ proposal.proposed_spec.solution }}</div>
+                  <div class="mt-2 flex gap-1.5"><Badge variant="outline">appétit · {{ proposal.proposed_spec.appetite }}</Badge><Badge variant="secondary">{{ proposal.classification }}</Badge></div>
+                </CardContent>
+              </Card>
+
+              <div v-if="proposal.candidates.length" class="text-sm">
+                <div class="mb-1 text-xs text-muted-foreground">Doublons proches</div>
+                <div v-for="c in proposal.candidates" :key="c.feature_id" class="flex justify-between text-muted-foreground"><span>{{ c.title }}</span><span class="font-mono">{{ (c.similarity * 100) | 0 }}%</span></div>
+              </div>
+
+              <Button class="w-full" :disabled="pending" @click="accept">{{ proposal.action === 'discard' ? 'Écarter (archiver)' : proposal.action === 'merge' ? 'Confirmer la fusion' : 'Confirmer & écrire' }}</Button>
+            </CardContent>
+          </Card>
+
+          <!-- Committed -->
+          <Card v-if="committed" class="ml-8 py-0">
+            <CardContent class="flex items-center gap-3 p-3 text-sm">
+              <span class="flex-1">
+                <template v-if="committed.action === 'discard'">Signal écarté — archivé.</template>
+                <template v-else>✓ Écrit en base — {{ committed.action === 'append' ? 'rattaché à' : committed.action === 'merge' ? 'survivante' : 'nouvelle feature' }} <code class="font-mono">{{ committed.feature_id?.slice(0, 8) }}</code></template>
+              </span>
+              <Button variant="outline" size="sm" @click="reset">Nouveau signal</Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
-      <div v-if="!committed" style="border-top: 1px solid #e4e4e7; padding: 16px 32px; background: white; flex-shrink: 0;">
-        <div style="max-width: 720px; margin: 0 auto; display: flex; gap: 8px;">
-          <input v-model="draft" type="text" placeholder="Réponds, précise ou corrige le routing..." style="flex: 1; padding: 11px 16px; border: 1.5px solid #e4e4e7; border-radius: 8px; font-size: 14px; font-family: inherit; color: #18181b; background: white;" @keydown="onKey">
-          <button class="bk-dark" :disabled="pending || !draft.trim()" style="width: 44px; height: 44px; background: #18181b; color: white; border: none; border-radius: 8px; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0;" @click="send">↑</button>
+      <div v-if="!committed" class="border-t p-3">
+        <div class="mx-auto max-w-2xl">
+          <Card class="py-0">
+            <CardContent class="flex items-end gap-2 p-2">
+              <Textarea v-model="draft" placeholder="Réponds, précise ou corrige le routing…" rows="1" class="min-h-9 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
+              <Button size="icon" :disabled="pending || !draft.trim()" @click="send"><ArrowUp class="size-4" /></Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </template>
@@ -227,9 +209,8 @@ const ACTION_LABEL: Record<string, string> = {
 </template>
 
 <style scoped>
-.bk-dark:hover { background: #27272a !important; }
-.bk-dark:disabled { opacity: 0.5; cursor: not-allowed; }
-.bk-chip:hover { border-color: #18181b !important; color: #18181b !important; }
-.bk-choice:hover { border-color: #b45309 !important; background: #fffbeb !important; }
-.bk-choice:disabled { opacity: 0.5; cursor: not-allowed; }
+.bk-dot { width: 6px; height: 6px; border-radius: 9999px; background: currentColor; opacity: 0.4; display: inline-block; animation: bk-bounce 1.2s infinite ease-in-out; }
+.bk-dot:nth-child(2) { animation-delay: 0.15s; }
+.bk-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes bk-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.3; } 30% { transform: translateY(-4px); opacity: 0.9; } }
 </style>

@@ -14,9 +14,20 @@ export interface ProposeInput {
  * talks to this interface, so Claude / Gemini / a stub are interchangeable.
  * `embed` stays local for now (brief §6); only reasoning calls hit a vendor.
  */
+/** A file to turn into intake context: images go to vision, text is inlined. */
+export interface AttachmentForLlm {
+  kind: 'image' | 'text' | 'other'
+  mime: string
+  filename: string
+  base64?: string
+  text?: string
+}
+
 export interface LlmProvider {
   name: string
   embed: (text: string) => Promise<number[]>
+  /** Turn attached files into French context text (vision for images, inline for text). Optional. */
+  extractAttachments?: (items: AttachmentForLlm[]) => Promise<string>
   /** Route the input: a read-only question, a refine of a named feature, or a raw signal. */
   detectIntent: (message: string) => Promise<Intent>
   /** Answer a read-only question about a feature from its current DB state (no writing). */
@@ -28,13 +39,31 @@ export interface LlmProvider {
 }
 
 let _provider: LlmProvider | null = null
+let _fingerprint = ''
 
-/** Anthropic when ANTHROPIC_API_KEY is set, deterministic stub otherwise. */
+/** Drop the cached provider so the next getLlm() rebuilds from current settings (call after a settings write). */
+export function resetLlm(): void {
+  _provider = null
+  _fingerprint = ''
+}
+
+/**
+ * Resolve key + model from runtime settings (DB), falling back to env. Anthropic when a key is
+ * present, deterministic stub otherwise. Cached by a key|model fingerprint so changing settings
+ * auto-invalidates the cache without a restart — single process, single writer.
+ */
 export async function getLlm(): Promise<LlmProvider> {
-  if (_provider) return _provider
-  if (process.env.ANTHROPIC_API_KEY) {
+  const { getSetting } = await import('../db/settings')
+  const apiKey = getSetting('anthropic_api_key') ?? process.env.ANTHROPIC_API_KEY ?? ''
+  const model = getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5'
+  const fingerprint = `${apiKey ? 'anthropic' : 'stub'}|${model}|${apiKey}`
+
+  if (_provider && fingerprint === _fingerprint) return _provider
+  _fingerprint = fingerprint
+
+  if (apiKey) {
     const { createAnthropicProvider } = await import('./anthropic')
-    _provider = createAnthropicProvider()
+    _provider = createAnthropicProvider({ apiKey, model })
   } else {
     const { createStubProvider } = await import('./stub')
     _provider = createStubProvider()

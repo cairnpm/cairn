@@ -5,7 +5,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-01-01',
   devtools: { enabled: true },
 
-  modules: ['shadcn-nuxt'],
+  modules: ['shadcn-nuxt', 'nuxt-auth-utils'],
 
   // Flat component names regardless of subfolders (<IntakeScreen />, not <ScreensIntakeScreen />)
   components: [{ path: '~/components', pathPrefix: false }],
@@ -26,6 +26,7 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'Bicycle — Product OS',
+      htmlAttrs: { class: 'dark' },
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
@@ -35,7 +36,7 @@ export default defineNuxtConfig({
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
         {
           rel: 'stylesheet',
-          href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
+          href: 'https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap',
         },
       ],
     },
