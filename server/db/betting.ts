@@ -1,6 +1,6 @@
 import { all, get, run } from './client'
 
-export type BettingAction = 'generated' | 'vote_cast' | 'vote_cleared' | 'validated' | 'cancelled'
+export type BettingAction = 'generated' | 'vote_cast' | 'vote_cleared' | 'validated' | 'cancelled' | 'deleted' | 'restored'
 
 export function logBettingEvent(
   tableId: string, actor: string | null, action: BettingAction, summary: string,

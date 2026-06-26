@@ -1,20 +1,18 @@
-import { get, run, tx } from '~~/server/db/client'
+import { get, run } from '~~/server/db/client'
 import { ensureSchema } from '~~/server/db/schema'
+import { logBettingEvent } from '~~/server/db/betting'
 
-// Delete a betting table (its candidates, votes and events). Any hill/bets it already produced
-// are separate records and are kept.
+// Soft delete: keep the table, flip status to 'deleted', remember the prior status for restore.
 export default defineEventHandler(async (event) => {
   ensureSchema()
-  await requireUserSession(event)
+  const { user } = await requireUserSession(event)
+  const actor = (user?.name as string) || 'inconnu'
   const id = getRouterParam(event, 'id')!
-  const t = get<{ id: string }>('SELECT id FROM betting_tables WHERE id = ?', id)
+  const t = get<{ status: string }>('SELECT status FROM betting_tables WHERE id = ?', id)
   if (!t) throw createError({ statusCode: 404, statusMessage: 'Betting table not found' })
+  if (t.status === 'deleted') return { ok: true, status: 'deleted' }
 
-  tx(() => {
-    run('DELETE FROM betting_votes WHERE table_id = ?', id)
-    run('DELETE FROM betting_candidates WHERE table_id = ?', id)
-    run('DELETE FROM betting_events WHERE table_id = ?', id)
-    run('DELETE FROM betting_tables WHERE id = ?', id)
-  })
-  return { ok: true }
+  run('UPDATE betting_tables SET prev_status = status, status = \'deleted\' WHERE id = ?', id)
+  logBettingEvent(id, actor, 'deleted', `${actor} a supprimé la table`)
+  return { ok: true, status: 'deleted' }
 })

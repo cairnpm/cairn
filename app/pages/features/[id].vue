@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watchEffect } from 'vue'
-import { MoreHorizontal, Trash2 } from 'lucide-vue-next'
+import { computed, onUnmounted, ref, watchEffect } from 'vue'
+import { MoreHorizontal, RotateCcw, Trash2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import {
@@ -11,12 +11,13 @@ import type { FeatureDetailData } from '~/types/feature'
 
 const route = useRoute()
 const bike = useBicycle()
-const { data: detail, error } = await useFetch<FeatureDetailData>(() => `/api/features/${route.params.id}`, { getCachedData: getFreshData })
+const { data: detail, error, refresh } = await useFetch<FeatureDetailData>(() => `/api/features/${route.params.id}`, { getCachedData: getFreshData })
 
 // Feed the breadcrumb (Workspace › Backlog › <feature title>).
 watchEffect(() => { if (detail.value) bike.setCrumb(detail.value.feature.title) })
 onUnmounted(() => bike.setCrumb(''))
 
+const isDeleted = computed(() => detail.value?.feature.status === 'deleted')
 const confirmOpen = ref(false)
 const deleting = ref(false)
 async function confirmDelete() {
@@ -27,6 +28,12 @@ async function confirmDelete() {
     if (bike.selectedFeatureId.value === route.params.id) bike.clearFeature()
     await navigateTo('/backlog')
   } finally { deleting.value = false }
+}
+const restoring = ref(false)
+async function restore() {
+  if (restoring.value) return
+  restoring.value = true
+  try { await $fetch(`/api/features/${route.params.id}/restore`, { method: 'POST' }); await refresh() } finally { restoring.value = false }
 }
 </script>
 
@@ -39,7 +46,8 @@ async function confirmDelete() {
             <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem variant="destructive" @click="confirmOpen = true"><Trash2 /> Supprimer</DropdownMenuItem>
+            <DropdownMenuItem v-if="isDeleted" :disabled="restoring" @click="restore"><RotateCcw /> Réactiver</DropdownMenuItem>
+            <DropdownMenuItem v-else variant="destructive" @click="confirmOpen = true"><Trash2 /> Supprimer</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </template>
@@ -53,7 +61,7 @@ async function confirmDelete() {
         <AlertDialogHeader>
           <AlertDialogTitle>Supprimer cette feature ?</AlertDialogTitle>
           <AlertDialogDescription>
-            « {{ detail?.feature.title }} » et tout son historique (signaux, décisions, activité) seront définitivement supprimés. Cette action est irréversible.
+            « {{ detail?.feature.title }} » passera au statut « Supprimée ». Son historique est conservé et tu pourras la réactiver depuis l'onglet « Supprimées » du backlog.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

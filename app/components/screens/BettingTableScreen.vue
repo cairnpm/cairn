@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watchEffect } from 'vue'
-import { Check, MoreHorizontal, Trash2 } from 'lucide-vue-next'
+import { Check, MoreHorizontal, RotateCcw, Trash2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -22,6 +22,7 @@ const { data, refresh } = await useFetch<BettingTableDetailData>(() => `/api/bet
 watchEffect(() => { if (data.value) bike.setCrumb(data.value.table.title) })
 onUnmounted(() => bike.setCrumb(''))
 
+const isDeleted = computed(() => data.value?.table.status === 'deleted')
 const confirmOpen = ref(false)
 const deleting = ref(false)
 async function confirmDelete() {
@@ -31,6 +32,12 @@ async function confirmDelete() {
     await $fetch(`/api/betting-tables/${id.value}`, { method: 'DELETE' })
     await navigateTo('/betting')
   } finally { deleting.value = false }
+}
+const restoring = ref(false)
+async function restore() {
+  if (restoring.value) return
+  restoring.value = true
+  try { await $fetch(`/api/betting-tables/${id.value}/restore`, { method: 'POST' }); await refresh() } finally { restoring.value = false }
 }
 
 const busy = ref(false)
@@ -80,7 +87,8 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
             <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem variant="destructive" @click="confirmOpen = true"><Trash2 /> Supprimer</DropdownMenuItem>
+            <DropdownMenuItem v-if="isDeleted" :disabled="restoring" @click="restore"><RotateCcw /> Réactiver</DropdownMenuItem>
+            <DropdownMenuItem v-else variant="destructive" @click="confirmOpen = true"><Trash2 /> Supprimer</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </template>
@@ -135,7 +143,7 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
         <AlertDialogHeader>
           <AlertDialogTitle>Supprimer cette betting table ?</AlertDialogTitle>
           <AlertDialogDescription>
-            « {{ data.table.title }} », ses candidats et ses votes seront définitivement supprimés. Un éventuel cycle déjà créé est conservé. Cette action est irréversible.
+            « {{ data.table.title }} » passera au statut « Supprimée ». Ses candidats, votes et historique sont conservés et tu pourras la réactiver depuis l'onglet « Supprimées ».
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

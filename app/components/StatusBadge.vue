@@ -16,6 +16,7 @@ const VARIANT: Record<string, 'default' | 'secondary' | 'outline' | 'destructive
   closed: 'outline',
   archived: 'outline',
   cancelled: 'outline',
+  deleted: 'destructive',
 }
 const variant = computed(() => VARIANT[props.status] ?? 'outline')
 </script>

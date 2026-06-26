@@ -25,10 +25,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
     <!-- Header (border-b) -->
     <header class="flex flex-col gap-3 border-b px-6 py-4">
       <div class="flex items-start justify-between gap-3">
-        <div class="flex items-center gap-2">
-          <h2 class="text-base font-semibold tracking-tight" :class="compact ? 'pr-24' : ''">{{ data.table.title }}</h2>
-          <StatusBadge :status="data.table.status" />
-        </div>
+        <h2 class="text-base font-semibold tracking-tight" :class="compact ? 'pr-24' : ''">{{ data.table.title }}</h2>
         <div class="flex items-center gap-2">
           <Button v-if="data.table.hill_id && !compact" as-child variant="link" size="sm" class="h-7 px-0">
             <NuxtLink :to="`/hills/${data.table.hill_id}`">Voir le cycle <ArrowRight class="size-3.5" /></NuxtLink>
@@ -36,12 +33,13 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
           <slot name="header-action" />
         </div>
       </div>
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-        <div><div class="text-xs text-muted-foreground">Créée par</div><div class="flex items-center gap-1.5 font-medium"><UserAvatar :name="data.table.owner_name" class="size-5" />{{ data.table.owner_name }}</div></div>
-        <div><div class="text-xs text-muted-foreground">Candidats</div><div class="font-medium tabular-nums">{{ data.candidates.length }}</div></div>
-        <div><div class="text-xs text-muted-foreground">Votes</div><div class="font-medium tabular-nums">{{ totalVotes() }}</div></div>
-        <div v-if="data.table.validated_by"><div class="text-xs text-muted-foreground">Validée par</div><div class="font-medium">{{ data.table.validated_by }}</div></div>
-        <NuxtLink v-if="data.table.hill_id && compact" :to="`/hills/${data.table.hill_id}`" class="text-muted-foreground hover:text-foreground">→ cycle</NuxtLink>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <MetaField label="Statut"><StatusBadge :status="data.table.status" /></MetaField>
+        <MetaField label="Créée par"><UserAvatar :name="data.table.owner_name" class="size-5" />{{ data.table.owner_name }}</MetaField>
+        <MetaField label="Candidats"><span class="tabular-nums">{{ data.candidates.length }}</span></MetaField>
+        <MetaField label="Votes"><span class="tabular-nums">{{ totalVotes() }}</span></MetaField>
+        <MetaField v-if="data.table.validated_by" label="Validée par">{{ data.table.validated_by }}</MetaField>
+        <NuxtLink v-if="data.table.hill_id && compact" :to="`/hills/${data.table.hill_id}`" class="self-end text-sm text-muted-foreground hover:text-foreground">→ cycle</NuxtLink>
       </div>
     </header>
 

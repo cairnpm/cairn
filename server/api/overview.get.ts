@@ -10,10 +10,10 @@ export default defineEventHandler(() => {
     `SELECT COUNT(*) AS total,
             SUM(status='shaped') AS shaped, SUM(status='bet') AS bet,
             SUM(status='building') AS building, SUM(status='done') AS done
-     FROM features WHERE status != 'archived'`,
+     FROM features WHERE status NOT IN ('archived', 'deleted')`,
   )
   const hillsActive = get<{ n: number }>(`SELECT COUNT(*) AS n FROM hills WHERE status IN ('active','planned')`)?.n ?? 0
-  const bettingTotal = get<{ n: number }>(`SELECT COUNT(*) AS n FROM betting_tables WHERE status != 'cancelled'`)?.n ?? 0
+  const bettingTotal = get<{ n: number }>(`SELECT COUNT(*) AS n FROM betting_tables WHERE status NOT IN ('cancelled', 'deleted')`)?.n ?? 0
 
   const activity = all<{ action: string, summary: string, actor: string, created_at: string, title: string }>(
     `SELECT e.action, e.summary, e.actor, e.created_at, f.title

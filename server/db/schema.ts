@@ -222,5 +222,9 @@ export function ensureSchema(): void {
   // A new feature iteration links back to the shipped feature it supersedes (no reopening 'done').
   addColumnIfMissing('features', 'supersedes_id', 'supersedes_id TEXT REFERENCES features(id)')
 
+  // Soft delete: status flips to 'deleted', the prior status is kept here so it can be restored.
+  addColumnIfMissing('features', 'prev_status', 'prev_status TEXT')
+  addColumnIfMissing('betting_tables', 'prev_status', 'prev_status TEXT')
+
   _ready = true
 }

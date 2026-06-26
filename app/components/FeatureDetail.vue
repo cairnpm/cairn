@@ -31,10 +31,10 @@ const PITCH = [
         <h2 class="pr-8 text-base font-semibold leading-snug">{{ detail.feature.title }}</h2>
         <slot name="header-action" />
       </div>
-      <div class="flex flex-wrap items-center gap-1.5">
-        <StatusBadge :status="detail.feature.status" />
-        <Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge>
-        <Badge v-if="detail.feature.hill_name" variant="secondary">{{ detail.feature.hill_name }}</Badge>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+        <MetaField label="Statut"><StatusBadge :status="detail.feature.status" /></MetaField>
+        <MetaField label="Appétit"><Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge></MetaField>
+        <MetaField v-if="detail.feature.hill_name" label="Hill"><Badge variant="secondary">{{ detail.feature.hill_name }}</Badge></MetaField>
       </div>
     </header>
 

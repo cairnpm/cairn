@@ -6,12 +6,14 @@ import {
 } from '@tanstack/vue-table'
 import {
   ArrowDown, ArrowUp, Check, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
-  ChevronsUpDown, Columns3, ExternalLink, MoreHorizontal, Plus, Trash2,
+  ChevronsUpDown, Columns3, ExternalLink, MoreHorizontal, Plus, RotateCcw, Trash2,
 } from 'lucide-vue-next'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import type { BettingTableDetailData } from '~/types/betting'
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -35,18 +37,21 @@ const { role } = bike
 const { data: tables, refresh } = await useFetch<TableRowT[]>('/api/betting-tables', { default: () => [], getCachedData: getFreshData })
 const creating = ref(false)
 
-// Row delete (confirmed via AlertDialog) — works from the list row or the Sheet.
+// Row delete (confirmed via AlertDialog) — works from the list row or the Sheet. Open-state is a
+// separate flag so closing the dialog never races with confirmDelete reading the payload.
 const toDelete = ref<{ id: string; title: string } | null>(null)
+const confirmOpen = ref(false)
 const deleting = ref(false)
+function askDelete(t: { id: string; title: string }) { toDelete.value = t; confirmOpen.value = true }
 async function confirmDelete() {
   if (!toDelete.value || deleting.value) return
   deleting.value = true
+  const id = toDelete.value.id
   try {
-    await $fetch(`/api/betting-tables/${toDelete.value.id}`, { method: 'DELETE' })
-    if (selectedId.value === toDelete.value.id) selectedId.value = null
-    toDelete.value = null
+    await $fetch(`/api/betting-tables/${id}`, { method: 'DELETE' })
+    if (selectedId.value === id) selectedId.value = null
     await refresh()
-  } finally { deleting.value = false }
+  } finally { deleting.value = false; confirmOpen.value = false; toDelete.value = null }
 }
 
 async function createTable() {
@@ -83,6 +88,21 @@ async function vote(candidateId: string) {
   } finally { voting.value = false }
 }
 
+// A DropdownMenu inside the Sheet portals its content outside the focus trap; without this the
+// Sheet would dismiss itself when the menu is clicked. Keep it open for menu/popper interactions.
+function keepSheetOpenOnMenu(e: any) {
+  const t = (e?.detail?.originalEvent?.target ?? e?.target) as HTMLElement | null
+  if (t?.closest?.('[role="menu"],[data-reka-popper-content-wrapper],[data-radix-popper-content-wrapper]')) e.preventDefault()
+}
+
+// Reactivate a soft-deleted table.
+const restoring = ref(false)
+async function restore(id: string) {
+  if (restoring.value) return
+  restoring.value = true
+  try { await $fetch(`/api/betting-tables/${id}/restore`, { method: 'POST' }); await refresh() } finally { restoring.value = false }
+}
+
 function relTime(iso: string): string {
   const d = Date.parse(iso?.includes?.('T') ? iso : (iso || '').replace(' ', 'T') + 'Z')
   if (Number.isNaN(d)) return '—'
@@ -97,23 +117,37 @@ const statusFilter = useState<string>('bike-betting-filter', () => 'all')
 const counts = computed(() => {
   const t = tables.value
   const by = (s: string) => t.filter(x => x.status === s).length
-  return { all: t.length, open: by('open'), validated: by('validated'), cancelled: by('cancelled') }
+  const deleted = by('deleted')
+  return { all: t.length - deleted, open: by('open'), validated: by('validated'), cancelled: by('cancelled'), deleted }
 })
 const FILTERS = computed(() => [
   { key: 'all', label: 'Toutes', n: counts.value.all },
   { key: 'open', label: 'Ouvertes', n: counts.value.open },
   { key: 'validated', label: 'Validées', n: counts.value.validated },
   { key: 'cancelled', label: 'Annulées', n: counts.value.cancelled },
+  { key: 'deleted', label: 'Supprimées', n: counts.value.deleted },
 ])
 
+function valueUpdater<T>(u: T | ((old: T) => T), r: { value: T }) {
+  r.value = typeof u === 'function' ? (u as (o: T) => T)(r.value) : u
+}
 const sorting = ref<SortingState>([{ id: 'generated_at', desc: true }])
 const columnFilters = ref<ColumnFiltersState>([])
 const columnVisibility = ref<VisibilityState>({})
+const rowSelection = ref({})
 
 const COL_LABEL: Record<string, string> = { title: 'Table', status: 'Statut', candidate_count: 'Candidats', vote_count: 'Votes', owner: 'Owner', generated_at: 'Créée' }
 const columns: ColumnDef<TableRowT>[] = [
   { id: 'title', accessorKey: 'title', header: 'Table', enableHiding: false },
-  { id: 'status', accessorKey: 'status', header: 'Statut' },
+  {
+    id: 'status', accessorKey: 'status', header: 'Statut',
+    filterFn: (row, _id, val) => {
+      const s = row.getValue('status') as string
+      if (val === 'all') return s !== 'deleted'
+      if (val === 'deleted') return s === 'deleted'
+      return s === val
+    },
+  },
   { id: 'candidate_count', accessorKey: 'candidate_count', header: 'Candidats' },
   { id: 'vote_count', accessorKey: 'vote_count', header: 'Votes' },
   { id: 'owner', accessorFn: r => r.owner_name || '', header: 'Owner', enableSorting: false },
@@ -127,11 +161,14 @@ const table = useVueTable({
     get sorting() { return sorting.value },
     get columnFilters() { return columnFilters.value },
     get columnVisibility() { return columnVisibility.value },
+    get rowSelection() { return rowSelection.value },
   },
   getRowId: row => row.id,
-  onSortingChange: u => { sorting.value = typeof u === 'function' ? u(sorting.value) : u },
-  onColumnFiltersChange: u => { columnFilters.value = typeof u === 'function' ? u(columnFilters.value) : u },
-  onColumnVisibilityChange: u => { columnVisibility.value = typeof u === 'function' ? u(columnVisibility.value) : u },
+  enableRowSelection: true,
+  onSortingChange: u => valueUpdater(u, sorting),
+  onColumnFiltersChange: u => valueUpdater(u, columnFilters),
+  onColumnVisibilityChange: u => valueUpdater(u, columnVisibility),
+  onRowSelectionChange: u => valueUpdater(u, rowSelection),
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
@@ -140,7 +177,7 @@ const table = useVueTable({
 })
 
 watch(statusFilter, (v) => {
-  table.getColumn('status')?.setFilterValue(v === 'all' ? undefined : v)
+  table.getColumn('status')?.setFilterValue(v)
 }, { immediate: true })
 
 const hideableCols = computed(() => table.getAllColumns().filter(c => c.getCanHide()))
@@ -157,8 +194,9 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
     <div class="flex items-center justify-between gap-2">
       <Tabs :model-value="statusFilter" @update:model-value="(v) => statusFilter = String(v)">
         <TabsList>
-          <TabsTrigger v-for="f in FILTERS" :key="f.key" :value="f.key">
-            {{ f.label }} <span class="ml-1 text-muted-foreground tabular-nums">{{ f.n }}</span>
+          <TabsTrigger v-for="f in FILTERS" :key="f.key" :value="f.key" class="group gap-1.5">
+            {{ f.label }}
+            <Badge variant="secondary" class="h-5 min-w-5 justify-center rounded-full border-transparent bg-background px-1.5 tabular-nums text-foreground group-data-[state=active]:bg-muted">{{ f.n }}</Badge>
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -184,6 +222,9 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
       <Table>
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
+            <TableHead class="w-10">
+              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" aria-label="Tout sélectionner" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
+            </TableHead>
             <TableHead>
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('title')?.toggleSorting()">Table <component :is="sortIcon('title')" class="size-3.5 opacity-60" /></button>
             </TableHead>
@@ -204,7 +245,10 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
           </TableRow>
         </TableHeader>
         <TableBody>
-          <TableRow v-for="row in table.getRowModel().rows" :key="row.id" class="cursor-pointer" @click="selectedId = row.original.id">
+          <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
+            <TableCell @click.stop>
+              <Checkbox :model-value="row.getIsSelected()" aria-label="Sélectionner la ligne" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
+            </TableCell>
             <TableCell>
               <div class="flex items-center gap-2 font-medium">
                 {{ row.original.title }}
@@ -224,13 +268,14 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
                   <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem variant="destructive" @click="toDelete = { id: row.original.id, title: row.original.title }"><Trash2 /> Supprimer</DropdownMenuItem>
+                  <DropdownMenuItem v-if="row.original.status === 'deleted'" :disabled="restoring" @click="restore(row.original.id)"><RotateCcw /> Réactiver</DropdownMenuItem>
+                  <DropdownMenuItem v-else variant="destructive" @click="askDelete({ id: row.original.id, title: row.original.title })"><Trash2 /> Supprimer</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </TableCell>
           </TableRow>
           <TableRow v-if="!table.getRowModel().rows.length">
-            <TableCell :colspan="7" class="h-24 text-center text-muted-foreground">Aucune table.</TableCell>
+            <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">Aucune table.</TableCell>
           </TableRow>
         </TableBody>
       </Table>
@@ -238,7 +283,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
 
     <!-- Footer / pagination -->
     <div class="flex items-center justify-between gap-4 text-sm">
-      <div class="text-muted-foreground">{{ table.getFilteredRowModel().rows.length }} table(s)</div>
+      <div class="text-muted-foreground">{{ table.getFilteredSelectedRowModel().rows.length }} / {{ table.getFilteredRowModel().rows.length }} table(s) sélectionnée(s)</div>
       <div class="flex items-center gap-6">
         <div class="flex items-center gap-2">
           <span class="text-muted-foreground hidden sm:inline">Lignes / page</span>
@@ -263,7 +308,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
 
     <!-- Quick-view Sheet -->
     <Sheet v-model:open="sheetOpen">
-      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]">
+      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepSheetOpenOnMenu" @focus-outside="keepSheetOpenOnMenu">
         <template v-if="detail">
           <SheetTitle class="sr-only">{{ detail.table.title }}</SheetTitle>
           <DropdownMenu>
@@ -277,7 +322,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem variant="destructive" @click="toDelete = { id: detail.table.id, title: detail.table.title }; selectedId = null"><Trash2 /> Supprimer</DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" @click="askDelete({ id: detail.table.id, title: detail.table.title }); selectedId = null"><Trash2 /> Supprimer</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <NuxtLink
@@ -300,12 +345,12 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
     </Sheet>
 
     <!-- Delete confirmation -->
-    <AlertDialog :open="toDelete !== null" @update:open="(v: boolean) => { if (!v) toDelete = null }">
+    <AlertDialog v-model:open="confirmOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Supprimer cette betting table ?</AlertDialogTitle>
           <AlertDialogDescription>
-            « {{ toDelete?.title }} », ses candidats et ses votes seront définitivement supprimés. Un éventuel cycle déjà créé est conservé. Cette action est irréversible.
+            « {{ toDelete?.title }} » passera au statut « Supprimée ». Ses candidats, votes et historique sont conservés et tu pourras la réactiver depuis l'onglet « Supprimées ».
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

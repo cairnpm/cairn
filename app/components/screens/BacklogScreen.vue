@@ -6,7 +6,7 @@ import {
 } from '@tanstack/vue-table'
 import {
   ArrowDown, ArrowUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
-  ChevronsUpDown, Columns3, ExternalLink, MoreHorizontal, Trash2,
+  ChevronsUpDown, Columns3, ExternalLink, MoreHorizontal, RotateCcw, Trash2,
 } from 'lucide-vue-next'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -35,18 +35,21 @@ const bike = useBicycle()
 const { statusFilter, selectedFeatureId } = bike
 const { data: features, refresh } = await useFetch<Feature[]>('/api/features', { default: () => [], getCachedData: getFreshData })
 
-// Row delete (confirmed via AlertDialog).
+// Row delete (confirmed via AlertDialog). Open-state is a separate flag so closing the dialog
+// never races with confirmDelete reading the payload.
 const toDelete = ref<Feature | null>(null)
+const confirmOpen = ref(false)
 const deleting = ref(false)
+function askDelete(f: Feature) { toDelete.value = f; confirmOpen.value = true }
 async function confirmDelete() {
   if (!toDelete.value || deleting.value) return
   deleting.value = true
+  const id = toDelete.value.id
   try {
-    await $fetch(`/api/features/${toDelete.value.id}`, { method: 'DELETE' })
-    if (selectedFeatureId.value === toDelete.value.id) bike.clearFeature()
-    toDelete.value = null
+    await $fetch(`/api/features/${id}`, { method: 'DELETE' })
+    if (selectedFeatureId.value === id) bike.clearFeature()
     await refresh()
-  } finally { deleting.value = false }
+  } finally { deleting.value = false; confirmOpen.value = false; toDelete.value = null }
 }
 
 function relTime(iso: string): string {
@@ -62,8 +65,25 @@ function relTime(iso: string): string {
 const counts = computed(() => {
   const f = features.value
   const by = (s: string) => f.filter(x => x.status === s).length
-  return { all: f.length, shaped: by('shaped'), bet: by('bet'), building: by('building'), done: by('done') }
+  const deleted = by('deleted')
+  return { all: f.length - deleted, shaped: by('shaped'), bet: by('bet'), building: by('building'), done: by('done'), deleted }
 })
+const FILTERS = computed(() => [
+  { key: 'all', label: 'Tous', n: counts.value.all },
+  { key: 'shaped', label: 'Shaped', n: counts.value.shaped },
+  { key: 'bet', label: 'Bet', n: counts.value.bet },
+  { key: 'building', label: 'Building', n: counts.value.building },
+  { key: 'done', label: 'Done', n: counts.value.done },
+  { key: 'deleted', label: 'Supprimées', n: counts.value.deleted },
+])
+
+// Restore a soft-deleted feature.
+const restoring = ref(false)
+async function restore(id: string) {
+  if (restoring.value) return
+  restoring.value = true
+  try { await $fetch(`/api/features/${id}/restore`, { method: 'POST' }); await refresh() } finally { restoring.value = false }
+}
 
 // ── @tanstack/vue-table ───────────────────────────────────────────────────
 function valueUpdater<T>(updaterOrValue: T | ((old: T) => T), ref: { value: T }) {
@@ -77,7 +97,15 @@ const rowSelection = ref({})
 const COL_LABEL: Record<string, string> = { title: 'Feature', status: 'Statut', signal_count: 'Signaux', hill: 'Hill', updated_at: 'Modifié', actor: 'Auteur' }
 const columns: ColumnDef<Feature>[] = [
   { id: 'title', accessorKey: 'title', header: 'Feature', enableHiding: false },
-  { id: 'status', accessorKey: 'status', header: 'Statut' },
+  {
+    id: 'status', accessorKey: 'status', header: 'Statut',
+    filterFn: (row, _id, val) => {
+      const s = row.getValue('status') as string
+      if (val === 'all') return s !== 'deleted'
+      if (val === 'deleted') return s === 'deleted'
+      return s === val
+    },
+  },
   { id: 'signal_count', accessorKey: 'signal_count', header: 'Signaux' },
   { id: 'hill', accessorFn: r => r.hill_name || '', header: 'Hill' },
   { id: 'updated_at', accessorKey: 'updated_at', header: 'Modifié' },
@@ -106,9 +134,9 @@ const table = useVueTable({
   initialState: { pagination: { pageSize: 10 } },
 })
 
-// Status filter Tabs drive the 'status' column filter.
+// Status filter Tabs drive the 'status' column filter (custom filterFn handles 'all'/'deleted').
 watch(statusFilter, (v) => {
-  table.getColumn('status')?.setFilterValue(v === 'all' ? undefined : v)
+  table.getColumn('status')?.setFilterValue(v)
 }, { immediate: true })
 
 const hideableCols = computed(() => table.getAllColumns().filter(c => c.getCanHide()))
@@ -146,11 +174,10 @@ const open = computed({
     <div class="flex items-center justify-between gap-2">
       <Tabs :model-value="statusFilter" @update:model-value="bike.setStatusFilter(String($event))">
         <TabsList>
-          <TabsTrigger value="all">Tous <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.all }}</span></TabsTrigger>
-          <TabsTrigger value="shaped">Shaped <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.shaped }}</span></TabsTrigger>
-          <TabsTrigger value="bet">Bet <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.bet }}</span></TabsTrigger>
-          <TabsTrigger value="building">Building <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.building }}</span></TabsTrigger>
-          <TabsTrigger value="done">Done <span class="ml-1 text-muted-foreground tabular-nums">{{ counts.done }}</span></TabsTrigger>
+          <TabsTrigger v-for="f in FILTERS" :key="f.key" :value="f.key" class="group gap-1.5">
+            {{ f.label }}
+            <Badge variant="secondary" class="h-5 min-w-5 justify-center rounded-full border-transparent bg-background px-1.5 tabular-nums text-foreground group-data-[state=active]:bg-muted">{{ f.n }}</Badge>
+          </TabsTrigger>
         </TabsList>
       </Tabs>
       <DropdownMenu>
@@ -222,7 +249,8 @@ const open = computed({
                   <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem variant="destructive" @click="toDelete = row.original"><Trash2 /> Supprimer</DropdownMenuItem>
+                  <DropdownMenuItem v-if="row.original.status === 'deleted'" :disabled="restoring" @click="restore(row.original.id)"><RotateCcw /> Réactiver</DropdownMenuItem>
+                  <DropdownMenuItem v-else variant="destructive" @click="askDelete(row.original)"><Trash2 /> Supprimer</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </TableCell>
@@ -278,12 +306,12 @@ const open = computed({
     </Sheet>
 
     <!-- Delete confirmation -->
-    <AlertDialog :open="toDelete !== null" @update:open="(v: boolean) => { if (!v) toDelete = null }">
+    <AlertDialog v-model:open="confirmOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Supprimer cette feature ?</AlertDialogTitle>
           <AlertDialogDescription>
-            « {{ toDelete?.title }} » et tout son historique (signaux, décisions, activité) seront définitivement supprimés. Cette action est irréversible.
+            « {{ toDelete?.title }} » passera au statut « Supprimée ». Son historique est conservé et tu pourras la réactiver depuis l'onglet « Supprimées ».
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
