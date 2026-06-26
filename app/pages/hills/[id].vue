@@ -1,3 +1,3 @@
 <template>
-  <HillsScreen />
+  <HillScreen />
 </template>

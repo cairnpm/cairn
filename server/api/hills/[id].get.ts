@@ -9,6 +9,13 @@ export default defineEventHandler((event) => {
   const hill = get<{ id: string }>('SELECT id, name, starts_at, ends_at, status, created_at FROM hills WHERE id = ?', id)
   if (!hill) throw createError({ statusCode: 404, statusMessage: 'Hill not found' })
 
+  // The cycle's "why": the rationale shared by most of its bet decisions (i.e. the validation rationale).
+  const rationale = get<{ rationale: string }>(
+    `SELECT rationale, COUNT(*) AS c FROM decisions
+     WHERE hill_id = ? AND verdict = 'bet' AND rationale IS NOT NULL AND rationale != ''
+     GROUP BY rationale ORDER BY c DESC, decided_at ASC LIMIT 1`, id,
+  )?.rationale ?? null
+
   // The betting table that produced this hill (why it exists), if any.
   const betting_table = get(
     'SELECT id, title, validated_by, validated_at FROM betting_tables WHERE hill_id = ? ORDER BY validated_at DESC LIMIT 1', id,
@@ -23,5 +30,5 @@ export default defineEventHandler((event) => {
     decision: get('SELECT verdict, rationale, decided_by, decided_at FROM decisions WHERE feature_id = ? AND verdict = \'bet\' ORDER BY decided_at DESC LIMIT 1', f.id),
   }))
 
-  return { hill, features, betting_table }
+  return { hill: { ...hill, rationale }, features, betting_table }
 })
