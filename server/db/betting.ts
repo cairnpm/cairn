@@ -18,19 +18,22 @@ export interface BettingTableRow {
   hill_id: string | null; generated_at: string; validated_at: string | null; validated_by: string | null
 }
 
-/** List of tables with progress counters (candidates, distinct voters, votes). */
+/** List of tables with progress counters (candidates, distinct voters, votes) + hill name. */
 export function listBettingTables() {
-  return all<BettingTableRow & { candidate_count: number; voter_count: number; vote_count: number }>(
-    `SELECT t.*,
+  return all<BettingTableRow & { hill_name: string | null; candidate_count: number; voter_count: number; vote_count: number }>(
+    `SELECT t.*, h.name AS hill_name,
             (SELECT COUNT(*) FROM betting_candidates c WHERE c.table_id = t.id)               AS candidate_count,
             (SELECT COUNT(DISTINCT v.voter_name) FROM betting_votes v WHERE v.table_id = t.id) AS voter_count,
             (SELECT COUNT(*) FROM betting_votes v WHERE v.table_id = t.id)                     AS vote_count
-     FROM betting_tables t ORDER BY t.created_at DESC`,
+     FROM betting_tables t LEFT JOIN hills h ON h.id = t.hill_id ORDER BY t.created_at DESC`,
   )
 }
 
-export function getBettingTable(id: string): BettingTableRow | undefined {
-  return get<BettingTableRow>('SELECT * FROM betting_tables WHERE id = ?', id)
+export function getBettingTable(id: string): (BettingTableRow & { hill_name: string | null }) | undefined {
+  return get<BettingTableRow & { hill_name: string | null }>(
+    `SELECT t.*, h.name AS hill_name FROM betting_tables t LEFT JOIN hills h ON h.id = t.hill_id WHERE t.id = ?`,
+    id,
+  )
 }
 
 /** Candidates with their vote tally + voter names (for avatars). */

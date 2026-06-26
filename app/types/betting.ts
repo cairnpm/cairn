@@ -5,7 +5,7 @@ export interface BettingCandidate {
 }
 export interface BettingEvent { seq: number; actor: string; action: string; summary: string; created_at: string }
 export interface BettingTableDetailData {
-  table: { id: string; title: string; status: string; owner_name: string | null; hill_id: string | null; validated_by: string | null }
+  table: { id: string; title: string; status: string; owner_name: string | null; hill_id: string | null; hill_name: string | null; validated_by: string | null }
   candidates: BettingCandidate[]
   events: BettingEvent[]
 }

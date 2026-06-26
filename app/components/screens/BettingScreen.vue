@@ -28,7 +28,7 @@ import {
 
 interface TableRowT {
   id: string; title: string; status: string; owner_name: string | null
-  hill_id: string | null; generated_at: string; validated_at: string | null; validated_by: string | null
+  hill_id: string | null; hill_name: string | null; generated_at: string; validated_at: string | null; validated_by: string | null
   candidate_count: number; voter_count: number; vote_count: number
 }
 
@@ -88,11 +88,19 @@ async function vote(candidateId: string) {
   } finally { voting.value = false }
 }
 
-// A DropdownMenu inside the Sheet portals its content outside the focus trap; without this the
-// Sheet would dismiss itself when the menu is clicked. Keep it open for menu/popper interactions.
+// Menus/dialogs opened from inside the Sheet portal their content outside the focus trap; without
+// this the Sheet would dismiss itself when they are clicked. Keep it open for those interactions.
 function keepSheetOpenOnMenu(e: any) {
   const t = (e?.detail?.originalEvent?.target ?? e?.target) as HTMLElement | null
-  if (t?.closest?.('[role="menu"],[data-reka-popper-content-wrapper],[data-radix-popper-content-wrapper]')) e.preventDefault()
+  if (t?.closest?.('[role="menu"],[role="dialog"],[role="alertdialog"],[data-reka-popper-content-wrapper],[data-radix-popper-content-wrapper]')) e.preventDefault()
+}
+
+// Validate from the Sheet (owner). Mirrors the dedicated page.
+const validateOpen = ref(false)
+// Peek a candidate's feature as a modal Dialog (we're already in a Sheet).
+const featPeek = ref<string | null>(null)
+async function onValidated() {
+  await Promise.all([loadDetail(), refresh()])
 }
 
 // Reactivate a soft-deleted table.
@@ -252,7 +260,15 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
             <TableCell>
               <div class="flex items-center gap-2 font-medium">
                 {{ row.original.title }}
-                <span v-if="row.original.hill_id" class="text-xs text-muted-foreground">→ cycle</span>
+                <NuxtLink
+                  v-if="row.original.hill_id"
+                  :to="`/hills/${row.original.hill_id}`"
+                  class="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-foreground hover:underline"
+                  @click.stop
+                >
+                  {{ row.original.hill_name || 'Cycle' }}
+                  <ExternalLink class="size-3" />
+                </NuxtLink>
               </div>
             </TableCell>
             <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
@@ -333,16 +349,23 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
             <ExternalLink class="size-4" />
             <span class="sr-only">Ouvrir la page</span>
           </NuxtLink>
-          <BettingTableDetail :data="detail" compact>
+          <BettingTableDetail :data="detail" compact @select-feature="featPeek = $event">
             <template #candidate-action="{ candidate }">
               <Button v-if="detail.table.status === 'open'" :variant="iVoted(candidate) ? 'default' : 'outline'" size="sm" :disabled="voting" @click="vote(candidate.id)">
                 <Check class="size-3.5" /> {{ iVoted(candidate) ? 'Voté' : 'Voter' }}
               </Button>
             </template>
+            <template v-if="detail.table.status === 'open' && role === 'owner'" #candidates-footer>
+              <Button @click="validateOpen = true">Valider la table</Button>
+            </template>
           </BettingTableDetail>
+          <ValidateTableDialog v-model:open="validateOpen" :table-id="detail.table.id" :candidates="detail.candidates" @validated="onValidated" />
         </template>
       </SheetContent>
     </Sheet>
+
+    <!-- Feature peek — from the Sheet, open the feature as a modal Dialog -->
+    <FeatureDetailOverlay v-model:feature-id="featPeek" mode="dialog" />
 
     <!-- Delete confirmation -->
     <AlertDialog v-model:open="confirmOpen">

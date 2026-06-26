@@ -2,10 +2,6 @@
 import { computed, onUnmounted, ref, watchEffect } from 'vue'
 import { Check, MoreHorizontal, RotateCcw, Trash2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
@@ -51,37 +47,15 @@ async function toggleVote(candidateId: string) {
 }
 
 const showValidate = ref(false)
-const hillName = ref('')
-const startsAt = ref('')
-const endsAt = ref('')
-const why = ref('')
-const picked = ref<string[]>([])
-const validating = ref(false)
-const votedCandidates = computed(() => (data.value?.candidates || []).filter(c => c.voters.length > 0))
-function openValidate() { picked.value = votedCandidates.value.map(c => c.id); showValidate.value = true }
-function togglePick(cid: string) { picked.value = picked.value.includes(cid) ? picked.value.filter(x => x !== cid) : [...picked.value, cid] }
-async function validate() {
-  if (validating.value || !hillName.value.trim()) return
-  validating.value = true
-  try {
-    await $fetch(`/api/betting-tables/${id.value}/validate`, {
-      method: 'POST',
-      body: { hill_name: hillName.value, starts_at: startsAt.value || null, ends_at: endsAt.value || null, rationale: why.value, selected_ids: picked.value },
-    })
-    await refresh()
-    showValidate.value = false
-  } finally { validating.value = false }
-}
-
+const featPeek = ref<string | null>(null)
 const isOpen = computed(() => data.value?.table.status === 'open')
 const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
 </script>
 
 <template>
   <div v-if="data" class="h-full">
-    <BettingTableDetail :data="data">
+    <BettingTableDetail :data="data" @select-feature="featPeek = $event">
       <template #header-action>
-        <Button v-if="isOpen && role === 'owner'" size="sm" @click="openValidate">Valider la table</Button>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
             <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
@@ -97,45 +71,16 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
           <Check class="size-3.5" /> {{ iVoted(candidate) ? 'Voté' : 'Voter' }}
         </Button>
       </template>
+      <template v-if="isOpen && role === 'owner'" #candidates-footer>
+        <Button @click="showValidate = true">Valider la table</Button>
+      </template>
     </BettingTableDetail>
 
+    <!-- Feature peek — from the dedicated page, open the feature as a side Sheet -->
+    <FeatureDetailOverlay v-model:feature-id="featPeek" mode="sheet" />
+
     <!-- Validate dialog -->
-    <Dialog v-model:open="showValidate">
-      <DialogContent class="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Valider → créer le cycle</DialogTitle>
-          <DialogDescription>Les features cochées passent en « bet » et rejoignent un nouveau Hill.</DialogDescription>
-        </DialogHeader>
-        <div class="flex flex-col gap-4">
-          <div class="grid gap-2">
-            <Label for="hillName">Nom du cycle</Label>
-            <Input id="hillName" v-model="hillName" placeholder="Sécurité & Data" />
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div class="grid gap-2"><Label for="s">Début</Label><Input id="s" v-model="startsAt" type="date" /></div>
-            <div class="grid gap-2"><Label for="e">Fin</Label><Input id="e" v-model="endsAt" type="date" /></div>
-          </div>
-          <div class="grid gap-2">
-            <Label for="why">Rationale</Label>
-            <Textarea id="why" v-model="why" placeholder="Le « pourquoi » de ce cycle…" />
-          </div>
-          <div>
-            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Features à parier</div>
-            <div class="flex flex-col gap-1.5">
-              <label v-for="c in votedCandidates" :key="c.id" class="flex items-center gap-2 text-sm">
-                <input type="checkbox" :checked="picked.includes(c.id)" class="size-4 accent-primary" @change="togglePick(c.id)">
-                {{ c.title_snap }} <span class="text-muted-foreground">({{ c.voters.length }} vote{{ c.voters.length > 1 ? 's' : '' }})</span>
-              </label>
-              <p v-if="!votedCandidates.length" class="text-sm text-muted-foreground">Aucun candidat voté — votez d'abord, ou cochez manuellement.</p>
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" @click="showValidate = false">Annuler</Button>
-          <Button :disabled="validating || !hillName.trim()" @click="validate">{{ validating ? 'Validation…' : 'Confirmer & créer' }}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ValidateTableDialog v-model:open="showValidate" :table-id="id" :candidates="data.candidates" @validated="refresh" />
 
     <!-- Delete confirmation -->
     <AlertDialog v-model:open="confirmOpen">

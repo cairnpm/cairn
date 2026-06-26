@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ArrowRight } from 'lucide-vue-next'
+import { ExternalLink } from 'lucide-vue-next'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import type { BettingTableDetailData } from '~/types/betting'
 
 const props = defineProps<{ data: BettingTableDetailData; compact?: boolean }>()
+const emit = defineEmits<{ 'select-feature': [featureId: string] }>()
 
 function impact(score: number) { return score >= 2.5 ? 'Très haute' : score >= 1.5 ? 'Haute' : score >= 0.8 ? 'Moyenne' : 'Basse' }
 function relTime(iso: string) {
@@ -26,10 +26,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
     <header class="flex flex-col gap-3 border-b px-6 py-4">
       <div class="flex items-start justify-between gap-3">
         <h2 class="text-base font-semibold tracking-tight" :class="compact ? 'pr-24' : ''">{{ data.table.title }}</h2>
-        <div class="flex items-center gap-2">
-          <Button v-if="data.table.hill_id && !compact" as-child variant="link" size="sm" class="h-7 px-0">
-            <NuxtLink :to="`/hills/${data.table.hill_id}`">Voir le cycle <ArrowRight class="size-3.5" /></NuxtLink>
-          </Button>
+        <div class="flex items-center gap-2" :class="compact ? 'mr-24' : ''">
           <slot name="header-action" />
         </div>
       </div>
@@ -39,7 +36,12 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
         <MetaField label="Candidats"><span class="tabular-nums">{{ data.candidates.length }}</span></MetaField>
         <MetaField label="Votes"><span class="tabular-nums">{{ totalVotes() }}</span></MetaField>
         <MetaField v-if="data.table.validated_by" label="Validée par">{{ data.table.validated_by }}</MetaField>
-        <NuxtLink v-if="data.table.hill_id && compact" :to="`/hills/${data.table.hill_id}`" class="self-end text-sm text-muted-foreground hover:text-foreground">→ cycle</NuxtLink>
+        <MetaField v-if="data.table.hill_id" label="Hill">
+          <NuxtLink :to="`/hills/${data.table.hill_id}`" class="inline-flex items-center gap-1 hover:underline">
+            {{ data.table.hill_name || 'Cycle' }}
+            <ExternalLink class="size-3.5 opacity-60" />
+          </NuxtLink>
+        </MetaField>
       </div>
     </header>
 
@@ -60,7 +62,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow v-for="c in data.candidates" :key="c.id">
+                <TableRow v-for="c in data.candidates" :key="c.id" class="cursor-pointer transition-colors hover:bg-muted/60" @click="emit('select-feature', c.feature_id)">
                   <TableCell>
                     <div class="flex items-center gap-2 font-medium">
                       {{ c.title_snap }}
@@ -75,10 +77,13 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
                     <span v-else class="text-xs text-muted-foreground">—</span>
                   </TableCell>
                   <TableCell><Badge variant="outline">{{ impact(c.score) }}</Badge></TableCell>
-                  <TableCell class="text-right"><slot name="candidate-action" :candidate="c" /></TableCell>
+                  <TableCell class="text-right" @click.stop><slot name="candidate-action" :candidate="c" /></TableCell>
                 </TableRow>
               </TableBody>
             </Table>
+          </div>
+          <div v-if="$slots['candidates-footer']" class="mt-4 flex justify-end">
+            <slot name="candidates-footer" />
           </div>
         </div>
       </ScrollArea>
