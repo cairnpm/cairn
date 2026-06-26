@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-interface Overview { features_total: number; hills_active: number }
+interface Overview { features_total: number; hills_active: number; betting_total: number }
 
 const bike = useBicycle()
 const { screen, author, role } = bike
@@ -20,7 +20,7 @@ const { data: ov } = await useFetch<Overview>('/api/overview', { getCachedData: 
 const items = computed(() => [
   { id: 'intake', label: t('nav.intake'), to: '/', icon: Inbox, badge: 'AI' },
   { id: 'backlog', label: t('nav.backlog'), to: '/backlog', icon: ListTodo, badge: ov.value?.features_total },
-  { id: 'betting', label: t('nav.betting'), to: '/betting', icon: Target },
+  { id: 'betting', label: t('nav.betting'), to: '/betting', icon: Target, badge: ov.value?.betting_total },
   { id: 'hills', label: t('nav.hills'), to: '/hills', icon: Mountain, badge: ov.value?.hills_active },
   { id: 'settings', label: t('nav.settings'), to: '/settings', icon: Settings2 },
 ])

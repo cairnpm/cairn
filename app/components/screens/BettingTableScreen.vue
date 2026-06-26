@@ -1,32 +1,37 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { ArrowRight, Check } from 'lucide-vue-next'
-import { Card, CardContent } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { computed, onUnmounted, ref, watchEffect } from 'vue'
+import { Check, MoreHorizontal, Trash2 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-
-interface Candidate {
-  id: string; feature_id: string; score: number
-  title_snap: string; problem_snap: string | null; appetite_snap: string | null
-  signal_count_snap: number; selected: number; voters: string[]
-}
-interface Evt { seq: number; actor: string; action: string; summary: string; created_at: string }
-interface TableDetail {
-  table: { id: string; title: string; status: string; owner_name: string | null; hill_id: string | null; validated_by: string | null }
-  candidates: Candidate[]
-  events: Evt[]
-}
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import type { BettingCandidate, BettingTableDetailData } from '~/types/betting'
 
 const bike = useBicycle()
 const { author, role, selectedBettingTable } = bike
 const id = selectedBettingTable
-const { data, refresh } = await useFetch<TableDetail>(() => `/api/betting-tables/${id.value}`, { getCachedData: getFreshData })
+const { data, refresh } = await useFetch<BettingTableDetailData>(() => `/api/betting-tables/${id.value}`, { getCachedData: getFreshData })
+
+// Feed the breadcrumb (Workspace › Betting Table › <table title>).
+watchEffect(() => { if (data.value) bike.setCrumb(data.value.table.title) })
+onUnmounted(() => bike.setCrumb(''))
+
+const confirmOpen = ref(false)
+const deleting = ref(false)
+async function confirmDelete() {
+  if (deleting.value) return
+  deleting.value = true
+  try {
+    await $fetch(`/api/betting-tables/${id.value}`, { method: 'DELETE' })
+    await navigateTo('/betting')
+  } finally { deleting.value = false }
+}
 
 const busy = ref(false)
 async function toggleVote(candidateId: string) {
@@ -62,94 +67,29 @@ async function validate() {
 }
 
 const isOpen = computed(() => data.value?.table.status === 'open')
-const iVoted = (c: Candidate) => c.voters.includes(author.value)
-function impact(score: number) { return score >= 2.5 ? 'Très haute' : score >= 1.5 ? 'Haute' : score >= 0.8 ? 'Moyenne' : 'Basse' }
-function relTime(iso: string) {
-  const d = Date.parse(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')
-  if (Number.isNaN(d)) return ''
-  const s = Math.floor((Date.now() - d) / 1000)
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}min`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  return `${Math.floor(s / 86400)}j`
-}
+const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
 </script>
 
 <template>
-  <div v-if="data" class="flex h-full flex-col gap-4 overflow-auto p-4">
-    <!-- Header -->
-    <Card class="py-0">
-      <CardContent class="flex flex-col gap-3 p-4">
-        <div class="flex items-start justify-between gap-4">
-          <div class="flex items-center gap-2">
-            <h1 class="text-lg font-semibold tracking-tight">{{ data.table.title }}</h1>
-            <StatusBadge :status="data.table.status" />
-          </div>
-          <div class="flex items-center gap-2">
-            <Button v-if="data.table.hill_id" as-child variant="link" size="sm" class="h-7 px-0">
-              <NuxtLink :to="`/hills/${data.table.hill_id}`">Voir le cycle <ArrowRight class="size-3.5" /></NuxtLink>
-            </Button>
-            <Button v-if="isOpen && role === 'owner'" size="sm" @click="openValidate">Valider la table</Button>
-          </div>
-        </div>
-        <Separator />
-        <div class="flex flex-wrap items-center gap-x-8 gap-y-2 text-sm">
-          <div><div class="text-xs text-muted-foreground">Créée par</div><div class="flex items-center gap-1.5 font-medium"><UserAvatar :name="data.table.owner_name" class="size-5" />{{ data.table.owner_name }}</div></div>
-          <div><div class="text-xs text-muted-foreground">Candidats</div><div class="font-medium tabular-nums">{{ data.candidates.length }}</div></div>
-          <div><div class="text-xs text-muted-foreground">Votes</div><div class="font-medium tabular-nums">{{ data.candidates.reduce((s, c) => s + c.voters.length, 0) }}</div></div>
-          <div v-if="data.table.validated_by"><div class="text-xs text-muted-foreground">Validée par</div><div class="font-medium">{{ data.table.validated_by }}</div></div>
-        </div>
-      </CardContent>
-    </Card>
-
-    <!-- Candidates -->
-    <div class="rounded-lg border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{{ isOpen ? 'Candidat' : 'Feature' }}</TableHead>
-            <TableHead class="w-28">Votes</TableHead>
-            <TableHead class="w-24">Impact</TableHead>
-            <TableHead class="w-24 text-right">{{ isOpen ? 'Vote' : '' }}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow v-for="c in data.candidates" :key="c.id">
-            <TableCell>
-              <div class="flex items-center gap-2 font-medium">
-                {{ c.title_snap }}
-                <Badge v-if="c.selected" class="gap-1"><Check class="size-3" /> parié</Badge>
-              </div>
-              <div class="text-xs text-muted-foreground truncate max-w-md">{{ c.problem_snap }}</div>
-            </TableCell>
-            <TableCell>
-              <div v-if="c.voters.length" class="flex items-center gap-1">
-                <UserAvatar v-for="v in c.voters" :key="v" :name="v" class="size-5 -mr-1.5 ring-2 ring-background" />
-              </div>
-              <span v-else class="text-xs text-muted-foreground">—</span>
-            </TableCell>
-            <TableCell><Badge variant="outline">{{ impact(c.score) }}</Badge></TableCell>
-            <TableCell class="text-right">
-              <Button v-if="isOpen" :variant="iVoted(c) ? 'default' : 'outline'" size="sm" :disabled="busy" @click="toggleVote(c.id)">
-                <Check class="size-3.5" /> {{ iVoted(c) ? 'Voté' : 'Voter' }}
-              </Button>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </div>
-
-    <!-- Timeline -->
-    <Card class="py-0">
-      <CardContent class="p-4">
-        <div class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Timeline · {{ data.events.length }} événements</div>
-        <div class="flex flex-col gap-3">
-          <div v-for="e in data.events" :key="e.seq" class="flex items-center gap-2.5 text-sm">
-            <UserAvatar :name="e.actor" class="size-6 shrink-0" />
-            <div class="flex-1"><div>{{ e.summary }}</div><div class="text-xs text-muted-foreground">{{ relTime(e.created_at) }}</div></div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+  <div v-if="data" class="h-full">
+    <BettingTableDetail :data="data">
+      <template #header-action>
+        <Button v-if="isOpen && role === 'owner'" size="sm" @click="openValidate">Valider la table</Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger as-child>
+            <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem variant="destructive" @click="confirmOpen = true"><Trash2 /> Supprimer</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </template>
+      <template #candidate-action="{ candidate }">
+        <Button v-if="isOpen" :variant="iVoted(candidate) ? 'default' : 'outline'" size="sm" :disabled="busy" @click="toggleVote(candidate.id)">
+          <Check class="size-3.5" /> {{ iVoted(candidate) ? 'Voté' : 'Voter' }}
+        </Button>
+      </template>
+    </BettingTableDetail>
 
     <!-- Validate dialog -->
     <Dialog v-model:open="showValidate">
@@ -188,5 +128,21 @@ function relTime(iso: string) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- Delete confirmation -->
+    <AlertDialog v-model:open="confirmOpen">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Supprimer cette betting table ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            « {{ data.table.title }} », ses candidats et ses votes seront définitivement supprimés. Un éventuel cycle déjà créé est conservé. Cette action est irréversible.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="deleting">Annuler</AlertDialogCancel>
+          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? 'Suppression…' : 'Supprimer' }}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>

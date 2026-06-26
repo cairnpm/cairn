@@ -27,7 +27,10 @@ const PITCH = [
   <div class="flex h-full flex-col">
     <!-- Header -->
     <header class="flex flex-col gap-2 border-b px-6 py-4">
-      <h2 class="pr-8 text-base font-semibold leading-snug">{{ detail.feature.title }}</h2>
+      <div class="flex items-start justify-between gap-3">
+        <h2 class="pr-8 text-base font-semibold leading-snug">{{ detail.feature.title }}</h2>
+        <slot name="header-action" />
+      </div>
       <div class="flex flex-wrap items-center gap-1.5">
         <StatusBadge :status="detail.feature.status" />
         <Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge>

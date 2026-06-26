@@ -13,6 +13,7 @@ export default defineEventHandler(() => {
      FROM features WHERE status != 'archived'`,
   )
   const hillsActive = get<{ n: number }>(`SELECT COUNT(*) AS n FROM hills WHERE status IN ('active','planned')`)?.n ?? 0
+  const bettingTotal = get<{ n: number }>(`SELECT COUNT(*) AS n FROM betting_tables WHERE status != 'cancelled'`)?.n ?? 0
 
   const activity = all<{ action: string, summary: string, actor: string, created_at: string, title: string }>(
     `SELECT e.action, e.summary, e.actor, e.created_at, f.title
@@ -24,6 +25,7 @@ export default defineEventHandler(() => {
     features_total: counts?.total ?? 0,
     by_status: { shaped: counts?.shaped ?? 0, bet: counts?.bet ?? 0, building: counts?.building ?? 0, done: counts?.done ?? 0 },
     hills_active: hillsActive,
+    betting_total: bettingTotal,
     model: getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5',
     activity,
   }

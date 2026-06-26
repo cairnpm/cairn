@@ -75,6 +75,7 @@ export function useBicycle() {
   const crumb = useState<string>('bike-crumb', () => '')
   const breadcrumb = computed<{ label: string; to?: string }[]>(() => {
     if (route.path.startsWith('/features/')) return [{ label: 'Backlog', to: '/backlog' }, { label: crumb.value || 'Feature' }]
+    if (selectedBettingTable.value) return [{ label: 'Betting Table', to: '/betting' }, { label: crumb.value || 'Table' }]
     return [{ label: pageMeta.value.title }]
   })
 

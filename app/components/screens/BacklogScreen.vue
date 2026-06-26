@@ -6,7 +6,7 @@ import {
 } from '@tanstack/vue-table'
 import {
   ArrowDown, ArrowUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
-  ChevronsUpDown, Columns3, ExternalLink,
+  ChevronsUpDown, Columns3, ExternalLink, MoreHorizontal, Trash2,
 } from 'lucide-vue-next'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -15,11 +15,15 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 interface Feature {
   id: string; title: string; problem: string; appetite: string | null
@@ -29,7 +33,21 @@ interface Feature {
 
 const bike = useBicycle()
 const { statusFilter, selectedFeatureId } = bike
-const { data: features } = await useFetch<Feature[]>('/api/features', { default: () => [], getCachedData: getFreshData })
+const { data: features, refresh } = await useFetch<Feature[]>('/api/features', { default: () => [], getCachedData: getFreshData })
+
+// Row delete (confirmed via AlertDialog).
+const toDelete = ref<Feature | null>(null)
+const deleting = ref(false)
+async function confirmDelete() {
+  if (!toDelete.value || deleting.value) return
+  deleting.value = true
+  try {
+    await $fetch(`/api/features/${toDelete.value.id}`, { method: 'DELETE' })
+    if (selectedFeatureId.value === toDelete.value.id) bike.clearFeature()
+    toDelete.value = null
+    await refresh()
+  } finally { deleting.value = false }
+}
 
 function relTime(iso: string): string {
   const d = Date.parse(iso)
@@ -173,6 +191,7 @@ const open = computed({
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('updated_at')?.toggleSorting()">Modifié <component :is="sortIcon('updated_at')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('actor')" class="w-12" />
+            <TableHead class="w-10" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -197,9 +216,19 @@ const open = computed({
             <TableCell v-if="vis('hill')" class="text-muted-foreground truncate">{{ row.original.hill_name || '—' }}</TableCell>
             <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground tabular-nums">{{ relTime(row.original.updated_at) }}</TableCell>
             <TableCell v-if="vis('actor')"><UserAvatar :name="row.original.last_actor" /></TableCell>
+            <TableCell @click.stop>
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem variant="destructive" @click="toDelete = row.original"><Trash2 /> Supprimer</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
           </TableRow>
           <TableRow v-if="!table.getRowModel().rows.length">
-            <TableCell :colspan="7" class="h-24 text-center text-muted-foreground">Aucune feature.</TableCell>
+            <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">Aucune feature.</TableCell>
           </TableRow>
         </TableBody>
       </Table>
@@ -247,5 +276,21 @@ const open = computed({
         </template>
       </SheetContent>
     </Sheet>
+
+    <!-- Delete confirmation -->
+    <AlertDialog :open="toDelete !== null" @update:open="(v: boolean) => { if (!v) toDelete = null }">
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Supprimer cette feature ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            « {{ toDelete?.title }} » et tout son historique (signaux, décisions, activité) seront définitivement supprimés. Cette action est irréversible.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel :disabled="deleting">Annuler</AlertDialogCancel>
+          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? 'Suppression…' : 'Supprimer' }}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>
