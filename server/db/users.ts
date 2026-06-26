@@ -10,6 +10,7 @@ export interface User {
   role: string
   avatar_bg: string | null
   avatar_init: string | null
+  avatar_url: string | null
   created_at: string
 }
 
@@ -39,6 +40,24 @@ export function findUserByEmail(email: string): User | undefined {
 
 export function listUsers(): Array<Omit<User, 'password_hash'>> {
   return all<Omit<User, 'password_hash'>>(
-    'SELECT id, name, email, role, avatar_bg, avatar_init, created_at FROM users ORDER BY created_at',
+    'SELECT id, name, email, role, avatar_bg, avatar_init, avatar_url, created_at FROM users ORDER BY created_at',
   )
+}
+
+export function getUserById(id: string): Omit<User, 'password_hash'> | undefined {
+  return get<Omit<User, 'password_hash'>>(
+    'SELECT id, name, email, role, avatar_bg, avatar_init, avatar_url, created_at FROM users WHERE id = ?', id,
+  )
+}
+
+// Update the current user's profile. avatar_init follows the name's first letter; avatar_url is an
+// uploaded attachment id (empty string clears it).
+export function updateUserProfile(id: string, fields: { name?: string, email?: string | null, avatar_url?: string | null }): Omit<User, 'password_hash'> | undefined {
+  const u = get<User>('SELECT * FROM users WHERE id = ?', id)
+  if (!u) return undefined
+  const name = (fields.name ?? '').trim() || u.name
+  const email = fields.email === undefined ? u.email : ((fields.email ?? '').trim() || null)
+  const avatarUrl = fields.avatar_url === undefined ? u.avatar_url : ((fields.avatar_url ?? '').trim() || null)
+  run('UPDATE users SET name = ?, email = ?, avatar_init = ?, avatar_url = ? WHERE id = ?', name, email, name[0]?.toUpperCase() ?? u.avatar_init, avatarUrl, id)
+  return getUserById(id)
 }

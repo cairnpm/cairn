@@ -10,19 +10,19 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-interface Overview { features_total: number; hills_active: number; betting_total: number }
+interface Overview { features_total: number; hills_active: number; betting_total: number; workspace_name: string; workspace_logo: string | null }
 
 const bike = useBicycle()
 const { screen, author, role } = bike
+const { user } = useUserSession()
 const { t, locale, setLocale } = useUiLang()
 const { data: ov } = await useFetch<Overview>('/api/overview', { getCachedData: getFreshData })
 
 const items = computed(() => [
-  { id: 'intake', label: t('nav.intake'), to: '/', icon: Inbox, badge: 'AI' },
+  { id: 'intake', label: t('nav.intake'), to: '/', icon: Inbox },
   { id: 'backlog', label: t('nav.backlog'), to: '/backlog', icon: ListTodo, badge: ov.value?.features_total },
   { id: 'betting', label: t('nav.betting'), to: '/betting', icon: Target, badge: ov.value?.betting_total },
   { id: 'hills', label: t('nav.hills'), to: '/hills', icon: Mountain, badge: ov.value?.hills_active },
-  { id: 'settings', label: t('nav.settings'), to: '/settings', icon: Settings2 },
 ])
 </script>
 
@@ -33,11 +33,12 @@ const items = computed(() => [
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" as-child>
             <NuxtLink to="/">
-              <div class="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                <Sparkles class="size-4" />
+              <div class="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg">
+                <img v-if="ov?.workspace_logo" :src="`/api/attachments/${ov.workspace_logo}`" class="size-full object-cover" alt="">
+                <Sparkles v-else class="size-4" />
               </div>
               <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-semibold">Bicycle</span>
+                <span class="truncate font-semibold">{{ ov?.workspace_name || 'Bicycle' }}</span>
                 <span class="truncate text-xs text-muted-foreground">Product OS</span>
               </div>
             </NuxtLink>
@@ -58,20 +59,36 @@ const items = computed(() => [
                   <span>{{ it.label }}</span>
                 </NuxtLink>
               </SidebarMenuButton>
-              <SidebarMenuBadge v-if="it.badge != null">{{ it.badge }}</SidebarMenuBadge>
+              <SidebarMenuBadge v-if="it.badge != null" class="rounded-full bg-sidebar-accent text-sidebar-foreground peer-data-[active=true]/menu-button:bg-sidebar">{{ it.badge }}</SidebarMenuBadge>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+
+      <SidebarGroup>
+        <SidebarGroupLabel>Configuration</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton as-child :is-active="screen === 'settings'" :tooltip="t('nav.settings')">
+                <NuxtLink to="/settings">
+                  <Settings2 />
+                  <span>{{ t('nav.settings') }}</span>
+                </NuxtLink>
+              </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
     </SidebarContent>
 
-    <SidebarFooter>
+    <SidebarFooter class="border-t border-sidebar-border">
       <SidebarMenu>
         <SidebarMenuItem>
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
               <SidebarMenuButton size="lg" class="data-[state=open]:bg-sidebar-accent">
-                <UserAvatar :name="author" class="size-8 rounded-lg" />
+                <UserAvatar :name="author" :src="(user?.avatar_url as string | null)" class="size-8 rounded-lg" />
                 <div class="grid flex-1 text-left text-sm leading-tight">
                   <span class="truncate font-semibold">{{ author }}</span>
                   <span class="truncate text-xs text-muted-foreground capitalize">{{ role }}</span>
@@ -81,7 +98,7 @@ const items = computed(() => [
             </DropdownMenuTrigger>
             <DropdownMenuContent class="w-(--reka-dropdown-menu-trigger-width) min-w-56 rounded-lg" side="right" align="end" :side-offset="4">
               <DropdownMenuLabel class="flex items-center gap-2 font-normal">
-                <UserAvatar :name="author" class="size-8 rounded-lg" />
+                <UserAvatar :name="author" :src="(user?.avatar_url as string | null)" class="size-8 rounded-lg" />
                 <div class="grid flex-1 text-left text-sm leading-tight">
                   <span class="truncate font-semibold">{{ author }}</span>
                   <span class="truncate text-xs text-muted-foreground capitalize">{{ role }}</span>

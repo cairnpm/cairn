@@ -6,6 +6,7 @@ declare module '#auth-utils' {
     role: string
     avatar_bg: string | null
     avatar_init: string | null
+    avatar_url: string | null
   }
   interface UserSession {
     user: User

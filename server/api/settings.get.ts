@@ -8,6 +8,8 @@ export default defineEventHandler(() => {
   const dbKey = getSetting('anthropic_api_key')
   const model = getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5'
   return {
+    workspace_name: getSetting('workspace_name') ?? 'Bicycle',
+    workspace_logo: getSetting('workspace_logo') ?? null,
     has_key: !!(dbKey || process.env.ANTHROPIC_API_KEY),
     key_source: dbKey ? 'settings' : process.env.ANTHROPIC_API_KEY ? 'env' : 'none',
     model,

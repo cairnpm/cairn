@@ -17,6 +17,12 @@ export default defineEventHandler(async (event) => {
   if (typeof body?.anthropic_model === 'string' && body.anthropic_model.trim()) {
     setSetting('anthropic_model', body.anthropic_model.trim(), by)
   }
+  if (typeof body?.workspace_name === 'string' && body.workspace_name.trim()) {
+    setSetting('workspace_name', body.workspace_name.trim(), by)
+  }
+  if (typeof body?.workspace_logo_id === 'string') {
+    setSetting('workspace_logo', body.workspace_logo_id.trim() || null, by)
+  }
 
   resetLlm()
   return { ok: true }

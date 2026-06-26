@@ -226,5 +226,8 @@ export function ensureSchema(): void {
   addColumnIfMissing('features', 'prev_status', 'prev_status TEXT')
   addColumnIfMissing('betting_tables', 'prev_status', 'prev_status TEXT')
 
+  // Uploaded user avatar (attachment id); falls back to the initial when null.
+  addColumnIfMissing('users', 'avatar_url', 'avatar_url TEXT')
+
   _ready = true
 }
