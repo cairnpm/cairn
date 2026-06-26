@@ -3,12 +3,12 @@ import { watch } from 'vue'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { Separator } from '@/components/ui/separator'
 import {
-  Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
+  Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb'
 
 const route = useRoute()
 const bike = useBicycle()
-const { pageMeta } = bike
+const { breadcrumb } = bike
 
 watch(() => route.path, () => {
   bike.clearFeature()
@@ -26,10 +26,15 @@ watch(() => route.path, () => {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem class="hidden md:block text-muted-foreground">Workspace</BreadcrumbItem>
-            <BreadcrumbSeparator class="hidden md:block" />
-            <BreadcrumbItem>
-              <BreadcrumbPage>{{ pageMeta.title }}</BreadcrumbPage>
-            </BreadcrumbItem>
+            <template v-for="(c, i) in breadcrumb" :key="i">
+              <BreadcrumbSeparator class="hidden md:block" />
+              <BreadcrumbItem>
+                <BreadcrumbLink v-if="c.to && i < breadcrumb.length - 1" as-child>
+                  <NuxtLink :to="c.to">{{ c.label }}</NuxtLink>
+                </BreadcrumbLink>
+                <BreadcrumbPage v-else>{{ c.label }}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </template>
           </BreadcrumbList>
         </Breadcrumb>
       </header>

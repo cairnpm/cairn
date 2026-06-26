@@ -35,7 +35,7 @@ export function useBicycle() {
 
   const screen = computed<Screen>(() => {
     const p = route.path
-    if (p.startsWith('/backlog')) return 'backlog'
+    if (p.startsWith('/backlog') || p.startsWith('/features')) return 'backlog'
     if (p.startsWith('/betting')) return 'betting'
     if (p.startsWith('/hills')) return 'hills'
     if (p.startsWith('/settings')) return 'settings'
@@ -71,6 +71,13 @@ export function useBicycle() {
     }[screen.value]
   })
 
+  // Breadcrumb trail. Detail pages (e.g. /features/[id]) set `crumb` to their title.
+  const crumb = useState<string>('bike-crumb', () => '')
+  const breadcrumb = computed<{ label: string; to?: string }[]>(() => {
+    if (route.path.startsWith('/features/')) return [{ label: 'Backlog', to: '/backlog' }, { label: crumb.value || 'Feature' }]
+    return [{ label: pageMeta.value.title }]
+  })
+
   function toggleSort(key: string) {
     if (sortKey.value === key) sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc'
     else { sortKey.value = key; sortDir.value = 'asc' }
@@ -83,6 +90,7 @@ export function useBicycle() {
 
   return {
     screen, selectedHill, selectedBettingTable, pageMeta, team: TEAM,
+    breadcrumb, setCrumb: (s: string) => { crumb.value = s },
     author, role, logout,
     selectBettingTable: (id: string) => navigateTo(`/betting/${encodeURIComponent(id)}`),
     clearBettingTable: () => navigateTo('/betting'),
