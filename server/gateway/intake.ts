@@ -22,15 +22,39 @@ const CANDIDATE_FLOOR = 0.15 // ignore near-zero similarities in the candidate l
 const TOP_K = 5
 
 // ── Dedup search (brute-force cosine — brief §6) ─────────────────────────────
+// Append targets are SHAPED only: a feature already bet/building lives in a validated cycle and its
+// scope is frozen (Shape Up — no mid-cycle scope creep). In-flight features are surfaced separately
+// as read-only roadmap context so the agent stays aware without amending them.
 export function topCandidates(embedding: number[], k = TOP_K): Candidate[] {
   const rows = all<Pick<Feature, 'id' | 'title' | 'embedding'>>(
-    `SELECT id, title, embedding FROM features WHERE status IN ('shaped','bet','building')`,
+    `SELECT id, title, embedding FROM features WHERE status = 'shaped'`,
   )
   return rows
     .map(r => ({ feature_id: r.id, title: r.title, similarity: cosine(embedding, decodeEmbedding(r.embedding)) }))
     .filter(c => c.similarity >= CANDIDATE_FLOOR)
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, k)
+}
+
+// Read-only picture of what's already committed — injected into the routing prompt so the agent
+// decides like a PM who knows the roadmap (and never proposes amending a frozen, in-cycle scope).
+export function roadmapContext(): string {
+  const hills = all<{ name: string; status: string }>(
+    `SELECT name, status FROM hills WHERE status IN ('active','planned') ORDER BY starts_at`,
+  )
+  const inFlight = all<{ title: string; status: string }>(
+    `SELECT title, status FROM features WHERE status IN ('bet','building') ORDER BY updated_at DESC LIMIT 12`,
+  )
+  const lines: string[] = []
+  if (hills.length) lines.push(`Cycles actifs / planifiés : ${hills.map(h => `${h.name} (${h.status})`).join(' · ')}`)
+  if (inFlight.length) {
+    lines.push(
+      'Features DÉJÀ ENGAGÉES dans un cycle (périmètre figé — NE PAS amender ; un signal qui les '
+      + 'concerne = une NOUVELLE feature pour un prochain cycle, ou un discard si rien de neuf) :\n'
+      + inFlight.map(f => `- ${f.title} (${f.status})`).join('\n'),
+    )
+  }
+  return lines.join('\n\n')
 }
 
 // ── Feature search (resolve a named feature; answer queries) ─────────────────
@@ -89,6 +113,44 @@ export function featureContext(id: string): string {
   ].filter(Boolean).join('\n')
 }
 
+/** Compact, read-only snapshot of the whole product — backlog, cycles, in-flight work, shipped,
+ *  recent activity — so a `query` can answer roadmap/backlog questions, not just single-feature ones. */
+export function workspaceContext(focus: string): string {
+  const counts = get<{ shaped: number; bet: number; building: number; done: number }>(
+    `SELECT SUM(status='shaped') AS shaped, SUM(status='bet') AS bet, SUM(status='building') AS building, SUM(status='done') AS done
+     FROM features WHERE status NOT IN ('archived','deleted')`,
+  )
+  const shaped = all<{ title: string; signal_count: number; stale: number }>(
+    `SELECT title, signal_count, stale FROM features WHERE status='shaped' ORDER BY stale ASC, signal_count DESC, updated_at DESC LIMIT 15`,
+  )
+  const inFlight = all<{ title: string; status: string; hill: string | null }>(
+    `SELECT f.title, f.status, h.name AS hill FROM features f LEFT JOIN hills h ON h.id=f.hill_id WHERE f.status IN ('bet','building') ORDER BY f.updated_at DESC LIMIT 15`,
+  )
+  const shipped = all<{ title: string }>(`SELECT title FROM features WHERE status='done' ORDER BY updated_at DESC LIMIT 10`)
+  const hills = all<{ name: string; status: string; starts_at: string | null; ends_at: string | null; total: number; done: number }>(
+    `SELECT h.name, h.status, h.starts_at, h.ends_at, COUNT(f.id) AS total,
+            COALESCE(SUM(CASE WHEN f.status='done' THEN 1 ELSE 0 END),0) AS done
+     FROM hills h LEFT JOIN features f ON f.hill_id=h.id AND f.status IN ('bet','building','done')
+     GROUP BY h.id ORDER BY h.starts_at DESC LIMIT 8`,
+  )
+  const tables = all<{ title: string; status: string }>(`SELECT title, status FROM betting_tables WHERE status != 'deleted' ORDER BY created_at DESC LIMIT 8`)
+  const activity = all<{ summary: string; title: string }>(
+    `SELECT e.summary, f.title FROM feature_events e JOIN features f ON f.id=e.feature_id ORDER BY e.seq DESC LIMIT 8`,
+  )
+  const hit = searchFeatures(focus, 1)[0]
+
+  const lines: string[] = []
+  lines.push(`Backlog : ${counts?.shaped ?? 0} shaped · ${counts?.bet ?? 0} bet · ${counts?.building ?? 0} building · ${counts?.done ?? 0} done.`)
+  if (shaped.length) lines.push(`Shaped (prêtes à parier) :\n${shaped.map(f => `  • ${f.title} — ${f.signal_count} signal(aux)${f.stale ? ' [stale]' : ''}`).join('\n')}`)
+  if (inFlight.length) lines.push(`En cours (cycle) :\n${inFlight.map(f => `  • ${f.title} (${f.status}${f.hill ? `, ${f.hill}` : ''})`).join('\n')}`)
+  if (shipped.length) lines.push(`Livrées récemment :\n${shipped.map(f => `  • ${f.title}`).join('\n')}`)
+  if (hills.length) lines.push(`Hills (cycles) :\n${hills.map(h => `  • ${h.name} — ${h.status}, ${h.total ? Math.round(h.done / h.total * 100) : 0}% (${h.done}/${h.total})${h.starts_at ? `, ${h.starts_at}→${h.ends_at ?? '—'}` : ''}`).join('\n')}`)
+  if (tables.length) lines.push(`Betting tables : ${tables.map(t => `${t.title} (${t.status})`).join(' · ')}`)
+  if (activity.length) lines.push(`Activité récente :\n${activity.map(a => `  • ${a.summary} — « ${a.title} »`).join('\n')}`)
+  if (hit) lines.push(`\nFeature en focus « ${hit.title} » :\n${featureContext(hit.id)}`)
+  return lines.join('\n\n')
+}
+
 // ── Session persistence ──────────────────────────────────────────────────────
 interface SessionRow { id: string; state: string; turns: number; data: string; committed: number }
 
@@ -144,13 +206,11 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
       attachment_ids: attachmentIds,
     }
 
-    // Read-only question → answer from current state, no write.
+    // Read-only question → answer from current state (whole-product snapshot), no write.
     if (intent.intent === 'query') {
       const hit = searchFeatures(intent.target || text, 1)[0]
       data.target_feature_id = hit?.id ?? null
-      const answer = hit
-        ? await llm.answerQuery(text, featureContext(hit.id))
-        : 'Je n\'ai trouvé aucune feature correspondante dans le backlog.'
+      const answer = await llm.answerQuery(text, workspaceContext(intent.target || text))
       data.transcript.push({ role: 'agent', text: answer })
       run(
         'INSERT INTO intake_session (id, state, turns, data, committed, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
@@ -210,7 +270,7 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
         if (hit) fid = hit.id
       }
       if (fid) data.target_feature_id = fid
-      const answer = fid ? await llm.answerQuery(text, featureContext(fid)) : 'Aucune feature correspondante.'
+      const answer = await llm.answerQuery(text, workspaceContext(intent.target || text))
       data.transcript.push({ role: 'agent', text: answer })
       saveSession(sessionId, 'answered', turns, data)
       return { session_id: sessionId, state: 'answered', agent_message: answer, proposal: null }
@@ -243,6 +303,7 @@ async function advance(
   const llmEmbed = await llm.embed(data.raw)
   const candidates = topCandidates(llmEmbed)
   data.candidates = candidates
+  const roadmap = roadmapContext()
 
   // A merge is an explicit human directive (the survivor/absorbed are already resolved) — skip the
   // adaptive shaping loop and go straight to the consolidated-pitch proposal for confirmation.
@@ -269,7 +330,7 @@ async function advance(
     const absorbed = get<Feature>('SELECT * FROM features WHERE id = ?', data.merge_from_id)
     const mergeRaw = `Fusion de deux features. À ABSORBER : « ${absorbed?.title} » — problème: ${absorbed?.problem} ; solution: ${absorbed?.solution} ; rabbit holes: ${absorbed?.rabbit_holes} ; no-gos: ${absorbed?.out_of_bounds}. Produis un pitch CONSOLIDÉ qui couvre les deux features.`
     proposal = await llm.propose({
-      raw: mergeRaw, transcript: data.transcript, classification,
+      raw: mergeRaw, transcript: data.transcript, classification, roadmap,
       candidates: survivor ? [{ feature_id: survivor.id, title: survivor.title, similarity: 1 }] : candidates,
       existing: survivor
         ? { title: survivor.title, problem: survivor.problem, solution: survivor.solution || '', rabbit_holes: survivor.rabbit_holes || '', out_of_bounds: survivor.out_of_bounds || '', appetite: survivor.appetite || 'small' }
@@ -284,7 +345,7 @@ async function advance(
     // Explicit target: force append to it, and feed Claude the current pitch to merge into.
     const target = get<Feature>('SELECT * FROM features WHERE id = ?', data.target_feature_id)
     proposal = await llm.propose({
-      raw: data.raw, transcript: data.transcript, classification,
+      raw: data.raw, transcript: data.transcript, classification, roadmap,
       candidates: target ? [{ feature_id: target.id, title: target.title, similarity: 1 }] : candidates,
       existing: target
         ? { title: target.title, problem: target.problem, solution: target.solution || '', rabbit_holes: target.rabbit_holes || '', out_of_bounds: target.out_of_bounds || '', appetite: target.appetite || 'small' }
@@ -296,13 +357,18 @@ async function advance(
       proposal.target_feature_id = null
       proposal.supersedes_id = target.id
       reflect = `« ${target.title} » est déjà ${target.status === 'done' ? 'livrée' : 'archivée'} — pas de réouverture. Je propose une NOUVELLE itération « ${proposal.proposed_spec.title} » liée à la version précédente. Tu confirmes, ou tu corriges ?`
+    } else if (target && (target.status === 'bet' || target.status === 'building')) {
+      // In a validated cycle → scope is frozen. No mid-cycle amend; shape a new feature for later.
+      proposal.action = 'create_feature'
+      proposal.target_feature_id = null
+      reflect = `« ${target.title} » est déjà engagée dans un cycle (${target.status}) — on ne modifie pas le périmètre d'un pari en cours. Je propose une NOUVELLE feature « ${proposal.proposed_spec.title} » pour un prochain cycle. Tu confirmes, ou tu corriges ?`
     } else {
       proposal.action = 'append'
       proposal.target_feature_id = data.target_feature_id
       reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose d'affiner la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
     }
   } else {
-    proposal = await llm.propose({ raw: data.raw, transcript: data.transcript, candidates, classification })
+    proposal = await llm.propose({ raw: data.raw, transcript: data.transcript, candidates, classification, roadmap })
     if (proposal.action === 'append') {
       reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose de le rattacher à la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
     } else if (proposal.action === 'discard') {

@@ -28,7 +28,7 @@ export default defineEventHandler(() => {
     betting_total: bettingTotal,
     workspace_name: getSetting('workspace_name') ?? 'Bicycle',
     workspace_logo: getSetting('workspace_logo') ?? null,
-    model: getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5',
+    model: getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
     activity,
   }
 })

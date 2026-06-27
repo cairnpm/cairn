@@ -164,12 +164,14 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
 
     answerQuery: async (question: string, context: string) => {
       const text = await callClaude(
-        'You answer a question about a product feature using ONLY the provided state. '
+        'You answer a question about the PRODUCT — its backlog, cycles (Hills), in-flight and shipped work, '
+        + 'or a specific feature — using ONLY the provided state snapshot. '
         + 'Be concise and concrete (French), PLAIN TEXT only — no markdown (no **, no #, no markdown bullets). '
+        + 'Use the relevant part of the snapshot for the question (a roadmap/backlog question vs a single feature). '
         + 'When asked about changes or history, be SPECIFIC: name the actual signal that was added (quote it briefly), '
         + 'say WHICH fields were refined and HOW they changed, and WHO did it — never just "a mis à jour un signal". '
-        + 'If the state doesn\'t answer it, say so. Do not invent.',
-        `Question: ${question}\n\nÉtat de la feature :\n${context}`, 450,
+        + 'If the snapshot doesn\'t answer it, say so. Do not invent.',
+        `Question: ${question}\n\nÉtat du produit (snapshot) :\n${context}`, 500,
       )
       return text ?? stub.answerQuery(question, context)
     },
@@ -191,14 +193,20 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       if (agentQuestions >= MAX_CLARIFY) return null
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
       const text = await callClaude(
-        'You are a Shape Up intake agent turning a raw signal into a bettable feature. Enforce shaping '
-        + 'discipline: the pitch must capture the REAL problem (what actually breaks today), the appetite '
-        + '(small/big), a solution direction, rabbit holes and explicit no-gos — NOT a reworded request. '
-        + 'Ask ONE targeted shaping question at a time, and keep asking — across as many turns as the subject '
-        + 'genuinely needs — until you could write a confident pitch. A simple signal may need a single '
-        + 'question; an ambiguous or far-reaching one may need several. Do NOT pad with unnecessary questions. '
-        + 'As soon as you could write a confident pitch, reply with ONLY the two letters "OK" and NOTHING else — '
-        + 'do NOT write the pitch, that is a later step. Otherwise reply with ONE short question (French) ending in "?".',
+        'You are a SENIOR product manager doing Shape Up intake — NOT an order-taker. Do not accept the '
+        + 'request at face value and do not flatter; your job is to protect a finite roadmap. First reframe the '
+        + 'request into the underlying PROBLEM (what concretely breaks today, for whom, how often) — never jump '
+        + 'to the solution. Then challenge it like a PM defending that roadmap: does the problem really matter? '
+        + 'why now rather than something else? what is the cost of doing THIS instead? what does success look '
+        + 'like? Interrogate the APPETITE (small = days / big = weeks) and whether it is justified. If the idea '
+        + 'is unbounded (open rabbit holes, unclear success, scope that could balloon), surface it — do not '
+        + 'pretend it is ready to bet. A bettable pitch is rough + solved + bounded (real problem, appetite, '
+        + 'solution direction, rabbit holes, explicit no-gos), NOT a reworded request. '
+        + 'Ask ONE sharp question at a time (French, ending in "?"), and keep challenging across as many turns as '
+        + 'the subject genuinely needs — a clear signal may need one, a vague or far-reaching one several. Do NOT '
+        + 'pad with filler. As soon as you could write a confident, bounded pitch — OR conclude there is no real '
+        + 'problem to shape (pure noise) — reply with ONLY "OK" and nothing else (do NOT write the pitch, that is a '
+        + 'later step). Note: a low-priority but real problem is still worth shaping — timing is decided later at betting.',
         `Signal: ${raw}\n\nConversation so far:\n${convo}`, 160, { temperature: 0 },
       )
       if (text === null) return stub.clarify({ raw, transcript })
@@ -210,27 +218,39 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
     },
 
     propose: async (input: ProposeInput) => {
-      const { raw, candidates, classification, transcript, existing } = input
+      const { raw, candidates, classification, transcript, existing, roadmap } = input
       const candList = candidates.map(c => `- ${c.feature_id} | ${c.title} | sim=${c.similarity.toFixed(2)}`).join('\n') || '(none)'
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
       const existingBlock = existing
         ? `\n\nYou are REFINING this existing feature — preserve what still applies and INTEGRATE the new precision (do not drop context):\n`
           + `title: ${existing.title}\nproblem: ${existing.problem}\nsolution: ${existing.solution}\nrabbit_holes: ${existing.rabbit_holes}\nout_of_bounds: ${existing.out_of_bounds}\nappetite: ${existing.appetite}`
         : ''
+      const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
       const text = await callClaude(
         `Contexte produit :\n${ARCHITECTURE_CONTEXT}\n\n`
-        + 'You route a raw product signal in a Shape Up pipeline, acting as the DEDUP JUDGE. '
+        + 'You route a raw product signal in a Shape Up pipeline, acting as a critical PM and the DEDUP JUDGE — '
+        + 'NOT a yes-man. Prioritise the CORRECT routing decision over agreeing with the user. '
         + 'The candidate features below were surfaced by a similarity search — the score is a HINT, not a hard rule '
         + `(ignore the ${DEDUP_STRONG} cosine threshold; judge meaning, not numbers). `
         + 'If ANY candidate addresses the SAME underlying problem/feature as this signal — even worded very '
         + 'differently — choose action "append" and set target_feature_id to that candidate. Choose "create_feature" '
         + 'ONLY when no candidate is genuinely the same feature (creating is a deliberate act — duplicates pollute the backlog). '
-        + 'Choose "discard" when the input is noise, out-of-scope, or a semantic duplicate that adds NOTHING new to an '
-        + 'existing feature (already fully captured) — set target_feature_id to that feature if relevant. '
+        + 'Choose "discard" ONLY for genuine noise — spam, empty/test input, or chatter that is not about this '
+        + 'product — or an exact duplicate that adds NOTHING new to an existing feature. '
+        + 'A BUG report is IN SCOPE: shape it into a feature/pitch (the problem IS the bug); NEVER discard a bug or '
+        + 'claim it belongs in another tool (Jira, ticketing, "issue tracker") — the intake is the team\'s entry point '
+        + 'for bugs too. "Out-of-scope" means genuinely not about this product, NOT "this is a bug, not a feature". '
+        + 'Do NOT discard a legitimate problem because it looks low-priority or "not now": shaping a feature is NOT a '
+        + 'commitment to build it — prioritisation and timing are decided later at the betting table. '
+        + 'Default strongly to CAPTURING real problems (append to the right feature, or create a new one). '
+        + 'ROADMAP CONTEXT is read-only: features already committed to a cycle have a FROZEN scope — NEVER append to them; '
+        + 'a signal about one of them is a NEW feature for a later cycle (create_feature), or a discard if it adds nothing. '
+        + 'In the rationale, reason like a PM: state your key ASSUMPTIONS and any MISSING context the human should confirm, '
+        + 'and separate fact from interpretation. '
         + 'The proposed_spec is a Shape Up pitch grounded in the product context above: real problem (what breaks today), '
         + 'appetite, sketched solution, rabbit_holes (risks), out_of_bounds (no-gos). '
         + 'Write every text field in FRENCH.',
-        `Signal: ${raw}\n\nConversation:\n${convo}\n\nCandidate features:\n${candList}${existingBlock}`,
+        `Signal: ${raw}\n\nConversation:\n${convo}\n\nCandidate features:\n${candList}${existingBlock}${roadmapBlock}`,
         900, { temperature: 0, schema: PROPOSE_SCHEMA },
       )
       const parsed = parseJson<Partial<Proposal>>(text)

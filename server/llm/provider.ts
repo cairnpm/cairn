@@ -7,6 +7,9 @@ export interface ProposeInput {
   classification: Classification
   /** Present when refining a known feature — its current pitch, to merge into. */
   existing?: { title: string; problem: string; solution: string; rabbit_holes: string; out_of_bounds: string; appetite: string }
+  /** Read-only roadmap context (active cycles + in-flight features) so the agent routes with the
+   *  right picture — and never amends a feature whose scope is frozen in a validated cycle. */
+  roadmap?: string
 }
 
 /**
@@ -55,7 +58,7 @@ export function resetLlm(): void {
 export async function getLlm(): Promise<LlmProvider> {
   const { getSetting } = await import('../db/settings')
   const apiKey = getSetting('anthropic_api_key') ?? process.env.ANTHROPIC_API_KEY ?? ''
-  const model = getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5'
+  const model = getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
   const fingerprint = `${apiKey ? 'anthropic' : 'stub'}|${model}|${apiKey}`
 
   if (_provider && fingerprint === _fingerprint) return _provider

@@ -229,5 +229,8 @@ export function ensureSchema(): void {
   // Uploaded user avatar (attachment id); falls back to the initial when null.
   addColumnIfMissing('users', 'avatar_url', 'avatar_url TEXT')
 
+  // Haiku retired for intake (unreliable routing) — migrate any stored choice to Sonnet.
+  db().exec("UPDATE settings SET value = 'claude-sonnet-4-6' WHERE key = 'anthropic_model' AND value = 'claude-haiku-4-5'")
+
   _ready = true
 }

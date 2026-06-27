@@ -61,7 +61,7 @@ const workspaceName = ref('')
 const workspaceLogo = ref<string | null>(null)
 const uploadingLogo = ref(false)
 const keyInput = ref('')
-const modelInput = ref('claude-haiku-4-5')
+const modelInput = ref('claude-sonnet-4-6')
 watchEffect(() => { if (cfg.value) { workspaceName.value = cfg.value.workspace_name; workspaceLogo.value = cfg.value.workspace_logo; modelInput.value = cfg.value.model } })
 async function onLogoFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -74,9 +74,8 @@ const saved = ref(false)
 const prefs = ref({ dedup: true, confirm: true, slack: false })
 
 const MODEL_META: Record<string, { name: string; desc: string }> = {
-  'claude-haiku-4-5': { name: 'Haiku 4.5', desc: 'Rapide · ~1.2s' },
-  'claude-sonnet-4-6': { name: 'Sonnet 4.6', desc: 'Équilibré · ~2.8s' },
-  'claude-opus-4-8': { name: 'Opus 4.8', desc: 'Profond · ~6.5s' },
+  'claude-sonnet-4-6': { name: 'Sonnet 4.6', desc: 'Équilibré · routage fiable (recommandé)' },
+  'claude-opus-4-8': { name: 'Opus 4.8', desc: 'Profond · routage optimal' },
 }
 const models = computed(() => cfg.value?.models ?? Object.keys(MODEL_META))
 
@@ -197,7 +196,7 @@ async function save() {
           </div>
           <div class="grid gap-2">
             <Label>Modèle</Label>
-            <div class="grid gap-2 sm:grid-cols-3">
+            <div class="grid gap-2 sm:grid-cols-2">
               <button v-for="m in models" :key="m" type="button" class="flex flex-col items-start gap-0.5 rounded-lg border p-3 text-left transition-colors hover:bg-accent" :class="modelInput === m ? 'border-primary ring-1 ring-primary' : ''" @click="modelInput = m">
                 <div class="flex w-full items-center justify-between"><span class="text-sm font-medium">{{ MODEL_META[m]?.name || m }}</span><Check v-if="modelInput === m" class="size-4" /></div>
                 <span class="text-xs text-muted-foreground">{{ MODEL_META[m]?.desc || '' }}</span>

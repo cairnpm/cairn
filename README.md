@@ -38,6 +38,13 @@ pnpm build && PORT=3000 node .output/server/index.mjs
 | `/hills`       | Hills overview                                     |
 | `/hills/[id]`  | Hill detail (e.g. `/hills/12`)                     |
 
+## Documentation
+
+- [`docs/intake.md`](docs/intake.md) — règles & fonctionnement de l'intake/gateway :
+  flux bottom-up Shape Up (signal → feature → menu → Hill), déduplication, merge/group,
+  mise à jour des seules features non livrées, tracking de l'historique, et comment
+  l'agent challenge la prise de contexte pour router correctement.
+
 ## Structure
 
 ```

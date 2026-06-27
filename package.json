@@ -7,7 +7,9 @@
     "build": "nuxt build",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "test:intake": "vitest run tests/intake.test.ts"
   },
   "dependencies": {
     "@lucide/vue": "^1.18.0",
@@ -29,6 +31,7 @@
     "tailwindcss": "^4.0.0",
     "tw-animate-css": "^1.0.0",
     "typescript": "^5.7.0",
+    "vitest": "^4.1.9",
     "vue-tsc": "^2.2.0"
   }
 }

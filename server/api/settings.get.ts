@@ -6,13 +6,13 @@ import { getSetting } from '~~/server/db/settings'
 export default defineEventHandler(() => {
   ensureSchema()
   const dbKey = getSetting('anthropic_api_key')
-  const model = getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-haiku-4-5'
+  const model = getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
   return {
     workspace_name: getSetting('workspace_name') ?? 'Bicycle',
     workspace_logo: getSetting('workspace_logo') ?? null,
     has_key: !!(dbKey || process.env.ANTHROPIC_API_KEY),
     key_source: dbKey ? 'settings' : process.env.ANTHROPIC_API_KEY ? 'env' : 'none',
     model,
-    models: ['claude-haiku-4-5', 'claude-sonnet-4-6', 'claude-opus-4-8'],
+    models: ['claude-sonnet-4-6', 'claude-opus-4-8'],
   }
 })
