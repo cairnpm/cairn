@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { ExternalLink } from 'lucide-vue-next'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatDate } from '~/utils/time'
 import type { HillDetailData } from '~/types/hill'
 
 const props = defineProps<{ data: HillDetailData; compact?: boolean }>()
@@ -34,7 +35,7 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
           </div>
         </MetaField>
         <MetaField label="Features"><span class="tabular-nums">{{ total }}</span></MetaField>
-        <MetaField label="Période"><span class="text-muted-foreground">{{ data.hill.starts_at || '—' }} → {{ data.hill.ends_at || '—' }}</span></MetaField>
+        <MetaField label="Période"><span class="text-muted-foreground">{{ formatDate(data.hill.starts_at) }} → {{ formatDate(data.hill.ends_at) }}</span></MetaField>
         <MetaField v-if="data.betting_table" label="Source">
           <NuxtLink :to="`/betting/${data.betting_table.id}`" class="inline-flex items-center gap-1 hover:underline">
             {{ data.betting_table.title }}

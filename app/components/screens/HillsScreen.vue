@@ -18,6 +18,7 @@ import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { formatDate } from '~/utils/time'
 import type { HillDetailData } from '~/types/hill'
 
 interface HillRow { id: string; name: string; starts_at: string | null; ends_at: string | null; status: string; total: number; done: number }
@@ -171,7 +172,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
                 <span class="text-xs text-muted-foreground tabular-nums">{{ row.original.done }}/{{ row.original.total }}</span>
               </div>
             </TableCell>
-            <TableCell v-if="vis('period')" class="text-xs text-muted-foreground">{{ row.original.starts_at || '—' }} → {{ row.original.ends_at || '—' }}</TableCell>
+            <TableCell v-if="vis('period')" class="text-xs text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.starts_at) }} → {{ formatDate(row.original.ends_at) }}</TableCell>
           </TableRow>
           <TableRow v-if="!table.getRowModel().rows.length">
             <TableCell :colspan="5" class="h-24 text-center text-muted-foreground">Aucune hill.</TableCell>

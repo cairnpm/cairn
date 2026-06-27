@@ -9,13 +9,13 @@ dayjs.locale('fr')
  *  (UTC, no T/Z) or ISO — normalize both. */
 export function timeAgo(iso: string | null | undefined): string {
   if (!iso) return ''
-  const d = dayjs(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`)
+  const d = dayjs(iso.includes(' ') ? `${iso.replace(' ', 'T')}Z` : iso)
   return d.isValid() ? d.fromNow() : ''
 }
 
 /** Absolute French date, e.g. « 16 juin 2026 » (for tables where a relative date is less useful). */
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—'
-  const d = dayjs(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`)
+  const d = dayjs(iso.includes(' ') ? `${iso.replace(' ', 'T')}Z` : iso)
   return d.isValid() ? d.format('D MMM YYYY') : '—'
 }

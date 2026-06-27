@@ -268,7 +268,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
             <TableCell v-if="vis('candidate_count')" class="text-right tabular-nums">{{ row.original.candidate_count }}</TableCell>
             <TableCell v-if="vis('vote_count')" class="text-right tabular-nums">{{ row.original.vote_count }}</TableCell>
             <TableCell v-if="vis('owner')">
-              <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.owner_name" :src="row.original.owner_avatar" />{{ row.original.owner_name }}</div>
+              <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.owner_name" :src="row.original.owner_avatar" /><span class="truncate text-muted-foreground">{{ row.original.owner_name || '—' }}</span></div>
             </TableCell>
             <TableCell v-if="vis('generated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.generated_at) }}</TableCell>
             <TableCell @click.stop>

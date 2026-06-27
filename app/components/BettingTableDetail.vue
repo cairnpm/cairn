@@ -3,20 +3,13 @@ import { ExternalLink } from 'lucide-vue-next'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { timeAgo } from '~/utils/time'
 import type { BettingTableDetailData } from '~/types/betting'
 
 const props = defineProps<{ data: BettingTableDetailData; compact?: boolean }>()
 const emit = defineEmits<{ 'select-feature': [featureId: string] }>()
 
 function impact(score: number) { return score >= 2.5 ? 'Très haute' : score >= 1.5 ? 'Haute' : score >= 0.8 ? 'Moyenne' : 'Basse' }
-function relTime(iso: string) {
-  const d = Date.parse(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')
-  if (Number.isNaN(d)) return ''
-  const s = Math.floor((Date.now() - d) / 1000)
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}min`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  return `${Math.floor(s / 86400)}j`
-}
 const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.length, 0)
 </script>
 
@@ -101,7 +94,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
                 </div>
                 <div class="min-w-0 pb-1 text-sm">
                   <div class="leading-snug">{{ e.summary }}</div>
-                  <div class="mt-0.5 text-xs text-muted-foreground">{{ relTime(e.created_at) }}</div>
+                  <div class="mt-0.5 text-xs text-muted-foreground">{{ timeAgo(e.created_at) }}</div>
                 </div>
               </div>
               <div v-if="!data.events.length" class="text-sm text-muted-foreground">Aucune activité.</div>
