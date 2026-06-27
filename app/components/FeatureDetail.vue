@@ -1,20 +1,19 @@
 <script setup lang="ts">
-import { ExternalLink } from 'lucide-vue-next'
+import { ref } from 'vue'
+import { Download, ExternalLink } from 'lucide-vue-next'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { timeAgo } from '~/utils/time'
 import type { FeatureDetailData } from '~/types/feature'
 
 defineProps<{ detail: FeatureDetailData }>()
 
-function relTime(iso: string): string {
-  const d = Date.parse(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z')
-  if (Number.isNaN(d)) return '—'
-  const s = Math.floor((Date.now() - d) / 1000)
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  if (s < 2592000) return `${Math.floor(s / 86400)}j`
-  return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-}
+// Attachment preview in a simple modal (instead of opening a new tab).
+type Att = { id: string; filename: string; kind: string }
+const preview = ref<Att | null>(null)
+
 const PITCH = [
   { key: 'problem', label: 'Problème' },
   { key: 'solution', label: 'Solution esquissée' },
@@ -49,25 +48,36 @@ const PITCH = [
           <div v-if="detail.attachments.length">
             <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Pièces jointes</div>
             <div class="flex flex-wrap gap-2">
-              <a v-for="a in detail.attachments" :key="a.id" :href="`/api/attachments/${a.id}`" target="_blank">
-                <img v-if="a.kind === 'image'" :src="`/api/attachments/${a.id}`" :title="a.filename" class="size-16 rounded-md border object-cover">
-                <Badge v-else variant="outline" class="gap-1">📄 {{ a.filename }}</Badge>
-              </a>
+              <button v-for="a in detail.attachments" :key="a.id" type="button" :title="a.filename" class="rounded-md transition-opacity hover:opacity-80" @click="preview = a">
+                <img v-if="a.kind === 'image'" :src="`/api/attachments/${a.id}`" class="size-16 rounded-md border object-cover">
+                <Badge v-else variant="outline" class="gap-1 font-normal">📄 {{ a.filename }}</Badge>
+              </button>
             </div>
           </div>
           <div v-if="detail.feedback.length">
             <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Signaux ({{ detail.feedback.length }})</div>
             <div class="flex flex-col gap-2">
               <div v-for="fb in detail.feedback" :key="fb.id" class="rounded-md border bg-muted/40 p-3">
+                <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <UserAvatar :name="fb.captured_by" class="size-5" />
+                  <span class="font-medium text-foreground">{{ fb.captured_by || 'Inconnu' }}</span>
+                  <Badge variant="outline" class="font-normal capitalize">{{ fb.classification }}</Badge>
+                  <span class="ml-auto">{{ timeAgo(fb.created_at) }}</span>
+                </div>
                 <div class="font-medium">{{ fb.content }}</div>
-                <div class="mt-1 text-xs text-muted-foreground">{{ fb.source }} · {{ fb.classification }}</div>
+                <div v-if="fb.attachments.length" class="mt-2 flex flex-wrap gap-2">
+                  <button v-for="a in fb.attachments" :key="a.id" type="button" :title="a.filename" class="rounded-md transition-opacity hover:opacity-80" @click="preview = a">
+                    <img v-if="a.kind === 'image'" :src="`/api/attachments/${a.id}`" class="size-14 rounded-md border object-cover">
+                    <Badge v-else variant="outline" class="gap-1 font-normal">📄 {{ a.filename }}</Badge>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
           <div v-if="detail.decisions.length">
             <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Décisions</div>
             <div v-for="d in detail.decisions" :key="d.id" class="mb-2 rounded-md border bg-muted/40 p-3">
-              <div class="mb-1 flex items-center gap-2"><Badge variant="secondary" class="capitalize">{{ d.verdict }}</Badge><span class="text-xs text-muted-foreground">{{ relTime(d.decided_at) }}</span></div>
+              <div class="mb-1 flex items-center gap-2"><Badge variant="secondary" class="capitalize">{{ d.verdict }}</Badge><span class="text-xs text-muted-foreground">{{ timeAgo(d.decided_at) }}</span></div>
               <p>{{ d.rationale }}</p>
               <div class="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><UserAvatar :name="d.decided_by" class="size-4" />{{ d.decided_by }}</div>
             </div>
@@ -93,7 +103,7 @@ const PITCH = [
                 </div>
                 <div class="min-w-0 pb-1 text-sm">
                   <div class="leading-snug">{{ e.summary }}</div>
-                  <div class="mt-0.5 text-xs text-muted-foreground">{{ relTime(e.created_at) }}</div>
+                  <div class="mt-0.5 text-xs text-muted-foreground">{{ timeAgo(e.created_at) }}</div>
                 </div>
               </div>
               <div v-if="!detail.events.length" class="text-sm text-muted-foreground">Aucune activité.</div>
@@ -102,5 +112,21 @@ const PITCH = [
         </ScrollArea>
       </aside>
     </div>
+
+    <!-- Attachment preview modal -->
+    <Dialog :open="preview !== null" @update:open="(v) => { if (!v) preview = null }">
+      <DialogContent class="max-w-3xl gap-0 overflow-hidden p-0">
+        <template v-if="preview">
+          <DialogTitle class="border-b px-4 py-3 text-sm font-medium">{{ preview.filename }}</DialogTitle>
+          <img v-if="preview.kind === 'image'" :src="`/api/attachments/${preview.id}`" :alt="preview.filename" class="max-h-[78vh] w-full bg-muted/30 object-contain">
+          <div v-else class="flex flex-col items-center gap-3 p-10 text-center text-sm text-muted-foreground">
+            <span>📄 {{ preview.filename }}</span>
+            <Button as-child variant="outline" size="sm">
+              <a :href="`/api/attachments/${preview.id}`" target="_blank" rel="noopener"><Download class="size-3.5" /> Ouvrir le document</a>
+            </Button>
+          </div>
+        </template>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

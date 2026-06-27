@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ExternalLink } from 'lucide-vue-next'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { keepOverlayOpen } from '~/utils/overlay'
 import type { FeatureDetailData } from '~/types/feature'
 
 // Shows a feature's detail either as a side Sheet or as a centered modal Dialog.
@@ -22,7 +23,7 @@ const open = computed({
 
 <template>
   <Sheet v-if="mode === 'sheet'" v-model:open="open">
-    <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]">
+    <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
       <template v-if="detail">
         <SheetTitle class="sr-only">{{ detail.feature.title }}</SheetTitle>
         <NuxtLink
@@ -38,7 +39,7 @@ const open = computed({
   </Sheet>
 
   <Dialog v-else v-model:open="open">
-    <DialogContent class="flex h-[85vh] w-[92vw] max-w-[1100px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1100px]">
+    <DialogContent class="flex h-[85vh] w-[92vw] max-w-[1100px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1100px]" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
       <template v-if="detail">
         <DialogTitle class="sr-only">{{ detail.feature.title }}</DialogTitle>
         <NuxtLink

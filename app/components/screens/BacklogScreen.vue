@@ -24,6 +24,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { keepOverlayOpen } from '~/utils/overlay'
 
 interface Feature {
   id: string; title: string; problem: string; appetite: string | null
@@ -289,7 +290,7 @@ const open = computed({
 
     <!-- Detail Sheet -->
     <Sheet v-model:open="open">
-      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]">
+      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
         <template v-if="detail">
           <SheetTitle class="sr-only">{{ detail.feature.title }}</SheetTitle>
           <NuxtLink
