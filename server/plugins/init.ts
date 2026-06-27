@@ -1,6 +1,6 @@
 import { ensureSchema } from '../db/schema'
 import { seedIfEmpty } from '../db/seed'
-import { seedUsersIfEmpty } from '../db/users'
+import { seedUsersIfEmpty, reconcileAttribution } from '../db/users'
 import { markStaleFeatures } from '../db/stale'
 
 // Create tables + seed demo data once at server startup.
@@ -9,6 +9,7 @@ export default defineNitroPlugin(() => {
     ensureSchema()
     seedIfEmpty()
     seedUsersIfEmpty()
+    reconcileAttribution()
     markStaleFeatures()
   } catch (err) {
     console.error('[db] init failed', err)

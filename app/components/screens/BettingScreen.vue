@@ -14,6 +14,7 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { formatDate } from '~/utils/time'
 import type { BettingTableDetailData } from '~/types/betting'
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -27,7 +28,7 @@ import {
 } from '@/components/ui/alert-dialog'
 
 interface TableRowT {
-  id: string; title: string; status: string; owner_name: string | null
+  id: string; title: string; status: string; owner_name: string | null; owner_avatar: string | null
   hill_id: string | null; hill_name: string | null; generated_at: string; validated_at: string | null; validated_by: string | null
   candidate_count: number; voter_count: number; vote_count: number
 }
@@ -111,15 +112,6 @@ async function restore(id: string) {
   try { await $fetch(`/api/betting-tables/${id}/restore`, { method: 'POST' }); await refresh() } finally { restoring.value = false }
 }
 
-function relTime(iso: string): string {
-  const d = Date.parse(iso?.includes?.('T') ? iso : (iso || '').replace(' ', 'T') + 'Z')
-  if (Number.isNaN(d)) return '—'
-  const s = Math.floor((Date.now() - d) / 1000)
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  if (s < 2592000) return `${Math.floor(s / 86400)}j`
-  return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-}
 
 const statusFilter = useState<string>('bike-betting-filter', () => 'all')
 const counts = computed(() => {
@@ -246,7 +238,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('vote_count')?.toggleSorting()">Votes <component :is="sortIcon('vote_count')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('owner')" class="w-32">Owner</TableHead>
-            <TableHead v-if="vis('generated_at')" class="w-24 text-right">
+            <TableHead v-if="vis('generated_at')" class="w-28 text-right">
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('generated_at')?.toggleSorting()">Créée <component :is="sortIcon('generated_at')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead class="w-10" />
@@ -275,9 +267,9 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
             <TableCell v-if="vis('candidate_count')" class="text-right tabular-nums">{{ row.original.candidate_count }}</TableCell>
             <TableCell v-if="vis('vote_count')" class="text-right tabular-nums">{{ row.original.vote_count }}</TableCell>
             <TableCell v-if="vis('owner')">
-              <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.owner_name" />{{ row.original.owner_name }}</div>
+              <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.owner_name" :src="row.original.owner_avatar" />{{ row.original.owner_name }}</div>
             </TableCell>
-            <TableCell v-if="vis('generated_at')" class="text-right text-muted-foreground tabular-nums">{{ relTime(row.original.generated_at) }}</TableCell>
+            <TableCell v-if="vis('generated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.generated_at) }}</TableCell>
             <TableCell @click.stop>
               <DropdownMenu>
                 <DropdownMenuTrigger as-child>

@@ -32,10 +32,10 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
       </div>
       <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
         <MetaField label="Statut"><StatusBadge :status="data.table.status" /></MetaField>
-        <MetaField label="Créée par"><UserAvatar :name="data.table.owner_name" class="size-5" />{{ data.table.owner_name }}</MetaField>
+        <MetaField label="Créée par"><UserAvatar :name="data.table.owner_name" :src="data.table.owner_avatar" class="size-5" />{{ data.table.owner_name }}</MetaField>
         <MetaField label="Candidats"><span class="tabular-nums">{{ data.candidates.length }}</span></MetaField>
         <MetaField label="Votes"><span class="tabular-nums">{{ totalVotes() }}</span></MetaField>
-        <MetaField v-if="data.table.validated_by" label="Validée par">{{ data.table.validated_by }}</MetaField>
+        <MetaField v-if="data.table.validated_by" label="Validée par"><UserAvatar :name="data.table.validated_by" class="size-5" />{{ data.table.validated_by }}</MetaField>
         <MetaField v-if="data.table.hill_id" label="Hill">
           <NuxtLink :to="`/hills/${data.table.hill_id}`" class="inline-flex items-center gap-1 hover:underline">
             {{ data.table.hill_name || 'Cycle' }}

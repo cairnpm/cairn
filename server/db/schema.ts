@@ -229,6 +229,12 @@ export function ensureSchema(): void {
   // Uploaded user avatar (attachment id); falls back to the initial when null.
   addColumnIfMissing('users', 'avatar_url', 'avatar_url TEXT')
 
+  // Identity: a user's former names (JSON array) so a rename keeps resolving their avatar everywhere.
+  addColumnIfMissing('users', 'former_names', 'former_names TEXT')
+
+  // Vote integrity: dedup votes by a stable user id, not the renameable name.
+  addColumnIfMissing('betting_votes', 'voter_id', 'voter_id TEXT REFERENCES users(id)')
+
   // Haiku retired for intake (unreliable routing) — migrate any stored choice to Sonnet.
   db().exec("UPDATE settings SET value = 'claude-sonnet-4-6' WHERE key = 'anthropic_model' AND value = 'claude-haiku-4-5'")
 

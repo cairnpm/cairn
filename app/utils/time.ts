@@ -12,3 +12,10 @@ export function timeAgo(iso: string | null | undefined): string {
   const d = dayjs(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`)
   return d.isValid() ? d.fromNow() : ''
 }
+
+/** Absolute French date, e.g. « 16 juin 2026 » (for tables where a relative date is less useful). */
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = dayjs(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`)
+  return d.isValid() ? d.format('D MMM YYYY') : '—'
+}

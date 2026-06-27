@@ -25,6 +25,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { keepOverlayOpen } from '~/utils/overlay'
+import { formatDate } from '~/utils/time'
 
 interface Feature {
   id: string; title: string; problem: string; appetite: string | null
@@ -53,15 +54,6 @@ async function confirmDelete() {
   } finally { deleting.value = false; confirmOpen.value = false; toDelete.value = null }
 }
 
-function relTime(iso: string): string {
-  const d = Date.parse(iso)
-  if (Number.isNaN(d)) return '—'
-  const s = Math.floor((Date.now() - d) / 1000)
-  if (s < 3600) return `${Math.max(1, Math.floor(s / 60))}m`
-  if (s < 86400) return `${Math.floor(s / 3600)}h`
-  if (s < 2592000) return `${Math.floor(s / 86400)}j`
-  return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
-}
 
 const counts = computed(() => {
   const f = features.value
@@ -215,10 +207,10 @@ const open = computed({
             <TableHead v-if="vis('hill')" class="w-44">
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('hill')?.toggleSorting()">Hill <component :is="sortIcon('hill')" class="size-3.5 opacity-60" /></button>
             </TableHead>
-            <TableHead v-if="vis('updated_at')" class="w-20 text-right">
+            <TableHead v-if="vis('updated_at')" class="w-28 text-right">
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('updated_at')?.toggleSorting()">Modifié <component :is="sortIcon('updated_at')" class="size-3.5 opacity-60" /></button>
             </TableHead>
-            <TableHead v-if="vis('actor')" class="w-12" />
+            <TableHead v-if="vis('actor')" class="w-32">Auteur</TableHead>
             <TableHead class="w-10" />
           </TableRow>
         </TableHeader>
@@ -242,8 +234,10 @@ const open = computed({
             <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
             <TableCell v-if="vis('signal_count')" class="text-right tabular-nums">{{ row.original.signal_count }}</TableCell>
             <TableCell v-if="vis('hill')" class="text-muted-foreground truncate">{{ row.original.hill_name || '—' }}</TableCell>
-            <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground tabular-nums">{{ relTime(row.original.updated_at) }}</TableCell>
-            <TableCell v-if="vis('actor')"><UserAvatar :name="row.original.last_actor" /></TableCell>
+            <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.updated_at) }}</TableCell>
+            <TableCell v-if="vis('actor')">
+              <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.last_actor" /><span class="truncate text-muted-foreground">{{ row.original.last_actor || '—' }}</span></div>
+            </TableCell>
             <TableCell @click.stop>
               <DropdownMenu>
                 <DropdownMenuTrigger as-child>

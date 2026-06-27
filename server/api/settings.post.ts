@@ -6,8 +6,10 @@ import { resetLlm } from '~~/server/llm/provider'
 // either field drops the cached LLM provider so the next request rebuilds from the new config.
 export default defineEventHandler(async (event) => {
   ensureSchema()
+  // Attribution comes from the authenticated session, never the request body.
+  const { user } = await requireUserSession(event)
+  const by = user.name as string
   const body = await readBody(event)
-  const by = typeof body?.updated_by === 'string' ? body.updated_by : null
 
   if (typeof body?.anthropic_api_key === 'string') {
     const key = body.anthropic_api_key.trim()

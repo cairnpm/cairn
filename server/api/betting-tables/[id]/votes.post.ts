@@ -18,7 +18,8 @@ export default defineEventHandler(async (event) => {
   const cand = get<{ id: string, title_snap: string }>('SELECT id, title_snap FROM betting_candidates WHERE id = ? AND table_id = ?', candidateId, id)
   if (!cand) throw createError({ statusCode: 404, statusMessage: 'Candidate not found' })
 
-  const existing = get<{ id: string }>('SELECT id FROM betting_votes WHERE table_id = ? AND candidate_id = ? AND voter_name = ?', id, candidateId, user.name)
+  // Identity is the stable user id (renames don't create a second vote); voter_name is kept for display.
+  const existing = get<{ id: string }>('SELECT id FROM betting_votes WHERE table_id = ? AND candidate_id = ? AND voter_id = ?', id, candidateId, user.id)
   let voted: boolean
   tx(() => {
     if (existing) {
@@ -26,7 +27,7 @@ export default defineEventHandler(async (event) => {
       voted = false
       logBettingEvent(id, user.name, 'vote_cleared', `${user.name} a retiré son vote sur « ${cand.title_snap} »`, { candidate_id: candidateId })
     } else {
-      run('INSERT INTO betting_votes (id, table_id, candidate_id, voter_name, created_at) VALUES (?, ?, ?, ?, datetime(\'now\'))', newId(), id, candidateId, user.name)
+      run('INSERT INTO betting_votes (id, table_id, candidate_id, voter_id, voter_name, created_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))', newId(), id, candidateId, user.id, user.name)
       voted = true
       logBettingEvent(id, user.name, 'vote_cast', `${user.name} a voté pour « ${cand.title_snap} »`, { candidate_id: candidateId })
     }
