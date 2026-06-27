@@ -1,6 +1,12 @@
-import { run } from './client'
+import { all, run } from './client'
 
-export type EventAction = 'created' | 'signal_added' | 'field_updated' | 'bet' | 'pass' | 'defer' | 'pr_linked' | 'pr_merged' | 'stale' | 'merged' | 'discarded' | 'deleted' | 'restored'
+// Feature activity timeline (newest first) — shared by the detail read and mutating endpoints so
+// the history stays in sync after a change.
+export function listFeatureEvents(featureId: string) {
+  return all('SELECT seq, actor, actor_type, action, summary, detail, created_at FROM feature_events WHERE feature_id = ? ORDER BY seq DESC', featureId)
+}
+
+export type EventAction = 'created' | 'signal_added' | 'field_updated' | 'bet' | 'pass' | 'defer' | 'pr_linked' | 'pr_merged' | 'stale' | 'merged' | 'discarded' | 'deleted' | 'restored' | 'assigned' | 'unassigned'
 export type ActorType = 'user' | 'agent' | 'system'
 
 /**

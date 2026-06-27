@@ -4,7 +4,7 @@ import type { HillDetailData } from '~/types/hill'
 
 const bike = useBicycle()
 const { selectedHill } = bike
-const { data, error } = await useFetch<HillDetailData>(() => `/api/hills/${selectedHill.value}`, { getCachedData: getFreshData })
+const { data, error } = await useApiData<HillDetailData>(qk.hillDetail, () => `/api/hills/${selectedHill.value}`)
 
 // Feed the breadcrumb (Workspace › Hills › <hill name>).
 watchEffect(() => { if (data.value) bike.setCrumb(data.value.hill.name) })

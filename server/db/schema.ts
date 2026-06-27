@@ -108,6 +108,19 @@ export function ensureSchema(): void {
     );
     CREATE INDEX IF NOT EXISTS events_by_feature ON feature_events (feature_id, seq);
 
+    -- Manually-assigned team on a feature: shapers refine the pitch (pre-bet), builders build it
+    -- (post-bet). user_id is a LIVE reference (FK → users); assigned_by is a point-in-time audit name.
+    CREATE TABLE IF NOT EXISTS feature_assignees (
+      id          TEXT PRIMARY KEY,
+      feature_id  TEXT NOT NULL REFERENCES features(id),
+      user_id     TEXT NOT NULL REFERENCES users(id),
+      role        TEXT NOT NULL DEFAULT 'shaper',     -- shaper | builder
+      assigned_by TEXT,
+      assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(feature_id, user_id, role)
+    );
+    CREATE INDEX IF NOT EXISTS assignees_by_feature ON feature_assignees (feature_id);
+
     -- Team members (auth + role). Audit columns elsewhere store the display NAME, not this id,
     -- so existing rows + actorAvatar() keep working unchanged.
     CREATE TABLE IF NOT EXISTS users (

@@ -87,6 +87,7 @@ export function useBicycle() {
 
   async function logout() {
     await clearSession()
+    clearNuxtData() // drop all cached query data so the next user never sees the previous session's
     await navigateTo('/login')
   }
 

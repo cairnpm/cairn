@@ -1,5 +1,6 @@
 import { all, get } from '~~/server/db/client'
 import { ensureSchema } from '~~/server/db/schema'
+import { listAssignees } from '~~/server/db/assignees'
 
 // Hill detail: the cycle + its bet features, each with PR links and the decision that bet it.
 export default defineEventHandler((event) => {
@@ -28,6 +29,7 @@ export default defineEventHandler((event) => {
     ...f,
     pr_links: all('SELECT repo, pr_number, pr_url, status, auto_close FROM pr_links WHERE feature_id = ?', f.id),
     decision: get('SELECT verdict, rationale, decided_by, decided_at FROM decisions WHERE feature_id = ? AND verdict = \'bet\' ORDER BY decided_at DESC LIMIT 1', f.id),
+    builders: listAssignees(f.id).filter(a => a.role === 'builder').map(a => ({ user_id: a.user_id, name: a.name, avatar_url: a.avatar_url })),
   }))
 
   return { hill: { ...hill, rationale }, features, betting_table }

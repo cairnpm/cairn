@@ -22,7 +22,7 @@ import type { HillDetailData } from '~/types/hill'
 
 interface HillRow { id: string; name: string; starts_at: string | null; ends_at: string | null; status: string; total: number; done: number }
 
-const { data: hills } = await useFetch<HillRow[]>('/api/hills', { default: () => [], getCachedData: getFreshData })
+const { data: hills } = await useApiData<HillRow[]>(qk.hills, '/api/hills', { default: () => [] })
 
 function shortId(id: string) { const m = id.match(/hill-(\d+)/); return m ? `H-${m[1]}` : id.slice(0, 4).toUpperCase() }
 const pct = (h: { total: number; done: number }) => h.total ? Math.round((h.done / h.total) * 100) : 0

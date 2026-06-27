@@ -1,5 +1,7 @@
 import { all, get } from '~~/server/db/client'
 import { ensureSchema } from '~~/server/db/schema'
+import { listAssignees } from '~~/server/db/assignees'
+import { listFeatureEvents } from '~~/server/db/events'
 
 // Read-only feature detail: shape + signals (feedback) + decisions + PR links + routing audit.
 export default defineEventHandler((event) => {
@@ -27,9 +29,10 @@ export default defineEventHandler((event) => {
     feedback,
     decisions: all('SELECT id, verdict, appetite, rationale, decided_by, hill_id, decided_at FROM decisions WHERE feature_id = ? ORDER BY decided_at DESC', id),
     pr_links: all('SELECT id, repo, pr_number, pr_url, status, auto_close, linked_at, closed_at FROM pr_links WHERE feature_id = ? ORDER BY linked_at DESC', id),
-    events: all('SELECT seq, actor, actor_type, action, summary, detail, created_at FROM feature_events WHERE feature_id = ? ORDER BY seq DESC', id),
+    events: listFeatureEvents(id),
     routing_log: all('SELECT id, action, confidence, rationale, model, created_at FROM routing_log WHERE target_feature_id = ? ORDER BY created_at DESC', id),
     // Only feature-level orphans (not tied to a specific signal) remain in the standalone block.
     attachments: attachments.filter(a => !a.feedback_id),
+    assignees: listAssignees(id),
   }
 })

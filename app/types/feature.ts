@@ -8,4 +8,5 @@ export interface FeatureDetailData {
   pr_links: { id: string; repo: string; pr_number: number; pr_url: string; status: string }[]
   events: { seq: number; actor: string; summary: string; created_at: string }[]
   attachments: { id: string; filename: string; kind: string }[]
+  assignees: { id: string; user_id: string; name: string; avatar_url: string | null; role: 'shaper' | 'builder' }[]
 }

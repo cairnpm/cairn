@@ -16,7 +16,7 @@ const bike = useBicycle()
 const { screen, author, role } = bike
 const { user } = useUserSession()
 const { t, locale, setLocale } = useUiLang()
-const { data: ov } = await useFetch<Overview>('/api/overview', { getCachedData: getFreshData })
+const { data: ov } = await useApiData<Overview>(qk.overview, '/api/overview')
 
 const items = computed(() => [
   { id: 'intake', label: t('nav.intake'), to: '/', icon: Inbox },

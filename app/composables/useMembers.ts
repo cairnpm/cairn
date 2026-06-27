@@ -11,9 +11,7 @@ function hasName(m: Member, name: string): boolean {
 // member's uploaded photo from just their name. Matches a member's current OR former names, so a
 // rename keeps resolving past records. One deduped fetch (keyed) across the whole app.
 export function useMembers() {
-  const { data: members } = useFetch<Member[]>('/api/members', {
-    key: 'members', default: () => [], getCachedData: getFreshData,
-  })
+  const { data: members } = useApiData<Member[]>(qk.members, '/api/members', { default: () => [] })
   function avatarFor(name?: string | null): string | null {
     if (!name) return null
     return members.value.find(m => hasName(m, name))?.avatar_url ?? null

@@ -31,11 +31,13 @@ interface Feature {
   id: string; title: string; problem: string; appetite: string | null
   status: string; stale: number; hill_id: string | null; hill_name: string | null
   signal_count: number; updated_at: string; last_actor: string | null
+  shapers: { user_id: string; name: string; avatar_url: string | null }[]
 }
 
 const bike = useBicycle()
 const { statusFilter, selectedFeatureId } = bike
-const { data: features, refresh } = await useFetch<Feature[]>('/api/features', { default: () => [], getCachedData: getFreshData })
+const { data: features } = await useApiData<Feature[]>(qk.features, '/api/features', { default: () => [] })
+const { mutate } = useApiMutation()
 
 // Row delete (confirmed via AlertDialog). Open-state is a separate flag so closing the dialog
 // never races with confirmDelete reading the payload.
@@ -48,9 +50,8 @@ async function confirmDelete() {
   deleting.value = true
   const id = toDelete.value.id
   try {
-    await $fetch(`/api/features/${id}`, { method: 'DELETE' })
+    await mutate(`/api/features/${id}`, { method: 'DELETE', invalidates: [qk.features, qk.overview] })
     if (selectedFeatureId.value === id) bike.clearFeature()
-    await refresh()
   } finally { deleting.value = false; confirmOpen.value = false; toDelete.value = null }
 }
 
@@ -75,7 +76,7 @@ const restoring = ref(false)
 async function restore(id: string) {
   if (restoring.value) return
   restoring.value = true
-  try { await $fetch(`/api/features/${id}/restore`, { method: 'POST' }); await refresh() } finally { restoring.value = false }
+  try { await mutate(`/api/features/${id}/restore`, { invalidates: [qk.features, qk.overview] }) } finally { restoring.value = false }
 }
 
 // ── @tanstack/vue-table ───────────────────────────────────────────────────
@@ -87,7 +88,7 @@ const columnFilters = ref<ColumnFiltersState>([])
 const columnVisibility = ref<VisibilityState>({})
 const rowSelection = ref({})
 
-const COL_LABEL: Record<string, string> = { title: 'Feature', status: 'Statut', signal_count: 'Signaux', hill: 'Hill', updated_at: 'Modifié', actor: 'Auteur' }
+const COL_LABEL: Record<string, string> = { title: 'Feature', status: 'Statut', signal_count: 'Signaux', shapers: 'Shapers', hill: 'Hill', updated_at: 'Modifié', actor: 'Auteur' }
 const columns: ColumnDef<Feature>[] = [
   { id: 'title', accessorKey: 'title', header: 'Feature', enableHiding: false },
   {
@@ -100,6 +101,7 @@ const columns: ColumnDef<Feature>[] = [
     },
   },
   { id: 'signal_count', accessorKey: 'signal_count', header: 'Signaux' },
+  { id: 'shapers', accessorFn: r => r.shapers?.length ?? 0, header: 'Shapers', enableSorting: false },
   { id: 'hill', accessorFn: r => r.hill_name || '', header: 'Hill' },
   { id: 'updated_at', accessorKey: 'updated_at', header: 'Modifié' },
   { id: 'actor', accessorFn: r => r.last_actor || '', header: 'Auteur', enableSorting: false },
@@ -204,6 +206,7 @@ const open = computed({
             <TableHead v-if="vis('signal_count')" class="w-24 text-right">
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('signal_count')?.toggleSorting()">Signaux <component :is="sortIcon('signal_count')" class="size-3.5 opacity-60" /></button>
             </TableHead>
+            <TableHead v-if="vis('shapers')" class="w-28">Shapers</TableHead>
             <TableHead v-if="vis('hill')" class="w-44">
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('hill')?.toggleSorting()">Hill <component :is="sortIcon('hill')" class="size-3.5 opacity-60" /></button>
             </TableHead>
@@ -233,7 +236,16 @@ const open = computed({
             </TableCell>
             <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
             <TableCell v-if="vis('signal_count')" class="text-right tabular-nums">{{ row.original.signal_count }}</TableCell>
-            <TableCell v-if="vis('hill')" class="text-muted-foreground truncate">{{ row.original.hill_name || '—' }}</TableCell>
+            <TableCell v-if="vis('shapers')">
+              <div v-if="row.original.shapers?.length" class="flex items-center">
+                <UserAvatar v-for="s in row.original.shapers" :key="s.user_id" :name="s.name" :src="s.avatar_url" class="-mr-1.5 size-6 ring-2 ring-background" />
+              </div>
+              <span v-else class="text-muted-foreground">—</span>
+            </TableCell>
+            <TableCell v-if="vis('hill')" class="truncate" @click.stop>
+              <NuxtLink v-if="row.original.hill_id" :to="`/hills/${row.original.hill_id}`" class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline">{{ row.original.hill_name }}<ExternalLink class="size-3.5 opacity-60" /></NuxtLink>
+              <span v-else class="text-muted-foreground">—</span>
+            </TableCell>
             <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.updated_at) }}</TableCell>
             <TableCell v-if="vis('actor')">
               <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.last_actor" /><span class="truncate text-muted-foreground">{{ row.original.last_actor || '—' }}</span></div>

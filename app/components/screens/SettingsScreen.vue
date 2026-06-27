@@ -19,9 +19,10 @@ async function uploadImage(file: File): Promise<string | null> {
   return r.attachments?.[0]?.id ?? null
 }
 
-const { data: cfg, refresh } = await useFetch<SettingsView>('/api/settings', { getCachedData: getFreshData })
-const { data: profileData, refresh: refreshProfile } = await useFetch<Profile>('/api/profile', { getCachedData: getFreshData })
-const { data: members } = await useFetch<Member[]>('/api/members', { default: () => [], getCachedData: getFreshData })
+const { data: cfg } = await useApiData<SettingsView>(qk.settings, '/api/settings')
+const { data: profileData } = await useApiData<Profile>(qk.profile, '/api/profile')
+const { data: members } = await useApiData<Member[]>(qk.members, '/api/members', { default: () => [] })
+const { mutate } = useApiMutation()
 const { fetch: refreshSession } = useUserSession()
 
 const SECTIONS = [
@@ -50,8 +51,8 @@ async function saveProfile() {
   if (savingProfile.value || !profile.name.trim()) return
   savingProfile.value = true; profileSaved.value = false
   try {
-    await $fetch('/api/profile', { method: 'POST', body: { name: profile.name.trim(), email: profile.email.trim(), avatar_url: avatarUrl.value ?? '' } })
-    await Promise.all([refreshProfile(), refreshSession()])
+    await mutate('/api/profile', { body: { name: profile.name.trim(), email: profile.email.trim(), avatar_url: avatarUrl.value ?? '' }, invalidates: [qk.profile, qk.members, qk.overview] })
+    await refreshSession()
     profileSaved.value = true
   } finally { savingProfile.value = false }
 }
@@ -83,14 +84,13 @@ async function save() {
   if (saving.value) return
   saving.value = true; saved.value = false
   try {
-    await $fetch('/api/settings', { method: 'POST', body: {
+    await mutate('/api/settings', { body: {
       workspace_name: workspaceName.value.trim() || undefined,
       workspace_logo_id: workspaceLogo.value ?? '',
       anthropic_api_key: keyInput.value.trim() || undefined,
       anthropic_model: modelInput.value,
-    } })
+    }, invalidates: [qk.settings, qk.overview] })
     keyInput.value = ''
-    await refresh()
     saved.value = true
   } finally { saving.value = false }
 }

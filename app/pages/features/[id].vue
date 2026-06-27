@@ -11,7 +11,8 @@ import type { FeatureDetailData } from '~/types/feature'
 
 const route = useRoute()
 const bike = useBicycle()
-const { data: detail, error, refresh } = await useFetch<FeatureDetailData>(() => `/api/features/${route.params.id}`, { getCachedData: getFreshData })
+const { data: detail, error } = await useApiData<FeatureDetailData>(qk.featureDetail, () => `/api/features/${route.params.id}`)
+const { mutate } = useApiMutation()
 
 // Feed the breadcrumb (Workspace › Backlog › <feature title>).
 watchEffect(() => { if (detail.value) bike.setCrumb(detail.value.feature.title) })
@@ -24,7 +25,7 @@ async function confirmDelete() {
   if (deleting.value) return
   deleting.value = true
   try {
-    await $fetch(`/api/features/${route.params.id}`, { method: 'DELETE' })
+    await mutate(`/api/features/${route.params.id}`, { method: 'DELETE', invalidates: [qk.features, qk.overview] })
     if (bike.selectedFeatureId.value === route.params.id) bike.clearFeature()
     await navigateTo('/backlog')
   } finally { deleting.value = false }
@@ -33,7 +34,7 @@ const restoring = ref(false)
 async function restore() {
   if (restoring.value) return
   restoring.value = true
-  try { await $fetch(`/api/features/${route.params.id}/restore`, { method: 'POST' }); await refresh() } finally { restoring.value = false }
+  try { await mutate(`/api/features/${route.params.id}/restore`, { invalidates: [qk.featureDetail, qk.features, qk.overview] }) } finally { restoring.value = false }
 }
 </script>
 

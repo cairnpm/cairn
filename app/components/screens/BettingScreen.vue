@@ -35,7 +35,8 @@ interface TableRowT {
 
 const bike = useBicycle()
 const { role } = bike
-const { data: tables, refresh } = await useFetch<TableRowT[]>('/api/betting-tables', { default: () => [], getCachedData: getFreshData })
+const { data: tables } = await useApiData<TableRowT[]>(qk.bettingTables, '/api/betting-tables', { default: () => [] })
+const { mutate } = useApiMutation()
 const creating = ref(false)
 
 // Row delete (confirmed via AlertDialog) — works from the list row or the Sheet. Open-state is a
@@ -49,9 +50,8 @@ async function confirmDelete() {
   deleting.value = true
   const id = toDelete.value.id
   try {
-    await $fetch(`/api/betting-tables/${id}`, { method: 'DELETE' })
+    await mutate(`/api/betting-tables/${id}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview] })
     if (selectedId.value === id) selectedId.value = null
-    await refresh()
   } finally { deleting.value = false; confirmOpen.value = false; toDelete.value = null }
 }
 
@@ -59,7 +59,7 @@ async function createTable() {
   if (creating.value) return
   creating.value = true
   try {
-    const r = await $fetch<{ id: string }>('/api/betting-tables', { method: 'POST', body: { title: '' } })
+    const r = await mutate<{ id: string }>('/api/betting-tables', { body: { title: '' }, invalidates: [qk.bettingTables, qk.overview] })
     await bike.selectBettingTable(r.id)
   } finally { creating.value = false }
 }
@@ -84,8 +84,8 @@ async function vote(candidateId: string) {
   if (voting.value || detail.value?.table.status !== 'open') return
   voting.value = true
   try {
-    await $fetch(`/api/betting-tables/${selectedId.value}/votes`, { method: 'POST', body: { candidate_id: candidateId } })
-    await Promise.all([loadDetail(), refresh()])
+    await mutate(`/api/betting-tables/${selectedId.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTables] })
+    await loadDetail()
   } finally { voting.value = false }
 }
 
@@ -101,7 +101,8 @@ const validateOpen = ref(false)
 // Peek a candidate's feature as a modal Dialog (we're already in a Sheet).
 const featPeek = ref<string | null>(null)
 async function onValidated() {
-  await Promise.all([loadDetail(), refresh()])
+  await invalidate(qk.bettingTables, qk.hills, qk.features, qk.overview)
+  await loadDetail()
 }
 
 // Reactivate a soft-deleted table.
@@ -109,7 +110,7 @@ const restoring = ref(false)
 async function restore(id: string) {
   if (restoring.value) return
   restoring.value = true
-  try { await $fetch(`/api/betting-tables/${id}/restore`, { method: 'POST' }); await refresh() } finally { restoring.value = false }
+  try { await mutate(`/api/betting-tables/${id}/restore`, { invalidates: [qk.bettingTables, qk.overview] }) } finally { restoring.value = false }
 }
 
 

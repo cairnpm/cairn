@@ -12,7 +12,9 @@ import type { BettingCandidate, BettingTableDetailData } from '~/types/betting'
 const bike = useBicycle()
 const { author, role, selectedBettingTable } = bike
 const id = selectedBettingTable
-const { data, refresh } = await useFetch<BettingTableDetailData>(() => `/api/betting-tables/${id.value}`, { getCachedData: getFreshData })
+const { data } = await useApiData<BettingTableDetailData>(qk.bettingTableDetail, () => `/api/betting-tables/${id.value}`)
+const { mutate } = useApiMutation()
+function onValidated() { return invalidate(qk.bettingTableDetail, qk.bettingTables, qk.hills, qk.features, qk.overview) }
 
 // Feed the breadcrumb (Workspace › Betting Table › <table title>).
 watchEffect(() => { if (data.value) bike.setCrumb(data.value.table.title) })
@@ -25,7 +27,7 @@ async function confirmDelete() {
   if (deleting.value) return
   deleting.value = true
   try {
-    await $fetch(`/api/betting-tables/${id.value}`, { method: 'DELETE' })
+    await mutate(`/api/betting-tables/${id.value}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview] })
     await navigateTo('/betting')
   } finally { deleting.value = false }
 }
@@ -33,7 +35,7 @@ const restoring = ref(false)
 async function restore() {
   if (restoring.value) return
   restoring.value = true
-  try { await $fetch(`/api/betting-tables/${id.value}/restore`, { method: 'POST' }); await refresh() } finally { restoring.value = false }
+  try { await mutate(`/api/betting-tables/${id.value}/restore`, { invalidates: [qk.bettingTableDetail, qk.bettingTables, qk.overview] }) } finally { restoring.value = false }
 }
 
 const busy = ref(false)
@@ -41,8 +43,7 @@ async function toggleVote(candidateId: string) {
   if (busy.value || data.value?.table.status !== 'open') return
   busy.value = true
   try {
-    await $fetch(`/api/betting-tables/${id.value}/votes`, { method: 'POST', body: { candidate_id: candidateId } })
-    await refresh()
+    await mutate(`/api/betting-tables/${id.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTableDetail, qk.bettingTables] })
   } finally { busy.value = false }
 }
 
@@ -80,7 +81,7 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
     <FeatureDetailOverlay v-model:feature-id="featPeek" mode="sheet" />
 
     <!-- Validate dialog -->
-    <ValidateTableDialog v-model:open="showValidate" :table-id="id" :candidates="data.candidates" @validated="refresh" />
+    <ValidateTableDialog v-model:open="showValidate" :table-id="id" :candidates="data.candidates" @validated="onValidated" />
 
     <!-- Delete confirmation -->
     <AlertDialog v-model:open="confirmOpen">

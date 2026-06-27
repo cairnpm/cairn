@@ -78,6 +78,8 @@ async function accept() {
     const r = await $fetch<{ action: string; feature_id: string }>('/api/intake/commit', { method: 'POST', body: { session_id: sessionId.value } })
     committed.value = { action: r.action, feature_id: r.feature_id }
     proposal.value = null
+    // A commit creates/updates a feature → the backlog + counts must re-sync.
+    await invalidate(qk.features, qk.featureDetail, qk.overview)
   } finally { pending.value = false }
 }
 function reset() {
