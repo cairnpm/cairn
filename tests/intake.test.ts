@@ -69,6 +69,17 @@ describe('intake gateway — bout en bout', () => {
     if (commit.action === 'create_feature') expect(featureCount()).toBe(before + 1)
   })
 
+  it('un incident critique est capturé (pas renvoyé vers l\'astreinte / la gestion d\'incident)', async () => {
+    const before = featureCount()
+    const res = await converse("Incident critique : l'authentification SSO via Okta échoue (erreur SAML « AudienceRestriction »), 200 utilisateurs bloqués depuis ce matin, aucun contournement.")
+    expect(res.proposal, 'un tour doit aboutir').toBeTruthy()
+    expect(res.proposal!.action, 'un incident doit être capturé, pas écarté/renvoyé ailleurs').not.toBe('discard')
+
+    const commit = await intakeCommit(res.session_id, ACTOR)
+    expect(commit.feature_id, 'l\'incident doit donner une feature (création ou rattachement)').toBeTruthy()
+    if (commit.action === 'create_feature') expect(featureCount()).toBe(before + 1)
+  })
+
   it.runIf(REAL)('déduplication / amend : un complément enrichit la feature existante (append), pas de doublon', async () => {
     const seed = await converse("Bug : l'export CSV plante quand un nom de colonne contient une virgule — fichiers invalides, 12 tickets cette semaine.")
     const seedCommit = await intakeCommit(seed.session_id, ACTOR)

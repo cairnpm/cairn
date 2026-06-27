@@ -194,7 +194,12 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
       const text = await callClaude(
         'You are a SENIOR product manager doing Shape Up intake — NOT an order-taker. Do not accept the '
-        + 'request at face value and do not flatter; your job is to protect a finite roadmap. First reframe the '
+        + 'request at face value and do not flatter; your job is to protect a finite roadmap. '
+        + 'Bugs and incidents — even a critical/production one — ARE valid product signals to capture here: this '
+        + 'intake is the team\'s entry point for them. Challenge to understand the real problem, but NEVER tell the '
+        + 'user it belongs in another tool or process (Jira, ticketing, on-call, incident management); you may flag '
+        + 'urgency, but the goal is to shape it into a fix pitch, not to redirect it elsewhere. '
+        + 'First reframe the '
         + 'request into the underlying PROBLEM (what concretely breaks today, for whom, how often) — never jump '
         + 'to the solution. Then challenge it like a PM defending that roadmap: does the problem really matter? '
         + 'why now rather than something else? what is the cost of doing THIS instead? what does success look '
