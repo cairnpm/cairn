@@ -17,7 +17,11 @@ watch(() => route.path, () => {
 </script>
 
 <template>
-  <SidebarProvider>
+  <!-- h-svh gives the shell a definite viewport height. The provider only sets min-h-svh, which lets
+       a tall page grow the document so the whole shell (breadcrumb header included) scrolls. With a
+       fixed height, the inset's overflow-hidden chain bounds every page → content scrolls inside,
+       headers stay fixed. -->
+  <SidebarProvider class="h-svh">
     <AppSidebar />
     <SidebarInset class="min-w-0 overflow-hidden">
       <header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
