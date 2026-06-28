@@ -6,7 +6,7 @@ import { getAttachment, linkAttachments, uploadsDir } from '../db/attachments'
 import { logEvent } from '../db/events'
 import { ensureSchema } from '../db/schema'
 import type {
-  Candidate, Feature, IntakeSessionData, IntakeState, Proposal, TurnResponse,
+  BatchSegment, Candidate, Feature, IntakeSessionData, IntakeState, Proposal, TurnResponse,
 } from '../domain/types'
 import { getLlm } from '../llm/provider'
 import type { AttachmentForLlm, LlmProvider } from '../llm/provider'
@@ -19,7 +19,9 @@ const MAX_TURNS = 18         // bounded loop — the agent decides how many shap
 // A safety net: a well-calibrated model rarely dips here once shaped. Tunable via env for testing.
 const CONFIDENCE_THRESHOLD = Number(process.env.NUXT_CONFIDENCE_THRESHOLD ?? 0.45)
 const CANDIDATE_FLOOR = 0.15 // ignore near-zero similarities in the candidate list
-const TOP_K = 5
+// How many dedup candidates we surface to the LLM judge. Local (non-semantic) embeddings rank the
+// true twin imperfectly, so we hand the judge a wider slate — it's the real same/not-same decider.
+const TOP_K = 8
 
 // ── Dedup search (brute-force cosine — brief §6) ─────────────────────────────
 // Append targets are SHAPED only: a feature already bet/building lives in a validated cycle and its
@@ -167,10 +169,19 @@ function saveSession(id: string, state: string, turns: number, data: IntakeSessi
   )
 }
 
-// ── A single intake turn (the conversational loop) ───────────────────────────
-/** Read uploaded files and turn them into French context text (vision for images, inline for text). */
-async function extractAttachmentContext(ids: string[], llm: LlmProvider): Promise<string> {
-  if (!ids.length || !llm.extractAttachments) return ''
+// ── Attachments → text ───────────────────────────────────────────────────────
+/** Extract plain text from a .docx buffer (Word file = zip; mammoth is pure-JS, no native dep). */
+async function extractDocxText(buf: Buffer): Promise<string> {
+  try {
+    const mammoth = await import('mammoth') as { extractRawText?: (o: { buffer: Buffer }) => Promise<{ value: string }>, default?: { extractRawText: (o: { buffer: Buffer }) => Promise<{ value: string }> } }
+    const fn = mammoth.extractRawText ?? mammoth.default?.extractRawText
+    if (!fn) return ''
+    return (await fn({ buffer: buf })).value ?? ''
+  } catch { return '' }
+}
+
+/** Turn uploaded files into AttachmentForLlm items (images stay base64, text/docx become text). */
+async function attachmentItems(ids: string[]): Promise<AttachmentForLlm[]> {
   const items: AttachmentForLlm[] = []
   for (const id of ids) {
     const a = getAttachment(id)
@@ -179,9 +190,32 @@ async function extractAttachmentContext(ids: string[], llm: LlmProvider): Promis
       const buf = readFileSync(join(uploadsDir(), a.storage_path))
       if (a.kind === 'image') items.push({ kind: 'image', mime: a.mime, filename: a.filename, base64: buf.toString('base64') })
       else if (a.kind === 'text') items.push({ kind: 'text', mime: a.mime, filename: a.filename, text: buf.toString('utf8') })
+      else if (a.kind === 'document') items.push({ kind: 'text', mime: a.mime, filename: a.filename, text: await extractDocxText(buf) })
     } catch { /* skip unreadable */ }
   }
+  return items
+}
+
+// ── A single intake turn (the conversational loop) ───────────────────────────
+/** Compact French context block for the conversational turn (vision for images, inline for text/docx). */
+async function extractAttachmentContext(ids: string[], llm: LlmProvider): Promise<string> {
+  if (!ids.length || !llm.extractAttachments) return ''
+  const items = await attachmentItems(ids)
   return items.length ? llm.extractAttachments(items) : ''
+}
+
+/** Full source text for decomposition: message + the COMPLETE text of each attachment (no truncation
+ *  for text/docx; vision summary for images). Used by the batch flow, which needs the whole transcript. */
+async function fullSourceText(message: string, ids: string[], llm: LlmProvider): Promise<string> {
+  const parts: string[] = []
+  if (message.trim()) parts.push(message.trim())
+  const items = await attachmentItems(ids)
+  const images = items.filter(i => i.kind === 'image')
+  for (const it of items) {
+    if (it.kind === 'text' && it.text) parts.push(`[${it.filename}]\n${it.text}`)
+  }
+  if (images.length && llm.extractAttachments) parts.push(await llm.extractAttachments(images))
+  return parts.join('\n\n')
 }
 
 export async function intakeTurn(sessionId: string | null, message: string, source = 'manual', capturedBy: string | null = null, attachmentIds: string[] = []): Promise<TurnResponse> {
@@ -242,6 +276,21 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
       }
     }
 
+    // Triage (signal only) — the AGENT decides, the user never has to. Shape Up: a pitch = one
+    // bounded problem. One problem → shape it (1:1). Several distinct problems (e.g. a pasted
+    // transcript) → decompose, then the agent GUIDES clarification on the segments IT judges unclear
+    // (in chat), and ends on a recap. Triage reads the FULL source (untruncated attachments).
+    if (data.mode === 'signal') {
+      const triageSource = attachmentIds.length ? await fullSourceText(message, attachmentIds, llm) : text
+      const triage = await llm.triage({ raw: triageSource })
+      if (triage.mode === 'multi' && triage.count >= 2) {
+        // Decompose drives the rest (guided clarify → recap). If it finds nothing to split, fall
+        // through to the normal single-signal shaping.
+        try { return await decomposeIntake(message, attachmentIds, source, capturedBy) }
+        catch { /* degrade to single shaping */ }
+      }
+    }
+
     run(
       'INSERT INTO intake_session (id, state, turns, data, committed, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
       id, 'gather', 1, JSON.stringify(data), new Date().toISOString(), new Date().toISOString(),
@@ -256,6 +305,11 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
   const data = loaded.data
   data.transcript.push({ role: 'user', text })
   const turns = loaded.row.turns + 1
+
+  // Guided batch clarify: the user is answering the agent's question for the current segment.
+  if (loaded.row.state === 'batch_clarify' && data.batch) {
+    return advanceBatchClarify(sessionId, data, text, turns)
+  }
 
   // In query mode, re-detect intent so the user can naturally switch to a write
   // (e.g. ask a question, then "ok crée un ticket pour X" / "affine la feature Y").
@@ -406,27 +460,30 @@ export interface CommitResult {
   idempotent: boolean
 }
 
-export async function intakeCommit(sessionId: string, committedBy: string | null = null): Promise<CommitResult> {
-  ensureSchema()
-  const loaded = loadSession(sessionId)
-  if (!loaded) throw createError({ statusCode: 404, statusMessage: 'Unknown intake session' })
-  if (loaded.row.committed) throw createError({ statusCode: 409, statusMessage: 'Session already committed' })
-  const { data } = loaded
-  // Attribution reflects who actually commits (their authenticated session), not who opened it.
-  if (committedBy) data.captured_by = committedBy
-  const proposal = data.proposal
-  if (!proposal) throw createError({ statusCode: 400, statusMessage: 'No proposal to commit — run /api/intake/turn first' })
+/** Context for committing one proposal — independent of any intake_session, so both the single
+ *  turn AND the batch decomposition reuse the exact same write path (idempotence + per-action). */
+export interface CommitContext {
+  raw: string
+  source: string
+  capturedBy: string | null
+  attachmentIds?: string[]
+  initialAction?: string | null   // agent's first proposal (quality metric); single-turn only
+  initialTarget?: string | null
+}
 
+/** The ONLY write path into the domain tables. Commits one routing proposal (create/append/merge/
+ *  discard) with idempotence on the raw content hash. Shared by intakeCommit (single) and commitBatch. */
+export async function commitProposal(proposal: Proposal, ctx: CommitContext): Promise<CommitResult> {
   const llm = await getLlm()
-  const contentHash = createHash('sha256').update(data.raw.trim().toLowerCase()).digest('hex')
+  const contentHash = createHash('sha256').update(ctx.raw.trim().toLowerCase()).digest('hex')
 
   // Idempotence: same brut already routed → no-op.
   const existing = get<{ id: string, feature_id: string | null }>('SELECT id, feature_id FROM feedback WHERE content_hash = ?', contentHash)
   if (existing?.feature_id) {
-    saveSession(sessionId, 'committed', loaded.row.turns, data, 1)
     return { feedback_id: existing.id, feature_id: existing.feature_id, action: proposal.action, idempotent: true }
   }
 
+  const data = { raw: ctx.raw, source: ctx.source, captured_by: ctx.capturedBy, attachment_ids: ctx.attachmentIds ?? [], initial_action: ctx.initialAction ?? null, initial_target: ctx.initialTarget ?? null }
   const now = new Date().toISOString()
   const fbEmbedding = await llm.embed(data.raw)
   const feedbackId = newId()
@@ -574,6 +631,185 @@ export async function intakeCommit(sessionId: string, committedBy: string | null
     return { feature_id: featureId }
   })
 
-  saveSession(sessionId, 'committed', loaded.row.turns, data, 1)
   return { feedback_id: feedbackId, feature_id: result.feature_id, action: proposal.action, idempotent: false }
+}
+
+/** Commit the proposal stored on an intake session (single-signal flow). */
+export async function intakeCommit(sessionId: string, committedBy: string | null = null): Promise<CommitResult> {
+  ensureSchema()
+  const loaded = loadSession(sessionId)
+  if (!loaded) throw createError({ statusCode: 404, statusMessage: 'Unknown intake session' })
+  if (loaded.row.committed) throw createError({ statusCode: 409, statusMessage: 'Session already committed' })
+  const { data } = loaded
+  // Attribution reflects who actually commits (their authenticated session), not who opened it.
+  if (committedBy) data.captured_by = committedBy
+  const proposal = data.proposal
+  if (!proposal) throw createError({ statusCode: 400, statusMessage: 'No proposal to commit — run /api/intake/turn first' })
+
+  const res = await commitProposal(proposal, {
+    raw: data.raw, source: data.source, capturedBy: data.captured_by,
+    attachmentIds: data.attachment_ids, initialAction: data.initial_action, initialTarget: data.initial_target,
+  })
+  saveSession(sessionId, 'committed', loaded.row.turns, data, 1)
+  return res
+}
+
+// ── Batch decomposition — one dense input (e.g. a transcript) → N routed signals ─────────────
+const DEDUP_SEGMENT = 0.8 // two create-segments above this cosine are flagged as likely duplicates
+
+/** Flag likely intra-batch duplicates (UI hint only — the human decides): a second append to the
+ *  same feature, or a create near-identical to an earlier create. */
+function flagDuplicates(segments: BatchSegment[], embeddings: number[][]): void {
+  const seenTarget = new Map<string, string>()
+  for (let i = 0; i < segments.length; i++) {
+    const p = segments[i].proposal
+    if (p.action === 'append' && p.target_feature_id) {
+      const first = seenTarget.get(p.target_feature_id)
+      if (first) segments[i].duplicate_of = first
+      else seenTarget.set(p.target_feature_id, segments[i].id)
+    } else if (p.action === 'create_feature') {
+      for (let j = 0; j < i; j++) {
+        if (segments[j].proposal.action === 'create_feature' && cosine(embeddings[i], embeddings[j]) >= DEDUP_SEGMENT) {
+          segments[i].duplicate_of = segments[j].id
+          break
+        }
+      }
+    }
+  }
+}
+
+// ── Guided clarify over a batch (the agent leads, in chat) ───────────────────────────────────
+function currentClarifySegment(batch: BatchSession): BatchSegment | undefined {
+  const id = batch.clarify_order[batch.cursor]
+  return id ? batch.segments.find(s => s.id === id) : undefined
+}
+const questionFor = (seg: BatchSegment) => `**${seg.signal.title}** — ${seg.clarifying_question}`
+
+/** Opening message: how many sujets, how many need precision, then the first question (if any). */
+function batchOpening(batch: BatchSession): string {
+  const total = batch.segments.length
+  const need = batch.clarify_order.length
+  const ready = total - need
+  if (!need) return `J'ai repéré **${total} sujets**, tous assez clairs pour être shapés. Voici le récap à valider.`
+  const head = `J'ai repéré **${total} sujets**. ${ready > 0 ? `${ready} ${ready > 1 ? 'sont clairs' : 'est clair'}, ` : ''}`
+    + `${need} ${need > 1 ? 'ont' : 'a'} besoin d'une précision de ta part — je te les passe un par un.`
+  const seg = currentClarifySegment(batch)
+  return seg ? `${head}\n\n${questionFor(seg)}` : head
+}
+
+/** Recap message once everything is clarified — hands off to the validation screen. */
+function batchRecap(batch: BatchSession): string {
+  const inc = batch.segments.filter(s => s.include)
+  const creates = inc.filter(s => s.proposal.action === 'create_feature').length
+  const appends = inc.filter(s => s.proposal.action === 'append').length
+  return `C'est clair pour moi. Récap : **${creates} à créer**, **${appends} à rattacher**. Vérifie et valide dans l'écran de validation.`
+}
+
+/** Read the full source (message + attachments incl. .docx), segment it into discrete signals, route
+ *  each (embed → candidates → propose), then EITHER open guided clarify (agent-decided) or, if every
+ *  segment is clear, go straight to the recap. Returns a TurnResponse the chat drives. */
+export async function decomposeIntake(message: string, attachmentIds: string[] = [], source = 'manual', capturedBy: string | null = null): Promise<TurnResponse> {
+  ensureSchema()
+  const llm = await getLlm()
+  const raw = await fullSourceText(message, attachmentIds, llm)
+  if (!raw.trim()) throw createError({ statusCode: 400, statusMessage: 'Rien à décomposer (source vide)' })
+
+  const roadmap = roadmapContext()
+  const signals = await llm.decompose({ raw, roadmap })
+  if (!signals.length) throw createError({ statusCode: 422, statusMessage: 'Aucun signal distinct trouvé' })
+
+  const segments: BatchSegment[] = []
+  const embeddings: number[][] = []
+  for (const signal of signals) {
+    const embedding = await llm.embed(signal.problem)
+    const candidates = topCandidates(embedding)
+    const proposal = await llm.propose({ raw: signal.problem, transcript: [], candidates, classification: signal.classification, roadmap })
+    segments.push({ id: newId(), signal, proposal, include: proposal.action !== 'discard', clarifying_question: signal.clarifying_question ?? null, answer: null })
+    embeddings.push(embedding)
+  }
+  flagDuplicates(segments, embeddings)
+
+  // The AGENT decides what needs clarifying (decompose flagged a question) — never the user. Discards
+  // are never clarified (they're excluded). Clear segments need nothing.
+  const clarify_order = segments.filter(s => s.clarifying_question && s.proposal.action !== 'discard').map(s => s.id)
+  const batch: BatchSession = { source, segments, clarify_order, cursor: 0 }
+  const state: IntakeState = clarify_order.length ? 'batch_clarify' : 'batch_review'
+  const agentMsg = clarify_order.length ? batchOpening(batch) : batchRecap(batch)
+
+  const data: IntakeSessionData = {
+    raw, source, captured_by: capturedBy, mode: 'signal',
+    target_feature_id: null, merge_from_id: null, initial_action: null, initial_target: null,
+    transcript: [{ role: 'agent', text: agentMsg }], proposal: null, candidates: [], attachment_ids: attachmentIds,
+    batch,
+  }
+  const id = newId()
+  const now = new Date().toISOString()
+  run('INSERT INTO intake_session (id, state, turns, data, committed, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)', id, state, 1, JSON.stringify(data), now, now)
+  return { session_id: id, state, agent_message: agentMsg, proposal: null, batch: state === 'batch_review' ? { session_id: id, segments } : undefined }
+}
+
+/** Handle one answer during guided clarify: fold it into the current segment (re-shape + re-route so
+ *  the precision improves both the pitch AND dedup), then ask the next question or hand off to recap. */
+async function advanceBatchClarify(sessionId: string, data: IntakeSessionData, answer: string, turns: number): Promise<TurnResponse> {
+  const llm = await getLlm()
+  const batch = data.batch!
+  const seg = currentClarifySegment(batch)
+  if (seg) {
+    const enriched = `${seg.signal.problem}\n\n[Précision de l'auteur] ${answer}`
+    const embedding = await llm.embed(enriched)
+    const candidates = topCandidates(embedding)
+    seg.proposal = await llm.propose({ raw: enriched, transcript: [], candidates, classification: seg.signal.classification, roadmap: roadmapContext() })
+    seg.signal = { ...seg.signal, problem: enriched, clarifying_question: null }
+    seg.answer = answer
+    seg.clarifying_question = null
+    seg.include = seg.proposal.action !== 'discard'
+  }
+  batch.cursor += 1
+
+  const next = currentClarifySegment(batch)
+  if (next) {
+    const msg = questionFor(next)
+    data.transcript.push({ role: 'agent', text: msg })
+    saveSession(sessionId, 'batch_clarify', turns, data)
+    return { session_id: sessionId, state: 'batch_clarify', agent_message: msg, proposal: null }
+  }
+  const recap = batchRecap(batch)
+  data.transcript.push({ role: 'agent', text: recap })
+  saveSession(sessionId, 'batch_review', turns, data)
+  return { session_id: sessionId, state: 'batch_review', agent_message: recap, proposal: null, batch: { session_id: sessionId, segments: batch.segments } }
+}
+
+export interface BatchSelection { id: string; action_override?: Proposal['action']; target_override?: string | null }
+export interface BatchCommitResult { created: number; updated: number; discarded: number; results: { id: string; feature_id: string | null; action: Proposal['action'] }[] }
+
+/** Commit the selected segments of a batch session — each via the shared commitProposal write path. */
+export async function commitBatch(sessionId: string, selections: BatchSelection[], committedBy: string | null = null): Promise<BatchCommitResult> {
+  ensureSchema()
+  const loaded = loadSession(sessionId)
+  if (!loaded) throw createError({ statusCode: 404, statusMessage: 'Unknown intake session' })
+  if (loaded.row.committed) throw createError({ statusCode: 409, statusMessage: 'Session already committed' })
+  const { data } = loaded
+  if (!data.batch) throw createError({ statusCode: 400, statusMessage: 'Not a batch session' })
+  if (committedBy) data.captured_by = committedBy
+
+  const selMap = new Map(selections.map(s => [s.id, s]))
+  const results: BatchCommitResult['results'] = []
+  let created = 0, updated = 0, discarded = 0
+  for (const seg of data.batch.segments) {
+    const sel = selMap.get(seg.id)
+    if (!sel) continue // not selected → excluded
+    const proposal: Proposal = { ...seg.proposal }
+    if (sel.action_override) proposal.action = sel.action_override
+    if (sel.target_override !== undefined) proposal.target_feature_id = sel.target_override
+    if (proposal.action === 'append' && !proposal.target_feature_id) continue // invalid override
+    // The source attachment spawned many features → not linked to any one (a transcript↔features
+    // many-to-many would need a join table; out of scope). Each segment commits its own problem text.
+    const res = await commitProposal(proposal, { raw: seg.signal.problem, source: data.source, capturedBy: data.captured_by })
+    if (res.action === 'create_feature') created++
+    else if (res.action === 'append' || res.action === 'merge') updated++
+    else discarded++
+    results.push({ id: seg.id, feature_id: res.feature_id, action: res.action })
+  }
+  saveSession(sessionId, 'committed', loaded.row.turns, data, 1)
+  return { created, updated, discarded, results }
 }

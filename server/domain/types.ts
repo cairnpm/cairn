@@ -71,8 +71,19 @@ export interface PrLink {
 
 // ── Intake conversation ──────────────────────────────────────────────────────
 export type IntakeMode = 'signal' | 'query' | 'refine' | 'merge'
-export type IntakeState = 'gather' | 'clarify' | 'reflect' | 'propose' | 'committed' | 'pending_review' | 'answered'
+export type IntakeState = 'gather' | 'clarify' | 'reflect' | 'propose' | 'committed' | 'pending_review' | 'answered' | 'batch_clarify' | 'batch_review'
 export interface Intent { intent: IntakeMode; target: string | null; target2?: string | null }
+
+// Triage: does this input describe ONE shapeable problem (→ clarify into 1 feature) or SEVERAL
+// (→ offer decomposition)? Shape Up: one pitch = one bounded problem. Length is irrelevant; the
+// count of distinct, independently-shapeable problems is what decides.
+export interface Triage { mode: 'single' | 'multi'; count: number; reason: string }
+
+// A discrete product signal carved out of a transcript/dense input, recontextualized into a
+// standalone problem so the normal routing (embed → candidates → propose) applies per segment.
+// clarifying_question: set by the decompose pass when the segment is too under-specified to shape
+// well — the agent will ASK it (guided clarify) before the final recap. Null = ready as-is.
+export interface DecomposedSignal { title: string; problem: string; classification: Classification; clarifying_question?: string | null }
 
 export interface Candidate {
   feature_id: string
@@ -116,11 +127,29 @@ export interface IntakeSessionData {
   proposal: Proposal | null
   candidates: Candidate[]
   attachment_ids: string[]            // files uploaded with the first turn, linked at commit
+  triage?: Triage | null             // first-turn triage result (drives single vs decompose offer)
+  batch?: BatchSession | null        // present once decomposed: the N segments under review
 }
+
+// A reviewable segment from decomposition: the carved signal + its routed proposal + include flag.
+export interface BatchSegment {
+  id: string
+  signal: DecomposedSignal
+  proposal: Proposal
+  include: boolean
+  duplicate_of?: string | null       // another segment id this likely duplicates (UI hint)
+  clarifying_question?: string | null // agent's targeted question while this segment is unresolved
+  answer?: string | null             // the human's answer (folded back into shaping + routing)
+}
+// clarify_order: ids of the segments the AGENT decided need precision, asked one by one in chat.
+// cursor: index into clarify_order of the segment currently being clarified.
+export interface BatchSession { source: string; segments: BatchSegment[]; clarify_order: string[]; cursor: number }
 
 export interface TurnResponse {
   session_id: string
   state: IntakeState
   agent_message: string
   proposal: Proposal | null
+  // Set when the agent decided the input covers several problems and auto-decomposed it for review.
+  batch?: { session_id: string; segments: BatchSegment[] }
 }

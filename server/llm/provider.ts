@@ -1,4 +1,4 @@
-import type { Candidate, Classification, Intent, Proposal, TranscriptEntry } from '../domain/types'
+import type { Candidate, Classification, DecomposedSignal, Intent, Proposal, TranscriptEntry, Triage } from '../domain/types'
 
 export interface ProposeInput {
   raw: string
@@ -39,6 +39,10 @@ export interface LlmProvider {
   /** A single targeted question, or null when the spec is complete enough. */
   clarify: (input: { raw: string; transcript: TranscriptEntry[] }) => Promise<string | null>
   propose: (input: ProposeInput) => Promise<Proposal>
+  /** Triage a raw input: one shapeable problem (single) or several (multi → offer decomposition). */
+  triage: (input: { raw: string }) => Promise<Triage>
+  /** Carve a dense input (e.g. a transcript) into discrete, recontextualized product signals. */
+  decompose: (input: { raw: string; roadmap?: string }) => Promise<DecomposedSignal[]>
 }
 
 let _provider: LlmProvider | null = null

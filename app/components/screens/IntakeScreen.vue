@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { ArrowDown, ArrowUp, Paperclip, Sparkles, X } from 'lucide-vue-next'
+import { ArrowDown, ArrowUp, Layers, Paperclip, Sparkles, X } from 'lucide-vue-next'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,8 @@ interface Proposal {
   proposed_spec: { title: string; problem: string; appetite: string; solution: string; rabbit_holes: string; out_of_bounds: string }
   candidates: Candidate[]
 }
-interface TurnResponse { session_id: string; state: string; agent_message: string; proposal: Proposal | null }
+interface BatchSegment { id: string; signal: { title: string; problem: string; classification: string }; proposal: Proposal; include: boolean; duplicate_of?: string | null }
+interface TurnResponse { session_id: string; state: string; agent_message: string; proposal: Proposal | null; batch?: { session_id: string; segments: BatchSegment[] } }
 interface Msg { role: 'user' | 'agent'; text: string; attachments?: Att[] }
 
 const bike = useBicycle()
@@ -81,7 +82,7 @@ watch([() => messages.value.length, proposal, committed, pending], async () => {
 
 async function send() {
   const text = draft.value.trim()
-  if (!text || pending.value) return
+  if ((!text && !attachments.value.length) || pending.value) return
   pending.value = true
   const atts = attachments.value
   attachments.value = [] // clear the composer immediately; the message keeps its own copy
@@ -97,6 +98,8 @@ async function send() {
     proposal.value = r.proposal
     state.value = r.state
     messages.value.push({ role: 'agent', text: r.agent_message })
+    // The agent decided this input covers several problems → it auto-decomposed; show the review.
+    if (r.batch) { batch.value = r.batch; reviewOpen.value = true }
   } finally { pending.value = false }
 }
 function pick(text: string) { draft.value = text; send() }
@@ -111,9 +114,29 @@ async function accept() {
     await invalidate(qk.features, qk.featureDetail, qk.overview)
   } finally { pending.value = false }
 }
+// ── Batch decomposition (agent-decided: multi-topic input → N features for review) ────────────
+// `batch` holds the decomposition; `reviewOpen` controls the takeover. Closing the review keeps the
+// batch so it stays re-openable from the chat (no dead end, no dangling "valide ci-dessous").
+const batch = ref<{ session_id: string; segments: BatchSegment[] } | null>(null)
+const reviewOpen = ref(false)
+const batchRecap = ref<{ created: number; updated: number; discarded: number } | null>(null)
+
+async function confirmBatch(selections: { id: string; action_override: string; target_override: string | null }[]) {
+  if (!batch.value || pending.value) return
+  pending.value = true
+  try {
+    const r = await $fetch<{ created: number; updated: number; discarded: number }>('/api/intake/commit-batch', { method: 'POST', body: { session_id: batch.value.session_id, segments: selections } })
+    batchRecap.value = { created: r.created, updated: r.updated, discarded: r.discarded }
+    batch.value = null; reviewOpen.value = false
+    await invalidate(qk.features, qk.featureDetail, qk.overview)
+  } finally { pending.value = false }
+}
+function cancelBatch() { reviewOpen.value = false } // back to chat; reopen anytime
+
 function reset() {
   sessionId.value = null; messages.value = []; proposal.value = null
   state.value = ''; committed.value = null; draft.value = ''; attachments.value = []
+  batch.value = null; reviewOpen.value = false; batchRecap.value = null
 }
 function onKey(e: KeyboardEvent) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
 
@@ -131,8 +154,21 @@ const QUICK = [
 
 <template>
   <div class="flex h-full flex-col">
+    <!-- BATCH RECAP (after committing a decomposition) -->
+    <div v-if="batchRecap" class="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+      <div class="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Sparkles class="size-5" /></div>
+      <div>
+        <h1 class="text-xl font-semibold tracking-tight">Décomposition appliquée</h1>
+        <p class="mt-1 text-sm text-muted-foreground">{{ batchRecap.created }} feature(s) créée(s) · {{ batchRecap.updated }} mise(s) à jour<template v-if="batchRecap.discarded"> · {{ batchRecap.discarded }} écartée(s)</template></p>
+      </div>
+      <Button @click="reset">Nouveau signal</Button>
+    </div>
+
+    <!-- BATCH REVIEW (takeover) -->
+    <IntakeBatchReview v-else-if="batch && reviewOpen" :segments="batch.segments" :pending="pending" @confirm="confirmBatch" @cancel="cancelBatch" />
+
     <!-- EMPTY -->
-    <div v-if="messages.length === 0" class="flex flex-1 items-center justify-center overflow-auto p-6">
+    <div v-else-if="messages.length === 0" class="flex flex-1 items-center justify-center overflow-auto p-6">
       <div class="w-full max-w-2xl">
         <div class="mb-6 flex flex-col items-center gap-3 text-center">
           <div class="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Sparkles class="size-5" /></div>
@@ -149,9 +185,9 @@ const QUICK = [
               <Badge v-for="a in attachments" :key="a.id" variant="secondary" class="gap-1">{{ a.kind === 'image' ? '🖼️' : '📄' }} {{ a.filename }}<button @click="removeAttachment(a.id)"><X class="size-3" /></button></Badge>
             </div>
             <div class="flex items-center justify-between px-1 pb-1">
-              <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log" class="hidden" @change="onFiles">
+              <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" @change="onFiles">
               <Button variant="ghost" size="sm" :disabled="uploading" @click="fileInput?.click()"><Paperclip class="size-4" /> {{ uploading ? 'Envoi…' : 'Joindre' }}</Button>
-              <Button size="sm" :disabled="pending || !draft.trim()" @click="send">Envoyer <ArrowUp class="size-4" /></Button>
+              <Button size="sm" :disabled="pending || (!draft.trim() && !attachments.length)" @click="send">Envoyer <ArrowUp class="size-4" /></Button>
             </div>
           </CardContent>
         </Card>
@@ -228,6 +264,12 @@ const QUICK = [
               <Button variant="outline" size="sm" @click="reset">Nouveau signal</Button>
             </CardContent>
           </Card>
+
+          <!-- Batch recap closed → always re-openable (no dead end) -->
+          <div v-if="batch && !reviewOpen" class="ml-8">
+            <Button size="sm" @click="reviewOpen = true"><Layers class="size-4" /> Ouvrir l'écran de validation ({{ batch.segments.length }})</Button>
+          </div>
+
           </div>
         </div>
         <Transition enter-active-class="transition duration-150" enter-from-class="translate-y-1 opacity-0" leave-active-class="transition duration-150" leave-to-class="translate-y-1 opacity-0">
@@ -243,10 +285,10 @@ const QUICK = [
                 <Badge v-for="a in attachments" :key="a.id" variant="secondary" class="gap-1">{{ a.kind === 'image' ? '🖼️' : '📄' }} {{ a.filename }}<button @click="removeAttachment(a.id)"><X class="size-3" /></button></Badge>
               </div>
               <div class="flex items-end gap-1.5">
-                <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log" class="hidden" @change="onFiles">
+                <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" @change="onFiles">
                 <Button variant="ghost" size="icon" class="size-9 shrink-0 text-muted-foreground" :disabled="uploading" :title="uploading ? 'Envoi…' : 'Joindre un fichier'" @click="fileInput?.click()"><Paperclip class="size-4" /></Button>
                 <Textarea v-model="draft" :placeholder="dragOver ? 'Déposez vos fichiers ici…' : 'Réponds, précise ou corrige le routing…'" rows="1" class="min-h-9 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
-                <Button size="icon" :disabled="pending || !draft.trim()" @click="send"><ArrowUp class="size-4" /></Button>
+                <Button size="icon" :disabled="pending || (!draft.trim() && !attachments.length)" @click="send"><ArrowUp class="size-4" /></Button>
               </div>
             </CardContent>
           </Card>

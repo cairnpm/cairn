@@ -1,4 +1,4 @@
-import type { Classification, Proposal } from '../domain/types'
+import type { Classification, DecomposedSignal, Proposal, Triage } from '../domain/types'
 import { localEmbed } from '../utils/embedding'
 import { ARCHITECTURE_CONTEXT } from './architecture'
 import type { LlmProvider, ProposeInput } from './provider'
@@ -63,6 +63,39 @@ const PROPOSE_SCHEMA = {
   required: ['action', 'target_feature_id', 'confidence', 'rationale', 'proposed_spec'],
 }
 
+const TRIAGE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    mode: { type: 'string', enum: ['single', 'multi'] },
+    count: { type: 'number' },
+    reason: { type: 'string' },
+  },
+  required: ['mode', 'count', 'reason'],
+}
+
+const DECOMPOSE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    signals: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          title: { type: 'string' },
+          problem: { type: 'string' },
+          classification: { type: 'string', enum: ['musing', 'explore', 'directive'] },
+          clarifying_question: nullableString,
+        },
+        required: ['title', 'problem', 'classification', 'clarifying_question'],
+      },
+    },
+  },
+  required: ['signals'],
+}
+
 export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
   const stub = createStubProvider()
   const { apiKey, model } = cfg
@@ -76,7 +109,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
     }
     if (opts.temperature !== undefined && acceptsTemperature) base.temperature = opts.temperature
 
-    const attempt = async (withSchema: boolean): Promise<string | null> => {
+    const attempt = async (withSchema: boolean): Promise<{ ok: true, text: string | null } | { ok: false, status: number }> => {
       const body = withSchema && opts.schema
         ? { ...base, output_config: { format: { type: 'json_schema', schema: opts.schema } } }
         : base
@@ -89,19 +122,27 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         },
         body: JSON.stringify(body),
       })
-      if (!res.ok) return null
+      if (!res.ok) return { ok: false, status: res.status }
       const data = await res.json() as { content?: { type: string, text?: string }[] }
-      return data.content?.find(b => b.type === 'text')?.text ?? null
+      return { ok: true, text: data.content?.find(b => b.type === 'text')?.text ?? null }
     }
 
-    try {
-      let t = await attempt(true)
-      // Structured outputs may be unsupported for the model/version → degrade to plain JSON-in-text.
-      if (t === null && opts.schema) t = await attempt(false)
-      return t
-    } catch {
-      return null
+    // Bounded retry with backoff on TRANSIENT failures (rate limit / overload / 5xx). Without this,
+    // a single 429/529 silently degrades routing to the deterministic stub — which is why a rapid
+    // batch (decompose → N propose calls) loses the smart dedup judge. 400 = schema unsupported →
+    // degrade to plain JSON-in-text once (not retried). Other 4xx (auth) → give up → caller stubs.
+    const MAX_ATTEMPTS = 4
+    for (let i = 0; i < MAX_ATTEMPTS; i++) {
+      try {
+        let r = await attempt(true)
+        if (!r.ok && r.status === 400 && opts.schema) r = await attempt(false)
+        if (r.ok) return r.text
+        const retryable = r.status === 429 || r.status === 529 || r.status >= 500
+        if (!retryable) return null
+      } catch { /* network error — treat as transient, retry */ }
+      if (i < MAX_ATTEMPTS - 1) await new Promise(res => setTimeout(res, 400 * 2 ** i + Math.floor(Math.random() * 250)))
     }
+    return null
   }
 
   async function describeImage(b64: string, mime: string): Promise<string | null> {
@@ -278,6 +319,59 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         },
         candidates,
       }
+    },
+
+    triage: async ({ raw }) => {
+      const text = await callClaude(
+        'You triage a raw input for a Shape Up product backlog. Decide whether it describes ONE shapeable '
+        + 'problem or SEVERAL distinct ones. Shape Up: a pitch = one bounded problem with one appetite. '
+        + 'LENGTH IS IRRELEVANT — count the distinct, independently-shapeable PRODUCT SIGNALS: feature requests, '
+        + 'gaps/limitations raised, bugs, or improvements. '
+        + 'A short single ask (even vague) → mode "single", count 1. '
+        + 'A MEETING/DEMO TRANSCRIPT almost always raises several distinct signals scattered through the talk '
+        + '(a missing filter, a limitation a prospect points out, a "could we also…", a bug) — count EACH of those, '
+        + 'even though most of the transcript is narration/demo/small-talk you ignore → mode "multi". '
+        + 'Only the SAME problem\'s sub-details do not add to the count. When the input is a transcript/long doc, '
+        + 'lean toward "multi". Write reason in FRENCH.',
+        `Input:\n${raw.slice(0, 60000)}`,
+        300, { temperature: 0, schema: TRIAGE_SCHEMA },
+      )
+      const parsed = parseJson<Partial<Triage>>(text)
+      if (!parsed || (parsed.mode !== 'single' && parsed.mode !== 'multi')) return stub.triage({ raw })
+      const count = typeof parsed.count === 'number' ? Math.max(1, Math.round(parsed.count)) : 2
+      return { mode: parsed.mode, count: parsed.mode === 'multi' ? Math.max(2, count) : 1, reason: parsed.reason || '' }
+    },
+
+    decompose: async ({ raw, roadmap }) => {
+      const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
+      const text = await callClaude(
+        `Contexte produit :\n${ARCHITECTURE_CONTEXT}\n\n`
+        + 'You are a senior PM doing Shape Up intake. The input is often a meeting/demo transcript where most of the '
+        + 'text is narration, sales pitch and small talk — but participants raise SEVERAL distinct product signals: '
+        + 'a feature request, a limitation/gap someone points out, a "could we also…", a bug, an improvement. '
+        + 'Extract EACH distinct, independently-shapeable signal. For each: a short title and a SELF-CONTAINED problem '
+        + 'statement (RECONTEXTUALIZE — the reader has NOT seen the transcript and does not know the product jargon), '
+        + 'plus a classification (musing | explore | directive). '
+        + 'IGNORE narration, demo walkthrough, sales pitch and chatter. MERGE duplicates (one entry per real signal). '
+        + 'Do NOT invent problems that are not genuinely raised. '
+        + 'For EACH signal, set clarifying_question: if the transcript leaves a signal too UNDER-SPECIFIED to shape '
+        + 'well (the core problem is ambiguous, it reads as a solution without the underlying need, the scope/appetite '
+        + 'is unclear, or it might overlap an existing feature), write ONE targeted question (FR) to ask the human. '
+        + 'If the signal is already clear enough to shape, set clarifying_question to null. Be SELECTIVE — most '
+        + 'well-stated signals need null; only flag the genuinely ambiguous ones. Write every field in FRENCH.'
+        + roadmapBlock,
+        `Source:\n${raw.slice(0, 120000)}`,
+        2600, { temperature: 0, schema: DECOMPOSE_SCHEMA },
+      )
+      const parsed = parseJson<{ signals?: DecomposedSignal[] }>(text)
+      const signals = parsed?.signals?.filter(s => s && s.problem?.trim())
+      if (!signals?.length) return stub.decompose({ raw, roadmap })
+      return signals.map(s => ({
+        title: (s.title || s.problem).trim().slice(0, 80),
+        problem: s.problem.trim(),
+        classification: (['musing', 'explore', 'directive'].includes(s.classification as string) ? s.classification : 'explore') as Classification,
+        clarifying_question: (typeof s.clarifying_question === 'string' && s.clarifying_question.trim()) ? s.clarifying_question.trim() : null,
+      }))
     },
   }
 }

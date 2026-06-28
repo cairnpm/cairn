@@ -1,4 +1,4 @@
-import type { Appetite, Classification, Proposal } from '../domain/types'
+import type { Appetite, Classification, DecomposedSignal, Proposal, Triage } from '../domain/types'
 import { localEmbed } from '../utils/embedding'
 import type { LlmProvider, ProposeInput } from './provider'
 
@@ -123,6 +123,22 @@ export function createStubProvider(): LlmProvider {
             candidates,
           }
       return proposal
+    },
+
+    // Heuristic triage: long text (transcript) or several bullet/line items → multi; else single.
+    triage: async ({ raw }) => {
+      const words = wordCount(raw)
+      if (words > 400) return { mode: 'multi', count: Math.min(8, Math.max(2, Math.round(words / 250))), reason: 'Texte long — plusieurs sujets probables.' }
+      const items = raw.split(/\n{2,}|(?:^|\n)\s*[-*•]\s+/).map(s => s.trim()).filter(s => wordCount(s) >= 3)
+      if (items.length >= 2) return { mode: 'multi', count: items.length, reason: 'Plusieurs items détectés.' }
+      return { mode: 'single', count: 1, reason: 'Un seul problème détecté.' }
+    },
+
+    // Heuristic decompose: split on blank lines / bullets, each chunk → one signal.
+    decompose: async ({ raw }) => {
+      const chunks = raw.split(/\n{2,}|(?:^|\n)\s*[-*•]\s+/).map(s => s.trim()).filter(s => wordCount(s) >= 4)
+      const segs: string[] = chunks.length ? chunks : [raw.trim()]
+      return segs.slice(0, 12).map(c => ({ title: makeTitle(c), problem: c, classification: heuristicClassify(c) } as DecomposedSignal))
     },
   }
 }

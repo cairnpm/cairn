@@ -21,9 +21,13 @@ export function uploadsDir(): string {
   return dir
 }
 
-/** Coarse kind from MIME — drives vision (image) vs inline-text (text) at intake, and UI rendering. */
-export function kindFor(mime: string): 'image' | 'text' | 'other' {
+/** Coarse kind from MIME — drives extraction (vision for image, inline for text, parser for
+ *  document) at intake, and UI rendering. */
+export function kindFor(mime: string): 'image' | 'text' | 'document' | 'other' {
   if (mime.startsWith('image/')) return 'image'
+  // .docx/.doc → parsed to text. MUST precede the xml/text check below: the docx mime
+  // (application/vnd.openxmlformats-officedocument.wordprocessingml.document) contains "xml".
+  if (/(wordprocessingml|msword)/.test(mime)) return 'document'
   if (mime.startsWith('text/') || /(json|markdown|csv|xml|yaml)/.test(mime)) return 'text'
   return 'other'
 }
