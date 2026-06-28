@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { Download, ExternalLink } from 'lucide-vue-next'
+import { ExternalLink } from 'lucide-vue-next'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import { timeAgo } from '~/utils/time'
 import type { FeatureDetailData } from '~/types/feature'
 
 const props = defineProps<{ detail: FeatureDetailData }>()
-
-// Attachment preview in a simple modal (instead of opening a new tab).
-type Att = { id: string; filename: string; kind: string }
-const preview = ref<Att | null>(null)
 
 // Manually-assigned team (member-driven, never the intake agent). Local copy synced with the server.
 const { members } = useMembers()
@@ -76,10 +70,7 @@ const PITCH = [
           <div v-if="detail.attachments.length">
             <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Pièces jointes</div>
             <div class="flex flex-wrap gap-2">
-              <button v-for="a in detail.attachments" :key="a.id" type="button" :title="a.filename" class="rounded-md transition-opacity hover:opacity-80" @click="preview = a">
-                <img v-if="a.kind === 'image'" :src="`/api/attachments/${a.id}`" class="size-16 rounded-md border object-cover">
-                <Badge v-else variant="outline" class="gap-1 font-normal">📄 {{ a.filename }}</Badge>
-              </button>
+              <AttachmentPreview v-for="a in detail.attachments" :key="a.id" :attachment="a" size="size-16" />
             </div>
           </div>
           <div v-if="detail.feedback.length">
@@ -94,10 +85,7 @@ const PITCH = [
                 </div>
                 <div class="font-medium">{{ fb.content }}</div>
                 <div v-if="fb.attachments.length" class="mt-2 flex flex-wrap gap-2">
-                  <button v-for="a in fb.attachments" :key="a.id" type="button" :title="a.filename" class="rounded-md transition-opacity hover:opacity-80" @click="preview = a">
-                    <img v-if="a.kind === 'image'" :src="`/api/attachments/${a.id}`" class="size-14 rounded-md border object-cover">
-                    <Badge v-else variant="outline" class="gap-1 font-normal">📄 {{ a.filename }}</Badge>
-                  </button>
+                  <AttachmentPreview v-for="a in fb.attachments" :key="a.id" :attachment="a" />
                 </div>
               </div>
             </div>
@@ -140,21 +128,5 @@ const PITCH = [
         </ScrollArea>
       </aside>
     </div>
-
-    <!-- Attachment preview modal -->
-    <Dialog :open="preview !== null" @update:open="(v) => { if (!v) preview = null }">
-      <DialogContent class="max-w-3xl gap-0 overflow-hidden p-0">
-        <template v-if="preview">
-          <DialogTitle class="border-b px-4 py-3 text-sm font-medium">{{ preview.filename }}</DialogTitle>
-          <img v-if="preview.kind === 'image'" :src="`/api/attachments/${preview.id}`" :alt="preview.filename" class="max-h-[78vh] w-full bg-muted/30 object-contain">
-          <div v-else class="flex flex-col items-center gap-3 p-10 text-center text-sm text-muted-foreground">
-            <span>📄 {{ preview.filename }}</span>
-            <Button as-child variant="outline" size="sm">
-              <a :href="`/api/attachments/${preview.id}`" target="_blank" rel="noopener"><Download class="size-3.5" /> Ouvrir le document</a>
-            </Button>
-          </div>
-        </template>
-      </DialogContent>
-    </Dialog>
   </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { ArrowUp, Paperclip, Sparkles, X } from 'lucide-vue-next'
+import { ArrowDown, ArrowUp, Paperclip, Sparkles, X } from 'lucide-vue-next'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -16,7 +16,7 @@ interface Proposal {
   candidates: Candidate[]
 }
 interface TurnResponse { session_id: string; state: string; agent_message: string; proposal: Proposal | null }
-interface Msg { role: 'user' | 'agent'; text: string }
+interface Msg { role: 'user' | 'agent'; text: string; attachments?: Att[] }
 
 const bike = useBicycle()
 const { author } = bike
@@ -34,36 +34,65 @@ interface Att { id: string; filename: string; kind: string }
 const attachments = ref<Att[]>([])
 const uploading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
-async function onFiles(e: Event) {
-  const files = (e.target as HTMLInputElement).files
-  if (!files?.length) return
+async function uploadFiles(files: File[]) {
+  if (!files.length) return
   uploading.value = true
   try {
     const fd = new FormData()
-    for (const f of Array.from(files)) fd.append('files', f)
+    for (const f of files) fd.append('files', f)
     const r = await $fetch<{ attachments: Att[] }>('/api/uploads', { method: 'POST', body: fd })
     attachments.value.push(...r.attachments)
-  } finally { uploading.value = false; if (fileInput.value) fileInput.value.value = '' }
+  } finally { uploading.value = false }
+}
+async function onFiles(e: Event) {
+  const input = e.target as HTMLInputElement
+  await uploadFiles(Array.from(input.files ?? []))
+  if (input) input.value = ''
 }
 function removeAttachment(id: string) { attachments.value = attachments.value.filter(a => a.id !== id) }
 
-function scrollDown() {
-  requestAnimationFrame(() => requestAnimationFrame(() => { if (chatEl.value) chatEl.value.scrollTop = chatEl.value.scrollHeight }))
+// Drag & drop attachments onto the composer — available in the empty state AND mid-intake.
+const dragOver = ref(false)
+function onDrop(e: DragEvent) {
+  dragOver.value = false
+  uploadFiles(Array.from(e.dataTransfer?.files ?? []))
 }
-watch([() => messages.value.length, proposal, committed], async () => { await nextTick(); scrollDown() })
+function onDragLeave(e: DragEvent) {
+  if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) dragOver.value = false
+}
+
+// ── Stick-to-bottom chat scroll ──────────────────────────────────────────────────────────────
+// Auto-scroll to the newest message, but ONLY while the user is already at the bottom — never yank
+// them down while they've scrolled up to read. A floating button jumps back down on demand.
+const atBottom = ref(true)
+function onScroll() {
+  const el = chatEl.value
+  if (el) atBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+}
+function scrollToBottom(behavior: ScrollBehavior = 'auto') {
+  const el = chatEl.value
+  if (el) el.scrollTo({ top: el.scrollHeight, behavior })
+}
+watch([() => messages.value.length, proposal, committed, pending], async () => {
+  const stick = atBottom.value
+  await nextTick()
+  if (stick) scrollToBottom()
+})
 
 async function send() {
   const text = draft.value.trim()
   if (!text || pending.value) return
   pending.value = true
-  messages.value.push({ role: 'user', text })
+  const atts = attachments.value
+  attachments.value = [] // clear the composer immediately; the message keeps its own copy
+  messages.value.push({ role: 'user', text, attachments: atts.length ? atts : undefined })
   draft.value = ''
+  nextTick(() => scrollToBottom('smooth')) // the user's own message always reveals itself
   try {
     const r = await $fetch<TurnResponse>('/api/intake/turn', {
       method: 'POST',
-      body: { session_id: sessionId.value, message: text, captured_by: author.value, attachment_ids: attachments.value.map(a => a.id) },
+      body: { session_id: sessionId.value, message: text, captured_by: author.value, attachment_ids: atts.map(a => a.id) },
     })
-    attachments.value = []
     sessionId.value = r.session_id
     proposal.value = r.proposal
     state.value = r.state
@@ -113,7 +142,7 @@ const QUICK = [
           </div>
         </div>
 
-        <Card class="py-0">
+        <Card class="py-0 transition-colors" :class="dragOver ? 'border-primary ring-2 ring-primary/30' : ''" @dragover.prevent="dragOver = true" @dragleave="onDragLeave" @drop.prevent="onDrop">
           <CardContent class="p-2">
             <Textarea v-model="draft" placeholder="Ex: l'export PDF est très lent pour les rapports >100Mo, 5 plaintes cette semaine…" class="min-h-28 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
             <div v-if="attachments.length" class="flex flex-wrap gap-1.5 px-2 pb-2">
@@ -135,11 +164,17 @@ const QUICK = [
 
     <!-- CHAT -->
     <template v-else>
-      <div ref="chatEl" class="flex-1 min-h-0 overflow-y-auto">
-        <div class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+      <div class="relative min-h-0 flex-1">
+        <div ref="chatEl" class="h-full overflow-y-auto" @scroll="onScroll">
+          <div class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
           <div v-for="(m, i) in messages" :key="i" class="flex gap-2.5" :class="m.role === 'user' ? 'justify-end' : ''">
             <div v-if="m.role === 'agent'" class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"><Sparkles class="size-3.5" /></div>
-            <div class="max-w-[80%] whitespace-pre-wrap rounded-lg px-3.5 py-2.5 text-sm leading-relaxed" :class="m.role === 'agent' ? 'bg-muted' : 'bg-primary text-primary-foreground'">{{ m.text }}</div>
+            <div class="max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm leading-relaxed" :class="m.role === 'agent' ? 'bg-muted' : 'bg-primary text-primary-foreground'">
+              <div v-if="m.attachments?.length" class="mb-2 flex flex-wrap gap-1.5">
+                <AttachmentPreview v-for="a in m.attachments" :key="a.id" :attachment="a" size="size-16" />
+              </div>
+              <span class="whitespace-pre-wrap">{{ m.text }}</span>
+            </div>
           </div>
 
           <div v-if="pending" class="flex gap-2.5">
@@ -193,15 +228,26 @@ const QUICK = [
               <Button variant="outline" size="sm" @click="reset">Nouveau signal</Button>
             </CardContent>
           </Card>
+          </div>
         </div>
+        <Transition enter-active-class="transition duration-150" enter-from-class="translate-y-1 opacity-0" leave-active-class="transition duration-150" leave-to-class="translate-y-1 opacity-0">
+          <Button v-if="!atBottom" size="icon" variant="secondary" class="absolute bottom-3 left-1/2 size-9 -translate-x-1/2 rounded-full border shadow-md" aria-label="Aller en bas" @click="scrollToBottom('smooth')"><ArrowDown class="size-4" /></Button>
+        </Transition>
       </div>
 
-      <div v-if="!committed" class="border-t p-3">
+      <div v-if="!committed" class="shrink-0 border-t p-3">
         <div class="mx-auto max-w-2xl">
-          <Card class="py-0">
-            <CardContent class="flex items-end gap-2 p-2">
-              <Textarea v-model="draft" placeholder="Réponds, précise ou corrige le routing…" rows="1" class="min-h-9 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
-              <Button size="icon" :disabled="pending || !draft.trim()" @click="send"><ArrowUp class="size-4" /></Button>
+          <Card class="py-0 transition-colors" :class="dragOver ? 'border-primary ring-2 ring-primary/30' : ''" @dragover.prevent="dragOver = true" @dragleave="onDragLeave" @drop.prevent="onDrop">
+            <CardContent class="p-2">
+              <div v-if="attachments.length" class="flex flex-wrap gap-1.5 px-1 pb-2">
+                <Badge v-for="a in attachments" :key="a.id" variant="secondary" class="gap-1">{{ a.kind === 'image' ? '🖼️' : '📄' }} {{ a.filename }}<button @click="removeAttachment(a.id)"><X class="size-3" /></button></Badge>
+              </div>
+              <div class="flex items-end gap-1.5">
+                <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log" class="hidden" @change="onFiles">
+                <Button variant="ghost" size="icon" class="size-9 shrink-0 text-muted-foreground" :disabled="uploading" :title="uploading ? 'Envoi…' : 'Joindre un fichier'" @click="fileInput?.click()"><Paperclip class="size-4" /></Button>
+                <Textarea v-model="draft" :placeholder="dragOver ? 'Déposez vos fichiers ici…' : 'Réponds, précise ou corrige le routing…'" rows="1" class="min-h-9 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
+                <Button size="icon" :disabled="pending || !draft.trim()" @click="send"><ArrowUp class="size-4" /></Button>
+              </div>
             </CardContent>
           </Card>
         </div>
