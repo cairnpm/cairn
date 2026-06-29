@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 definePageMeta({ layout: false })
+useSeoMeta({ title: 'Rejoindre Cairn' })
 
 const route = useRoute()
 const token = route.params.token as string
@@ -40,7 +41,7 @@ async function submit() {
       <!-- Brand -->
       <a href="/login" class="flex flex-col items-center gap-3 self-center font-medium">
         <CairnMark inverted class="h-14 w-auto" />
-        Cairn · Product OS
+        Cairn
       </a>
 
       <Card>

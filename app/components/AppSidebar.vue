@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ChevronsUpDown, Inbox, Languages, ListTodo, LogOut, Mountain, Settings2, Sparkles, Target } from 'lucide-vue-next'
+import { ChevronsUpDown, Inbox, Languages, ListTodo, LogOut, Mountain, Settings2, Target } from 'lucide-vue-next'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarHeader, SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarRail,
@@ -35,11 +35,10 @@ const items = computed(() => [
             <NuxtLink to="/">
               <div class="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg">
                 <img v-if="ov?.workspace_logo" :src="`/api/attachments/${ov.workspace_logo}`" class="size-full object-cover" alt="">
-                <Sparkles v-else class="size-4" />
+                <CairnMark v-else class="h-5 w-auto" />
               </div>
               <div class="grid flex-1 text-left text-sm leading-tight">
                 <span class="truncate font-semibold">{{ ov?.workspace_name || 'Cairn' }}</span>
-                <span class="truncate text-xs text-muted-foreground">Product OS</span>
               </div>
             </NuxtLink>
           </SidebarMenuButton>

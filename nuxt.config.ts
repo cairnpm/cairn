@@ -25,8 +25,7 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'Cairn — Product OS',
-      htmlAttrs: { class: 'dark' },
+      htmlAttrs: { class: 'dark', lang: 'fr' },
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },

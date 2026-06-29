@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>The PM agent that turns scattered feedback into a clear roadmap.</strong><br/>
-  An open, self-hosted Product OS built on Shape Up — not another feature factory.
+  Open, self-hosted, and built on Shape Up — not another feature factory.
 </p>
 
 <p align="center">

@@ -14,6 +14,12 @@ const bike = useCairn()
 const { data: detail, error } = await useApiData<FeatureDetailData>(qk.featureDetail, () => `/api/features/${route.params.id}`)
 const { mutate } = useApiMutation()
 
+// Deep links share the feature's own title + problem.
+useSeoMeta({
+  title: () => detail.value?.feature.title || 'Feature',
+  description: () => detail.value?.feature.problem?.slice(0, 160) || 'Une feature shapée dans Cairn.',
+})
+
 // Feed the breadcrumb (Workspace › Backlog › <feature title>).
 watchEffect(() => { if (detail.value) bike.setCrumb(detail.value.feature.title) })
 onUnmounted(() => bike.setCrumb(''))

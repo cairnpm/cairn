@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 definePageMeta({ layout: false })
+useSeoMeta({ title: 'Connexion' })
 
 const { t } = useUiLang()
 const { fetch: refreshSession, loggedIn } = useUserSession()
@@ -38,7 +39,7 @@ async function submit() {
       <!-- Brand -->
       <a href="/login" class="flex flex-col items-center gap-3 self-center font-medium">
         <CairnMark inverted class="h-14 w-auto" />
-        Cairn · Product OS
+        Cairn
       </a>
 
       <Card>
