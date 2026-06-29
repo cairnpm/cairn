@@ -191,7 +191,7 @@ const open = computed({
 
     <!-- Table -->
     <div class="flex-1 overflow-auto rounded-lg border">
-      <Table>
+      <Table class="table-fixed">
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
             <TableHead class="w-10">
@@ -229,10 +229,10 @@ const open = computed({
             </TableCell>
             <TableCell>
               <div class="flex items-center gap-2 font-medium">
-                {{ row.original.title }}
-                <Badge v-if="row.original.stale" variant="outline" class="text-destructive border-destructive/30">stale</Badge>
+                <span class="truncate">{{ row.original.title }}</span>
+                <Badge v-if="row.original.stale" variant="outline" class="shrink-0 text-destructive border-destructive/30">stale</Badge>
               </div>
-              <div class="text-xs text-muted-foreground truncate max-w-md">{{ row.original.problem }}</div>
+              <div class="truncate text-xs text-muted-foreground">{{ row.original.problem }}</div>
             </TableCell>
             <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
             <TableCell v-if="vis('signal_count')" class="text-right tabular-nums">{{ row.original.signal_count }}</TableCell>

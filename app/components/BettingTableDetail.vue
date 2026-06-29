@@ -39,13 +39,13 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
     </header>
 
     <!-- Two columns -->
-    <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_340px]">
+    <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_340px]">
       <!-- Left: candidates -->
       <ScrollArea class="min-h-0">
         <div class="p-6">
           <div class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Candidats ({{ data.candidates.length }})</div>
           <div class="rounded-lg border">
-            <Table>
+            <Table class="table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead>Candidat</TableHead>
@@ -58,10 +58,10 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
                 <TableRow v-for="c in data.candidates" :key="c.id" class="cursor-pointer transition-colors hover:bg-muted/60" @click="emit('select-feature', c.feature_id)">
                   <TableCell>
                     <div class="flex items-center gap-2 font-medium">
-                      {{ c.title_snap }}
-                      <Badge v-if="c.selected" class="text-[10px]">parié</Badge>
+                      <span class="truncate">{{ c.title_snap }}</span>
+                      <Badge v-if="c.selected" class="shrink-0 text-[10px]">parié</Badge>
                     </div>
-                    <div v-if="!compact" class="text-xs text-muted-foreground truncate max-w-md">{{ c.problem_snap }}</div>
+                    <div v-if="!compact" class="truncate text-xs text-muted-foreground">{{ c.problem_snap }}</div>
                   </TableCell>
                   <TableCell>
                     <div v-if="c.voters.length" class="flex items-center">

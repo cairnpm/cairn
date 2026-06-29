@@ -54,7 +54,7 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
         </div>
         <div class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Features pariées ({{ total }})</div>
         <div class="rounded-lg border">
-          <Table>
+          <Table class="table-fixed">
             <TableHeader>
               <TableRow>
                 <TableHead>Feature</TableHead>
@@ -66,7 +66,7 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
             </TableHeader>
             <TableBody>
               <TableRow v-for="f in data.features" :key="f.id" class="cursor-pointer transition-colors hover:bg-muted/60" @click="emit('select-feature', f.id)">
-                <TableCell class="font-medium">{{ f.title }}</TableCell>
+                <TableCell class="font-medium"><div class="truncate">{{ f.title }}</div></TableCell>
                 <TableCell><StatusBadge :status="f.status" /></TableCell>
                 <TableCell>
                   <div v-if="f.builders?.length" class="flex items-center">
@@ -74,7 +74,7 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
                   </div>
                   <span v-else class="text-xs text-muted-foreground">—</span>
                 </TableCell>
-                <TableCell class="text-muted-foreground text-xs">{{ f.decision?.rationale || '—' }}</TableCell>
+                <TableCell class="text-muted-foreground text-xs"><div class="truncate">{{ f.decision?.rationale || '—' }}</div></TableCell>
                 <TableCell @click.stop>
                   <div v-if="f.decision" class="flex items-center gap-1.5 text-xs"><UserAvatar :name="f.decision.decided_by" class="size-5" />{{ f.decision.decided_by }}</div>
                 </TableCell>

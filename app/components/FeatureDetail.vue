@@ -60,7 +60,7 @@ const PITCH = [
     </header>
 
     <!-- Two columns -->
-    <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[1fr_360px]">
+    <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_360px]">
       <ScrollArea class="min-h-0">
         <div class="flex flex-col gap-6 p-6 text-sm">
           <!-- Équipe: shapers affinent le pitch (pré-bet), builders construisent (post-bet) -->
