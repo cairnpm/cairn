@@ -39,6 +39,7 @@ const items = computed(() => [
               </div>
               <div class="grid flex-1 text-left text-sm leading-tight">
                 <span class="truncate font-semibold">{{ ov?.workspace_name || 'Cairn' }}</span>
+                <span class="truncate text-xs text-muted-foreground">Piloté par Cairn</span>
               </div>
             </NuxtLink>
           </SidebarMenuButton>

@@ -5,8 +5,9 @@
 <h1 align="center">Cairn</h1>
 
 <p align="center">
-  <strong>The PM agent that turns scattered feedback into a clear roadmap.</strong><br/>
-  Open, self-hosted, and built on Shape Up — not another feature factory.
+  <strong>The hard part of building software moved from <em>how</em> to <em>what</em>.</strong><br/>
+  Cairn is the PM agent that turns a dense, scattered stream of feedback into a
+  roadmap you can actually reason about — open, self-hosted, built on Shape Up.
 </p>
 
 <p align="center">
@@ -31,10 +32,11 @@
 
 ## Why Cairn?
 
-Most product tools are databases with a form on top. You pour in tickets; they
-pile up. Cairn takes the opposite stance — **an agent does the messy part** (read,
-deduplicate, shape, route) so the backlog stays small and every item is a real,
-bounded problem.
+AI made shipping cheap: *how* to build something is no longer the bottleneck. The
+scarce skill now is deciding **what** to build — and in what order — in a roadmap
+that fills up faster than anyone can read it. Cairn is built for that exact moment:
+**an agent does the sorting** (read, deduplicate, shape, route) so your judgment
+goes to the decision, not the pile.
 
 - **🪨 An agent, not a form.** Paste a Slack thread, a bug report, or a whole
   meeting transcript. The intake agent extracts the distinct signals, recontextualizes
