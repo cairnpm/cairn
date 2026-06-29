@@ -1,0 +1,15 @@
+# Self-host Cairn in one command:  docker compose up -d
+# Pulls the published image; to build from source instead, comment `image` and uncomment `build`.
+services:
+  cairn:
+    image: ghcr.io/jrpersico/cairn:latest
+    # build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file: .env
+    volumes:
+      - cairn_data:/data
+
+volumes:
+  cairn_data:

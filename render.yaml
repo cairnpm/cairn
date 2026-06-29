@@ -1,0 +1,19 @@
+# One-click deploy on Render (reads this blueprint). SQLite lives on a persistent disk.
+services:
+  - type: web
+    name: cairn
+    runtime: docker
+    region: frankfurt
+    plan: starter
+    healthCheckPath: /login
+    envVars:
+      - key: NUXT_SESSION_PASSWORD
+        generateValue: true
+      - key: NUXT_DB_URL
+        value: file:/data/app.db
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    disk:
+      name: cairn-data
+      mountPath: /data
+      sizeGB: 1

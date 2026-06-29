@@ -65,18 +65,25 @@ bounded problem.
 
 ## Get started (self-host)
 
-Cairn ships as a single container. Bring an Anthropic API key (or add it later in
-the UI) and a place to keep `/data`.
+Cairn is a **single container** backed by an embedded SQLite file — no external
+database. Bring an Anthropic API key (or add it later in the UI) and a place to
+keep `/data`. Pick whichever fits:
+
+**One-click on Render:**
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jrpersico/cairn)
+
+**Docker Compose** (recommended for your own server):
 
 ```bash
-docker build -t cairn .
-docker run -d -p 3000:3000 -v cairn_data:/data \
-  -e NUXT_SESSION_PASSWORD="$(openssl rand -base64 32)" \
-  -e ANTHROPIC_API_KEY="sk-ant-…" \
-  cairn
+git clone https://github.com/jrpersico/cairn && cd cairn
+cp .env.example .env        # set NUXT_SESSION_PASSWORD (and your Anthropic key)
+docker compose up -d        # → http://localhost:3000
 ```
 
-Full instructions (Docker, Fly.io, backups, env vars) → **[DEPLOY.md](./DEPLOY.md)**.
+Also supported — **Fly.io**, plain **Docker**, backups and env vars: see
+**[DEPLOY.md](./DEPLOY.md)**. Prebuilt images are published to
+`ghcr.io/jrpersico/cairn`.
 
 First boot seeds a demo team — `ceo@cairn.local` / `cairn` — change the password
 right away.

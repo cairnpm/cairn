@@ -21,13 +21,37 @@ The default team is seeded on first boot: `ceo@cairn.local` / `cairn`
 
 ---
 
-## Option A — Docker (anywhere)
+## Option A — Docker Compose (recommended)
+
+The repo ships a [`docker-compose.yml`](./docker-compose.yml).
 
 ```bash
-# Build
-docker build -t cairn .
+git clone https://github.com/jrpersico/cairn && cd cairn
+cp .env.example .env          # set NUXT_SESSION_PASSWORD (+ ANTHROPIC_API_KEY)
+docker compose up -d          # → http://localhost:3000
+```
 
-# Run with a persistent volume for /data
+It pulls the prebuilt image `ghcr.io/jrpersico/cairn:latest` (published by CI). To
+build from source instead, uncomment `build: .` in the compose file. Put it behind
+a reverse proxy (Caddy, nginx, Traefik) for TLS.
+
+---
+
+## Option B — One-click on Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jrpersico/cairn)
+
+Render reads [`render.yaml`](./render.yaml): a Docker web service with a 1 GB
+persistent disk at `/data` and an auto-generated session secret. Add your
+`ANTHROPIC_API_KEY` in the dashboard (or later in Settings). Persistent disks
+require a paid Render instance.
+
+---
+
+## Option C — Docker (manual build & run)
+
+```bash
+docker build -t cairn .
 docker run -d --name cairn \
   -p 3000:3000 \
   -v cairn_data:/data \
@@ -36,12 +60,9 @@ docker run -d --name cairn \
   cairn
 ```
 
-Cairn is now on `http://localhost:3000`. Put it behind a reverse proxy
-(Caddy, nginx, Traefik) for TLS.
-
 ---
 
-## Option B — Fly.io
+## Option D — Fly.io
 
 A [`fly.toml`](./fly.toml) is included (one machine + a `/data` volume).
 
