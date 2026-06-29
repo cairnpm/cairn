@@ -36,7 +36,9 @@ watch(() => route.path, () => {
                 <BreadcrumbLink v-if="c.to && i < breadcrumb.length - 1" as-child>
                   <NuxtLink :to="c.to">{{ c.label }}</NuxtLink>
                 </BreadcrumbLink>
-                <BreadcrumbPage v-else>{{ c.label }}</BreadcrumbPage>
+                <!-- Detail pages set this crumb from child data after the layout has rendered, so the
+                     SSR fallback ("Feature") and the client's resolved title legitimately differ. -->
+                <BreadcrumbPage v-else><span data-allow-mismatch>{{ c.label }}</span></BreadcrumbPage>
               </BreadcrumbItem>
             </template>
           </BreadcrumbList>

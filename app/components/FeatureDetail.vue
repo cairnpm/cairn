@@ -4,7 +4,6 @@ import { ExternalLink } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { timeAgo } from '~/utils/time'
 import type { FeatureDetailData } from '~/types/feature'
 
 const props = defineProps<{ detail: FeatureDetailData }>()
@@ -82,7 +81,7 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
                   <UserAvatar :name="fb.captured_by" class="size-5" />
                   <span class="font-medium text-foreground">{{ fb.captured_by || t('feature.unknown') }}</span>
                   <Badge variant="outline" class="font-normal capitalize">{{ fb.classification }}</Badge>
-                  <span class="ml-auto">{{ timeAgo(fb.created_at) }}</span>
+                  <TimeAgo :date="fb.created_at" class="ml-auto" />
                 </div>
                 <div class="font-medium">{{ fb.content }}</div>
                 <div v-if="fb.attachments.length" class="mt-2 flex flex-wrap gap-2">
@@ -94,7 +93,7 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
           <div v-if="detail.decisions.length">
             <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.decisions') }}</div>
             <div v-for="d in detail.decisions" :key="d.id" class="mb-2 rounded-md border bg-muted/40 p-3">
-              <div class="mb-1 flex items-center gap-2"><Badge variant="secondary" class="capitalize">{{ d.verdict }}</Badge><span class="text-xs text-muted-foreground">{{ timeAgo(d.decided_at) }}</span></div>
+              <div class="mb-1 flex items-center gap-2"><Badge variant="secondary" class="capitalize">{{ d.verdict }}</Badge><TimeAgo :date="d.decided_at" class="text-xs text-muted-foreground" /></div>
               <p>{{ d.rationale }}</p>
               <div class="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground"><UserAvatar :name="d.decided_by" class="size-4" />{{ d.decided_by }}</div>
             </div>
@@ -120,7 +119,7 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
                 </div>
                 <div class="min-w-0 pb-1 text-sm">
                   <div class="leading-snug">{{ e.summary }}</div>
-                  <div class="mt-0.5 text-xs text-muted-foreground">{{ timeAgo(e.created_at) }}</div>
+                  <TimeAgo :date="e.created_at" class="mt-0.5 block text-xs text-muted-foreground" />
                 </div>
               </div>
               <div v-if="!events.length" class="text-sm text-muted-foreground">{{ t('feature.noActivity') }}</div>

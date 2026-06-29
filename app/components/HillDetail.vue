@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatDate } from '~/utils/time'
 import type { HillDetailData } from '~/types/hill'
 
-const { t } = useUiLang()
+const { t, locale } = useUiLang()
 const props = defineProps<{ data: HillDetailData; compact?: boolean }>()
 const emit = defineEmits<{ 'select-feature': [featureId: string] }>()
 
@@ -36,7 +36,7 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
           </div>
         </MetaField>
         <MetaField :label="t('hill.features')"><span class="tabular-nums">{{ total }}</span></MetaField>
-        <MetaField :label="t('hill.period')"><span class="text-muted-foreground">{{ formatDate(data.hill.starts_at) }} → {{ formatDate(data.hill.ends_at) }}</span></MetaField>
+        <MetaField :label="t('hill.period')"><span class="text-muted-foreground">{{ formatDate(data.hill.starts_at, locale) }} → {{ formatDate(data.hill.ends_at, locale) }}</span></MetaField>
         <MetaField v-if="data.betting_table" :label="t('hill.source')">
           <NuxtLink :to="`/betting/${data.betting_table.id}`" class="inline-flex items-center gap-1 hover:underline">
             {{ data.betting_table.title }}

@@ -3,7 +3,6 @@ import { ExternalLink } from 'lucide-vue-next'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { timeAgo } from '~/utils/time'
 import type { BettingTableDetailData } from '~/types/betting'
 
 const { t } = useUiLang()
@@ -95,7 +94,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
                 </div>
                 <div class="min-w-0 pb-1 text-sm">
                   <div class="leading-snug">{{ e.summary }}</div>
-                  <div class="mt-0.5 text-xs text-muted-foreground">{{ timeAgo(e.created_at) }}</div>
+                  <TimeAgo :date="e.created_at" class="mt-0.5 block text-xs text-muted-foreground" />
                 </div>
               </div>
               <div v-if="!data.events.length" class="text-sm text-muted-foreground">{{ t('betting.noActivity') }}</div>

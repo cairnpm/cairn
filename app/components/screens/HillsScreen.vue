@@ -21,7 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatDate } from '~/utils/time'
 import type { HillDetailData } from '~/types/hill'
 
-const { t } = useUiLang()
+const { t, locale } = useUiLang()
 
 interface HillRow { id: string; name: string; starts_at: string | null; ends_at: string | null; status: string; total: number; done: number }
 
@@ -174,7 +174,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
                 <span class="text-xs text-muted-foreground tabular-nums">{{ row.original.done }}/{{ row.original.total }}</span>
               </div>
             </TableCell>
-            <TableCell v-if="vis('period')" class="text-xs text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.starts_at) }} → {{ formatDate(row.original.ends_at) }}</TableCell>
+            <TableCell v-if="vis('period')" class="text-xs text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.starts_at, locale) }} → {{ formatDate(row.original.ends_at, locale) }}</TableCell>
           </TableRow>
           <TableRow v-if="!table.getRowModel().rows.length">
             <TableCell :colspan="5" class="h-24 text-center text-muted-foreground">{{ t('hill.emptyList') }}</TableCell>

@@ -34,7 +34,7 @@ interface Feature {
   shapers: { user_id: string; name: string; avatar_url: string | null }[]
 }
 
-const { t } = useUiLang()
+const { t, locale } = useUiLang()
 const bike = useCairn()
 const { statusFilter, selectedFeatureId } = bike
 const { data: features } = await useApiData<Feature[]>(qk.features, '/api/features', { default: () => [] })
@@ -250,7 +250,7 @@ const open = computed({
               </NuxtLink>
               <span v-else class="text-muted-foreground">—</span>
             </TableCell>
-            <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.updated_at) }}</TableCell>
+            <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.updated_at, locale) }}</TableCell>
             <TableCell v-if="vis('actor')">
               <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.last_actor" /><span class="truncate text-muted-foreground">{{ row.original.last_actor || '—' }}</span></div>
             </TableCell>
