@@ -2,14 +2,13 @@
 import { computed, ref } from 'vue'
 import { Check } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
-import type { BettingCandidate, BettingTableDetailData } from '~/types/betting'
+import type { BettingTableDetailData } from '~/types/betting'
 
 const { t } = useUiLang()
 const bike = useCairn()
 const { author, role, selectedBettingTable } = bike
 const id = selectedBettingTable
 const { data, error } = await useApiData<BettingTableDetailData>(qk.bettingTableDetail, () => `/api/betting-tables/${id.value}`)
-const { mutate } = useApiMutation()
 function onValidated() { return invalidate(qk.bettingTableDetail, qk.bettingTables, qk.hills, qk.features, qk.overview) }
 
 const { isDeleted, confirmOpen, deleting, restoring, confirmDelete, restore } = useDetailCrud({
@@ -22,21 +21,17 @@ const { isDeleted, confirmOpen, deleting, restoring, confirmDelete, restore } = 
   toasts: { deleted: () => t('betting.toast.deleted'), restored: () => t('betting.toast.restored') },
 })
 
-const busy = ref(false)
-async function toggleVote(candidateId: string) {
-  if (busy.value || data.value?.table.status !== 'open') return
-  busy.value = true
-  try {
-    const cand = data.value?.candidates.find(c => c.id === candidateId)
-    const success = cand && iVoted(cand) ? t('betting.toast.voteRemoved') : t('betting.toast.voteAdded')
-    await mutate(`/api/betting-tables/${id.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTableDetail, qk.bettingTables], success })
-  } finally { busy.value = false }
-}
+const { iVoted, toggleVote, voting } = useTableVote({
+  tableId: computed(() => id.value),
+  candidates: computed(() => data.value?.candidates),
+  status: computed(() => data.value?.table.status),
+  author,
+  invalidates: [qk.bettingTableDetail, qk.bettingTables],
+})
 
 const showValidate = ref(false)
 const featPeek = ref<string | null>(null)
 const isOpen = computed(() => data.value?.table.status === 'open')
-const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
 </script>
 
 <template>
@@ -51,7 +46,7 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
         />
       </template>
       <template #candidate-action="{ candidate }">
-        <Button v-if="isOpen" :variant="iVoted(candidate) ? 'default' : 'outline'" size="sm" :disabled="busy" @click="toggleVote(candidate.id)">
+        <Button v-if="isOpen" :variant="iVoted(candidate) ? 'default' : 'outline'" size="sm" :disabled="voting" @click="toggleVote(candidate.id)">
           <Check class="size-3.5" /> {{ iVoted(candidate) ? t('betting.voted') : t('betting.vote') }}
         </Button>
       </template>

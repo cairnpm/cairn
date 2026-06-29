@@ -63,18 +63,14 @@ const sheetOpen = computed({
 })
 
 // Vote from the Sheet (same as the dedicated page).
-const voting = ref(false)
-const iVoted = (c: { voters: string[] }) => c.voters.includes(author.value)
-async function vote(candidateId: string) {
-  if (voting.value || detail.value?.table.status !== 'open') return
-  voting.value = true
-  try {
-    const cand = detail.value?.candidates.find(c => c.id === candidateId)
-    const success = cand && iVoted(cand) ? t('betting.toast.voteRemoved') : t('betting.toast.voteAdded')
-    await mutate(`/api/betting-tables/${selectedId.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTables], success })
-    await loadDetail()
-  } finally { voting.value = false }
-}
+const { iVoted, toggleVote: vote, voting } = useTableVote({
+  tableId: selectedId,
+  candidates: computed(() => detail.value?.candidates),
+  status: computed(() => detail.value?.table.status),
+  author,
+  invalidates: [qk.bettingTables],
+  onVoted: loadDetail,
+})
 
 // Validate from the Sheet (owner). Mirrors the dedicated page.
 const validateOpen = ref(false)
