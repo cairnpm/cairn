@@ -31,7 +31,7 @@ const FEATURES: SeedFeature[] = [
       { content: 'Besoin de notifications Slack quand un ticket change de statut', source: 'manual', classification: 'explore' },
     ],
     decision: { verdict: 'bet', rationale: 'Réduit les réunions de statut. ROI immédiat sur le daily. Estimé 3 jours.', by: 'CEO' },
-    pr: { repo: 'bicycle/app', number: 342, status: 'open' },
+    pr: { repo: 'cairn/app', number: 342, status: 'open' },
   },
   {
     id: 'feat-export-batch', title: 'Export en batch CSV/PDF', appetite: 'small', status: 'bet', hill: 'hill-12', signal: 5,
@@ -44,7 +44,7 @@ const FEATURES: SeedFeature[] = [
       { content: 'L\'export PDF un par un est trop lent pour nos gros comptes', source: 'email', classification: 'explore' },
     ],
     decision: { verdict: 'bet', rationale: 'Demandé par 5 clients ce mois. ROI direct et immédiat.', by: 'CEO' },
-    pr: { repo: 'bicycle/app', number: 328, status: 'open' },
+    pr: { repo: 'cairn/app', number: 328, status: 'open' },
   },
   {
     id: 'feat-analytics', title: 'Analytics dashboard', appetite: 'small', status: 'bet', hill: 'hill-12', signal: 2,
@@ -81,7 +81,7 @@ const FEATURES: SeedFeature[] = [
     out_of_bounds: 'Pas de refonte du format du PDF — uniquement la performance.',
     feedback: [{ content: 'L\'export PDF est beaucoup trop lent, ~30 secondes', source: 'email', classification: 'directive' }],
     decision: { verdict: 'bet', rationale: 'Top plainte utilisateurs depuis 3 semaines. Impact NPS direct.', by: 'CEO' },
-    pr: { repo: 'bicycle/app', number: 335, status: 'merged' },
+    pr: { repo: 'cairn/app', number: 335, status: 'merged' },
   },
 ]
 

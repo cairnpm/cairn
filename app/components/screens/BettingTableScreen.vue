@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import type { BettingCandidate, BettingTableDetailData } from '~/types/betting'
 
-const bike = useBicycle()
+const bike = useCairn()
 const { author, role, selectedBettingTable } = bike
 const id = selectedBettingTable
 const { data } = await useApiData<BettingTableDetailData>(qk.bettingTableDetail, () => `/api/betting-tables/${id.value}`)

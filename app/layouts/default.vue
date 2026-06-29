@@ -7,7 +7,7 @@ import {
 } from '@/components/ui/breadcrumb'
 
 const route = useRoute()
-const bike = useBicycle()
+const bike = useCairn()
 const { breadcrumb } = bike
 
 watch(() => route.path, () => {

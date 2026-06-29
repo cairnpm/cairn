@@ -34,7 +34,7 @@ interface Feature {
   shapers: { user_id: string; name: string; avatar_url: string | null }[]
 }
 
-const bike = useBicycle()
+const bike = useCairn()
 const { statusFilter, selectedFeatureId } = bike
 const { data: features } = await useApiData<Feature[]>(qk.features, '/api/features', { default: () => [] })
 const { mutate } = useApiMutation()

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import { ArrowDown, ArrowUp, Layers, Paperclip, Sparkles, X } from 'lucide-vue-next'
+import { ArrowDown, ArrowUp, Layers, Paperclip, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -20,7 +20,7 @@ interface BatchSegment { id: string; signal: { title: string; problem: string; c
 interface TurnResponse { session_id: string; state: string; agent_message: string; proposal: Proposal | null; batch?: { session_id: string; segments: BatchSegment[] } }
 interface Msg { role: 'user' | 'agent'; text: string; attachments?: Att[] }
 
-const bike = useBicycle()
+const bike = useCairn()
 const { author } = bike
 
 const sessionId = ref<string | null>(null)
@@ -162,7 +162,7 @@ const QUICK = [
   <div class="flex h-full flex-col">
     <!-- BATCH RECAP (after committing a decomposition) -->
     <div v-if="batchRecap" class="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-      <div class="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Sparkles class="size-5" /></div>
+      <CairnMark inverted class="h-14 w-auto" />
       <div>
         <h1 class="text-xl font-semibold tracking-tight">Décomposition appliquée</h1>
         <p class="mt-1 text-sm text-muted-foreground">{{ batchRecap.created }} feature(s) créée(s) · {{ batchRecap.updated }} mise(s) à jour<template v-if="batchRecap.discarded"> · {{ batchRecap.discarded }} écartée(s)</template></p>
@@ -177,7 +177,7 @@ const QUICK = [
     <div v-else-if="messages.length === 0" class="flex flex-1 items-center justify-center overflow-auto p-6">
       <div class="w-full max-w-2xl">
         <div class="mb-6 flex flex-col items-center gap-3 text-center">
-          <div class="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Sparkles class="size-5" /></div>
+          <CairnMark inverted class="h-14 w-auto" />
           <div>
             <h1 class="text-xl font-semibold tracking-tight">Comment puis-je vous aider ?</h1>
             <p class="mt-1 text-sm text-muted-foreground">Décrivez un signal, posez une question, ou affinez un ticket. L'écriture n'a lieu qu'à la confirmation.</p>
@@ -210,7 +210,7 @@ const QUICK = [
         <div ref="chatEl" class="h-full overflow-y-auto" @scroll="onScroll">
           <div class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
           <div v-for="(m, i) in messages" :key="i" class="flex gap-2.5" :class="m.role === 'user' ? 'justify-end' : ''">
-            <div v-if="m.role === 'agent'" class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"><Sparkles class="size-3.5" /></div>
+            <CairnMark v-if="m.role === 'agent'" inverted class="mt-0.5 h-6 w-auto shrink-0" />
             <div class="max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm leading-relaxed" :class="m.role === 'agent' ? 'bg-muted' : 'bg-primary text-primary-foreground'">
               <div v-if="m.attachments?.length" class="mb-2 flex flex-wrap gap-1.5">
                 <AttachmentPreview v-for="a in m.attachments" :key="a.id" :attachment="a" size="size-16" />
@@ -220,7 +220,7 @@ const QUICK = [
           </div>
 
           <div v-if="pending" class="flex gap-2.5">
-            <div class="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground"><Sparkles class="size-3.5" /></div>
+            <CairnMark inverted class="mt-0.5 h-6 w-auto shrink-0" />
             <div class="flex items-center gap-1 rounded-lg bg-muted px-3.5 py-3"><span class="bk-dot" /><span class="bk-dot" /><span class="bk-dot" /></div>
           </div>
 

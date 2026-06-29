@@ -25,7 +25,7 @@ export function actorInitial(name: string | null | undefined): string {
   return (name || '?').trim()[0]?.toUpperCase() || '?'
 }
 
-export function useBicycle() {
+export function useCairn() {
   const route = useRoute()
 
   // Current user (collaborative attribution) — derived from the authenticated session.

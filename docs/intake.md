@@ -7,7 +7,7 @@
 
 ## 1. Philosophie — Shape Up, bottom-up
 
-Bicycle est un **Product OS bottom-up** : on ne remplit pas un backlog à la main, on
+Cairn est un **Product OS bottom-up** : on ne remplit pas un backlog à la main, on
 laisse **les signaux remonter** et se condenser en features _shapées_, puis _bettables_,
 puis regroupées dans des **Hills** (cycles). Inspiration directe de **Shape Up** :
 

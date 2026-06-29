@@ -12,7 +12,7 @@ import {
 
 interface Overview { features_total: number; hills_active: number; betting_total: number; workspace_name: string; workspace_logo: string | null }
 
-const bike = useBicycle()
+const bike = useCairn()
 const { screen, author, role } = bike
 const { user } = useUserSession()
 const { t, locale, setLocale } = useUiLang()
@@ -38,7 +38,7 @@ const items = computed(() => [
                 <Sparkles v-else class="size-4" />
               </div>
               <div class="grid flex-1 text-left text-sm leading-tight">
-                <span class="truncate font-semibold">{{ ov?.workspace_name || 'Bicycle' }}</span>
+                <span class="truncate font-semibold">{{ ov?.workspace_name || 'Cairn' }}</span>
                 <span class="truncate text-xs text-muted-foreground">Product OS</span>
               </div>
             </NuxtLink>

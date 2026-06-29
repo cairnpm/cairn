@@ -26,7 +26,7 @@ export default defineEventHandler(() => {
     by_status: { shaped: counts?.shaped ?? 0, bet: counts?.bet ?? 0, building: counts?.building ?? 0, done: counts?.done ?? 0 },
     hills_active: hillsActive,
     betting_total: bettingTotal,
-    workspace_name: getSetting('workspace_name') ?? 'Bicycle',
+    workspace_name: getSetting('workspace_name') ?? 'Cairn',
     workspace_logo: getSetting('workspace_logo') ?? null,
     model: getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
     activity,

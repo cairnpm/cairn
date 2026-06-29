@@ -10,7 +10,7 @@ import {
 import type { FeatureDetailData } from '~/types/feature'
 
 const route = useRoute()
-const bike = useBicycle()
+const bike = useCairn()
 const { data: detail, error } = await useApiData<FeatureDetailData>(qk.featureDetail, () => `/api/features/${route.params.id}`)
 const { mutate } = useApiMutation()
 

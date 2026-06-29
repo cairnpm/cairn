@@ -3,7 +3,7 @@
  * rabbit holes are grounded in this product's reality (brief: agent §3.4). Keep it terse —
  * NOT the whole repo. Fine code exploration happens in Claude Code at build time, not here.
  */
-export const ARCHITECTURE_CONTEXT = `Produit : « Bicycle — Product OS », un pipeline produit Shape Up contraint.
+export const ARCHITECTURE_CONTEXT = `Produit : « Cairn — Product OS », un pipeline produit Shape Up contraint.
 Stack : Nuxt 4 + Nitro (server routes = la write gateway, seul chemin d'écriture), node:sqlite
 (SQLite fichier, 1 machine), shadcn-vue (UI lecture seule + actions). Embeddings stockés en JSON,
 dédup par cosine brute-force JS.

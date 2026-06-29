@@ -1,4 +1,4 @@
-# Bicycle — Product OS
+# Cairn — Product OS
 
 A constrained Shape Up product pipeline. This repo currently holds the **UI shell** —
 the read-only views and the conversational intake surface — mirroring the
@@ -53,7 +53,7 @@ app/
   layouts/default.vue           # sidebar + header shell
   assets/css/tailwind.css       # Tailwind v4 + shadcn neutral theme
   lib/utils.ts                  # cn() helper
-  composables/useBicycle.ts     # in-memory state + derived data (no DB yet)
+  composables/useCairn.ts     # in-memory state + derived data (no DB yet)
   components/
     AppSidebar.vue, AppHeader.vue
     screens/                    # IntakeScreen, BacklogScreen, BettingScreen, HillsScreen

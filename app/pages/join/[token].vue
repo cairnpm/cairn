@@ -38,11 +38,9 @@ async function submit() {
   <div class="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
     <div class="flex w-full max-w-sm flex-col gap-6">
       <!-- Brand -->
-      <a href="/login" class="flex items-center gap-2 self-center font-medium">
-        <div class="flex size-7 items-center justify-center rounded-md" style="background: linear-gradient(140deg, #8A7DFF 0%, #5B5BD6 55%, #3F38B5 100%);">
-          <span style="color: #fff; font-size: 14px; font-weight: 800; letter-spacing: -0.5px; font-family: var(--font-mono);">B</span>
-        </div>
-        Bicycle · Product OS
+      <a href="/login" class="flex flex-col items-center gap-3 self-center font-medium">
+        <CairnMark inverted class="h-14 w-auto" />
+        Cairn · Product OS
       </a>
 
       <Card>

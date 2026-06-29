@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 // Hermetic + replayable: the whole suite runs on a throwaway SQLite DB (wiped before and after), so
 // it never touches .data/app.db and gives identical results on every run. NUXT_DB_URL is read lazily
 // by the db client, so setting it here — before any db() call — is enough to redirect everything.
-const TEST_DB = join(tmpdir(), 'bicycle-members-test.db')
+const TEST_DB = join(tmpdir(), 'cairn-members-test.db')
 function wipe() { for (const s of ['', '-wal', '-shm']) { try { rmSync(TEST_DB + s) } catch { /* absent */ } } }
 process.env.NUXT_DB_URL = `file:${TEST_DB}`
 wipe()
@@ -35,28 +35,28 @@ function ok<T extends object>(res: T | { error: string }): T {
   return res
 }
 
-const OWNER = 'ceo@bicycle.local'
+const OWNER = 'ceo@cairn.local'
 
 beforeAll(() => {
   ensureSchema()
-  seedUsersIfEmpty() // CEO (owner) + Alex + Sam, password 'bicycle'
+  seedUsersIfEmpty() // CEO (owner) + Alex + Sam, password 'cairn'
 })
 afterAll(wipe)
 
 describe('membres — login / invitation / logout / join', () => {
   it('parcours complet : login owner → invite → logout → join → login du nouveau membre', () => {
     // 1. LOGIN (owner)
-    expect(login(OWNER, 'bicycle')).toBe(true)
+    expect(login(OWNER, 'cairn')).toBe(true)
     expect(session?.role).toBe('owner')
     expect(login(OWNER, 'mauvais')).toBe(false) // wrong password rejected
 
     // 2. INVITE (owner creates a token link for a new email)
     const owner = findUserByEmail(OWNER)!
-    const inv = ok(createInvitation('newbie@bicycle.local', 'member', owner.id))
+    const inv = ok(createInvitation('newbie@cairn.local', 'member', owner.id))
     expect(inv.token).toBeTruthy()
-    expect(inv.email).toBe('newbie@bicycle.local')
-    expect(getValidInvitation(inv.token)?.email).toBe('newbie@bicycle.local') // link resolves
-    expect(listPendingInvitations().some(i => i.email === 'newbie@bicycle.local')).toBe(true)
+    expect(inv.email).toBe('newbie@cairn.local')
+    expect(getValidInvitation(inv.token)?.email).toBe('newbie@cairn.local') // link resolves
+    expect(listPendingInvitations().some(i => i.email === 'newbie@cairn.local')).toBe(true)
 
     // 3. LOGOUT (owner leaves; the invitee acts on their own)
     logout()
@@ -65,18 +65,18 @@ describe('membres — login / invitation / logout / join', () => {
     // 4. JOIN (invitee opens the link, picks a name + password → account created)
     const usersBefore = listUsers().length
     const joined = ok(acceptInvitation(inv.token, 'Newbie', 'sup3rsecret'))
-    expect(joined.user.email).toBe('newbie@bicycle.local')
+    expect(joined.user.email).toBe('newbie@cairn.local')
     expect(joined.user.role).toBe('member')
     expect(listUsers().length).toBe(usersBefore + 1)
 
     // 5. The new member can now LOGIN with the credentials they set
-    expect(login('newbie@bicycle.local', 'sup3rsecret')).toBe(true)
+    expect(login('newbie@cairn.local', 'sup3rsecret')).toBe(true)
     expect(session?.name).toBe('Newbie')
 
     // 6. The invite is SINGLE-USE — the link no longer works
     expect(getValidInvitation(inv.token)).toBeUndefined()
     expect('error' in acceptInvitation(inv.token, 'Re', 'sup3rsecret')).toBe(true)
-    expect(listPendingInvitations().some(i => i.email === 'newbie@bicycle.local')).toBe(false)
+    expect(listPendingInvitations().some(i => i.email === 'newbie@cairn.local')).toBe(false)
   })
 
   it('invitation : doublon, mot de passe faible et expiration refusés', () => {
@@ -84,7 +84,7 @@ describe('membres — login / invitation / logout / join', () => {
     expect('error' in createInvitation(OWNER, 'member', null)).toBe(true)
 
     // Weak password is rejected and creates no account.
-    const inv = ok(createInvitation('weak@bicycle.local', 'member', null))
+    const inv = ok(createInvitation('weak@cairn.local', 'member', null))
     const before = listUsers().length
     expect('error' in acceptInvitation(inv.token, 'Weak', 'short')).toBe(true)
     expect(listUsers().length).toBe(before)
@@ -96,19 +96,19 @@ describe('membres — login / invitation / logout / join', () => {
     const hash = createHash('sha256').update(token).digest('hex')
     run(
       `INSERT INTO invitations (id, token_hash, email, role, expires_at, created_at)
-       VALUES ('inv-exp', ?, 'late@bicycle.local', 'member', datetime('now', '-1 day'), datetime('now'))`,
+       VALUES ('inv-exp', ?, 'late@cairn.local', 'member', datetime('now', '-1 day'), datetime('now'))`,
       hash,
     )
     expect(getValidInvitation(token)).toBeUndefined()
   })
 
   it('mot de passe : changement vérifié par l\'ancien', () => {
-    const u = findUserByEmail('newbie@bicycle.local')!
+    const u = findUserByEmail('newbie@cairn.local')!
     expect('error' in changePassword(u.id, 'mauvais', 'nouveaupass1')).toBe(true)   // wrong current
     expect('error' in changePassword(u.id, 'sup3rsecret', 'court')).toBe(true)        // too short
     ok(changePassword(u.id, 'sup3rsecret', 'nouveaupass1'))                           // success
-    expect(login('newbie@bicycle.local', 'sup3rsecret')).toBe(false)                 // old no longer works
-    expect(login('newbie@bicycle.local', 'nouveaupass1')).toBe(true)                 // new works
+    expect(login('newbie@cairn.local', 'sup3rsecret')).toBe(false)                 // old no longer works
+    expect(login('newbie@cairn.local', 'nouveaupass1')).toBe(true)                 // new works
   })
 
   it('garde-fous : dernier owner protégé, membre retiré ne peut plus se connecter', () => {
@@ -118,10 +118,10 @@ describe('membres — login / invitation / logout / join', () => {
     expect('error' in setUserDisabled(owner.id, true)).toBe(true)     // can't remove the last owner
 
     // Remove a member (soft-disable) → can't log in, drops off the active list, id/name preserved.
-    const newbie = findUserByEmail('newbie@bicycle.local')!
+    const newbie = findUserByEmail('newbie@cairn.local')!
     ok(setUserDisabled(newbie.id, true))
-    expect(login('newbie@bicycle.local', 'nouveaupass1')).toBe(false)
+    expect(login('newbie@cairn.local', 'nouveaupass1')).toBe(false)
     expect(listUsers().some(m => m.id === newbie.id)).toBe(false)
-    expect(findUserByEmail('newbie@bicycle.local')).toBeTruthy() // row still there for attribution
+    expect(findUserByEmail('newbie@cairn.local')).toBeTruthy() // row still there for attribution
   })
 })

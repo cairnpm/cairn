@@ -239,7 +239,7 @@ async function save() {
           </div>
           <div class="grid gap-2 sm:max-w-sm">
             <Label for="ws">Nom du workspace</Label>
-            <Input id="ws" v-model="workspaceName" placeholder="Bicycle" />
+            <Input id="ws" v-model="workspaceName" placeholder="Cairn" />
           </div>
           <div class="flex items-center justify-end gap-3">
             <span v-if="saved" class="text-sm text-muted-foreground">✓ Enregistré</span>

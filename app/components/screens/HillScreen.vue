@@ -2,7 +2,7 @@
 import { onUnmounted, ref, watchEffect } from 'vue'
 import type { HillDetailData } from '~/types/hill'
 
-const bike = useBicycle()
+const bike = useCairn()
 const { selectedHill } = bike
 const { data, error } = await useApiData<HillDetailData>(qk.hillDetail, () => `/api/hills/${selectedHill.value}`)
 

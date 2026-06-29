@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 // ── Isolated DB ──────────────────────────────────────────────────────────────
 // Fresh SQLite file for the whole run, so tests never touch the dev DB (.data/app.db).
-const dir = mkdtempSync(join(tmpdir(), 'bicycle-intake-'))
+const dir = mkdtempSync(join(tmpdir(), 'cairn-intake-'))
 process.env.NUXT_DB_URL = `file:${join(dir, 'app.db')}`
 
 // The gateway calls `createError` (a Nitro auto-import) only on error paths. We invoke the gateway

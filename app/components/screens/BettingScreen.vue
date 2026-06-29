@@ -33,7 +33,7 @@ interface TableRowT {
   candidate_count: number; voter_count: number; vote_count: number
 }
 
-const bike = useBicycle()
+const bike = useCairn()
 const { role } = bike
 const { data: tables } = await useApiData<TableRowT[]>(qk.bettingTables, '/api/betting-tables', { default: () => [] })
 const { mutate } = useApiMutation()
