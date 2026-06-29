@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watchEffect } from 'vue'
-import { Check, Sparkles } from 'lucide-vue-next'
+import { Check, Sparkles, Trash2, UserPlus } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { toast } from 'vue-sonner'
 
 interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; model: string; models: string[] }
 interface Profile { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
@@ -29,7 +31,6 @@ const SECTIONS = [
   { key: 'profile', label: 'Profil' },
   { key: 'workspace', label: 'Workspace' },
   { key: 'ia', label: 'Intelligence' },
-  { key: 'prefs', label: 'Préférences' },
   { key: 'members', label: 'Membres' },
 ] as const
 const active = ref<typeof SECTIONS[number]['key']>('profile')
@@ -51,10 +52,61 @@ async function saveProfile() {
   if (savingProfile.value || !profile.name.trim()) return
   savingProfile.value = true; profileSaved.value = false
   try {
-    await mutate('/api/profile', { body: { name: profile.name.trim(), email: profile.email.trim(), avatar_url: avatarUrl.value ?? '' }, invalidates: [qk.profile, qk.members, qk.overview] })
+    await mutate('/api/profile', { body: { name: profile.name.trim(), email: profile.email.trim(), avatar_url: avatarUrl.value ?? '' }, invalidates: [qk.profile, qk.members, qk.overview], success: 'Profil enregistré' })
     await refreshSession()
     profileSaved.value = true
   } finally { savingProfile.value = false }
+}
+
+// ── Mot de passe ────────────────────────────────────────────────────────
+const pwd = reactive({ current: '', next: '' })
+const changingPwd = ref(false)
+async function changePassword() {
+  if (changingPwd.value || !pwd.current || pwd.next.length < 8) return
+  changingPwd.value = true
+  try {
+    await mutate('/api/profile/password', { body: { current: pwd.current, next: pwd.next }, success: 'Mot de passe changé' })
+    pwd.current = ''; pwd.next = ''
+  } catch { /* error toast shown by mutate */ } finally { changingPwd.value = false }
+}
+
+// ── Membres (admin owner) ───────────────────────────────────────────────
+const isOwner = computed(() => profileData.value?.role === 'owner')
+const invite = reactive({ email: '', role: 'member' as 'member' | 'owner' })
+const inviting = ref(false)
+const inviteUrl = ref('')
+const inviteErr = ref('')
+const copied = ref(false)
+const inviteOpen = ref(false)
+function openInvite() { invite.email = ''; invite.role = 'member'; inviteUrl.value = ''; inviteErr.value = ''; inviteOpen.value = true }
+const invites = ref<Array<{ id: string; email: string; role: string; expires_at: string }>>([])
+async function loadInvites() {
+  try { invites.value = await $fetch('/api/members/invites') } catch { invites.value = [] }
+}
+watchEffect(() => { if (isOwner.value) loadInvites() })
+async function sendInvite() {
+  if (inviting.value || !invite.email.trim()) return
+  inviting.value = true; inviteErr.value = ''; inviteUrl.value = ''
+  try {
+    // The generated link IS the confirmation → show it inline, no toast; errors stay inline in the modal.
+    const r = await mutate<{ url: string }>('/api/members/invite', { body: { email: invite.email.trim(), role: invite.role }, errorToast: false })
+    inviteUrl.value = r.url; invite.email = ''
+    await loadInvites()
+  } catch (e: unknown) { inviteErr.value = (e as { statusMessage?: string })?.statusMessage || 'Échec de l\'invitation' } finally { inviting.value = false }
+}
+async function copyInvite() {
+  try { await navigator.clipboard.writeText(inviteUrl.value); copied.value = true; toast.success('Lien copié'); setTimeout(() => copied.value = false, 1500) } catch { /* clipboard blocked */ }
+}
+async function revokeInvite(id: string) {
+  try { await mutate(`/api/members/invites/${id}`, { method: 'DELETE', success: 'Invitation révoquée' }); await loadInvites() } catch { /* toast shown */ }
+}
+async function setMemberRole(id: string, role: string) {
+  try { await mutate(`/api/members/${id}/role`, { body: { role }, invalidates: [qk.members], success: 'Rôle mis à jour' }) }
+  catch { await invalidate(qk.members) } // revert the optimistic Select value
+}
+async function removeMember(m: Member) {
+  if (!confirm(`Retirer ${m.name} du workspace ?`)) return
+  try { await mutate(`/api/members/${m.id}`, { method: 'DELETE', invalidates: [qk.members], success: `${m.name} retiré·e du workspace` }) } catch { /* toast shown */ }
 }
 
 // ── Workspace + IA ──────────────────────────────────────────────────────
@@ -72,7 +124,6 @@ async function onLogoFile(e: Event) {
 }
 const saving = ref(false)
 const saved = ref(false)
-const prefs = ref({ dedup: true, confirm: true, slack: false })
 
 const MODEL_META: Record<string, { name: string; desc: string }> = {
   'claude-sonnet-4-6': { name: 'Sonnet 4.6', desc: 'Équilibré · routage fiable (recommandé)' },
@@ -89,7 +140,7 @@ async function save() {
       workspace_logo_id: workspaceLogo.value ?? '',
       anthropic_api_key: keyInput.value.trim() || undefined,
       anthropic_model: modelInput.value,
-    }, invalidates: [qk.settings, qk.overview] })
+    }, invalidates: [qk.settings, qk.overview], success: 'Réglages enregistrés' })
     keyInput.value = ''
     saved.value = true
   } finally { saving.value = false }
@@ -146,6 +197,23 @@ async function save() {
           <div class="flex items-center justify-end gap-3">
             <span v-if="profileSaved" class="text-sm text-muted-foreground">✓ Profil enregistré</span>
             <Button variant="outline" :disabled="savingProfile || !profile.name.trim()" @click="saveProfile">{{ savingProfile ? 'Enregistrement…' : 'Enregistrer le profil' }}</Button>
+          </div>
+
+          <Separator />
+          <div>
+            <h3 class="text-sm font-medium">Mot de passe</h3>
+            <p class="text-sm text-muted-foreground">Au moins 8 caractères.</p>
+          </div>
+          <div class="grid gap-2 sm:max-w-sm">
+            <Label for="curpwd">Mot de passe actuel</Label>
+            <Input id="curpwd" v-model="pwd.current" type="password" autocomplete="current-password" />
+          </div>
+          <div class="grid gap-2 sm:max-w-sm">
+            <Label for="newpwd">Nouveau mot de passe</Label>
+            <Input id="newpwd" v-model="pwd.next" type="password" autocomplete="new-password" />
+          </div>
+          <div class="flex items-center justify-end gap-3">
+            <Button variant="outline" :disabled="changingPwd || !pwd.current || pwd.next.length < 8" @click="changePassword">{{ changingPwd ? 'Changement…' : 'Changer le mot de passe' }}</Button>
           </div>
         </section>
 
@@ -209,39 +277,90 @@ async function save() {
           </div>
         </section>
 
-        <!-- Préférences -->
-        <section v-show="active === 'prefs'" class="flex max-w-xl flex-col gap-5">
-          <div>
-            <h2 class="text-base font-medium">Préférences</h2>
-            <p class="text-sm text-muted-foreground">Comportement global du Product OS.</p>
-          </div>
-          <Separator />
-          <div class="flex flex-col">
-            <div v-for="(p, i) in [{ k: 'dedup', t: 'Détection de doublons', d: 'Avant écriture en base' }, { k: 'confirm', t: 'Confirmation avant routing', d: 'Requise pour création de feature' }, { k: 'slack', t: 'Notifications Slack', d: 'À chaque hill créé/clôturé' }]" :key="p.k">
-              <Separator v-if="i > 0" class="my-1" />
-              <div class="flex items-center justify-between py-2.5">
-                <div><div class="text-sm font-medium">{{ p.t }}</div><div class="text-xs text-muted-foreground">{{ p.d }}</div></div>
-                <Switch v-model="prefs[p.k as keyof typeof prefs.value]" />
-              </div>
-            </div>
-          </div>
-        </section>
-
         <!-- Membres -->
         <section v-show="active === 'members'" class="flex max-w-xl flex-col gap-5">
-          <div>
-            <h2 class="text-base font-medium">Membres</h2>
-            <p class="text-sm text-muted-foreground">L'équipe du workspace.</p>
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="text-base font-medium">Membres</h2>
+              <p class="text-sm text-muted-foreground">{{ isOwner ? 'Invitez par lien et gérez les rôles.' : "L'équipe du workspace." }}</p>
+            </div>
+            <Button v-if="isOwner" size="sm" @click="openInvite"><UserPlus class="size-4" /> Inviter un membre</Button>
           </div>
           <Separator />
+
+          <!-- Invite dialog -->
+          <Dialog v-if="isOwner" v-model:open="inviteOpen">
+            <DialogContent class="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Inviter un membre</DialogTitle>
+                <DialogDescription>{{ inviteUrl ? 'Partage ce lien — valable 7 jours, usage unique.' : 'Génère un lien d’invitation à partager (Slack, email…).' }}</DialogDescription>
+              </DialogHeader>
+
+              <div v-if="!inviteUrl" class="flex flex-col gap-4 py-2">
+                <div class="grid gap-2">
+                  <Label for="inviteEmail">Email</Label>
+                  <Input id="inviteEmail" v-model="invite.email" type="email" placeholder="personne@exemple.com" @keydown.enter="sendInvite" />
+                </div>
+                <div class="grid gap-2">
+                  <Label>Rôle</Label>
+                  <Select v-model="invite.role">
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Membre</SelectItem>
+                      <SelectItem value="owner">Owner</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p v-if="inviteErr" class="text-sm text-destructive">{{ inviteErr }}</p>
+              </div>
+
+              <div v-else class="flex items-center gap-2 rounded-md bg-muted p-2">
+                <code class="min-w-0 flex-1 truncate text-xs">{{ inviteUrl }}</code>
+                <Button variant="outline" size="sm" @click="copyInvite">{{ copied ? '✓ Copié' : 'Copier' }}</Button>
+              </div>
+
+              <DialogFooter :class="inviteUrl ? 'sm:justify-between' : ''">
+                <template v-if="!inviteUrl">
+                  <Button :disabled="inviting || !invite.email.trim()" @click="sendInvite">{{ inviting ? 'Génération…' : 'Générer le lien' }}</Button>
+                </template>
+                <template v-else>
+                  <Button variant="ghost" @click="openInvite">Inviter quelqu'un d'autre</Button>
+                  <Button @click="inviteOpen = false">Terminé</Button>
+                </template>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <!-- Pending invites -->
+          <div v-if="isOwner && invites.length" class="flex flex-col gap-1">
+            <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">En attente ({{ invites.length }})</div>
+            <div v-for="i in invites" :key="i.id" class="flex items-center gap-3 py-1.5">
+              <div class="min-w-0 flex-1 truncate text-sm text-muted-foreground">{{ i.email }}</div>
+              <Badge variant="secondary" class="capitalize">{{ i.role }}</Badge>
+              <button type="button" class="text-xs text-muted-foreground hover:text-destructive" @click="revokeInvite(i.id)">Révoquer</button>
+            </div>
+          </div>
+
+          <!-- Active members -->
           <div class="flex flex-col gap-1">
+            <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Équipe ({{ members.length }})</div>
             <div v-for="m in members" :key="m.id" class="flex items-center gap-3 py-2">
               <UserAvatar :name="m.name" :src="m.avatar_url" class="size-8 rounded-full" />
               <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium">{{ m.name }}</div>
+                <div class="text-sm font-medium">{{ m.name }}{{ m.id === profileData?.id ? ' (vous)' : '' }}</div>
                 <div class="truncate text-xs text-muted-foreground">{{ m.email || '—' }}</div>
               </div>
-              <Badge :variant="m.role === 'owner' ? 'default' : 'secondary'" class="capitalize">{{ m.role }}</Badge>
+              <template v-if="isOwner && m.id !== profileData?.id">
+                <Select :model-value="m.role" @update:model-value="(v) => setMemberRole(m.id, v as string)">
+                  <SelectTrigger class="h-8 w-[120px] text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="member">Membre</SelectItem>
+                    <SelectItem value="owner">Owner</SelectItem>
+                  </SelectContent>
+                </Select>
+                <button type="button" class="text-muted-foreground transition-colors hover:text-destructive" title="Retirer" @click="removeMember(m)"><Trash2 class="size-4" /></button>
+              </template>
+              <Badge v-else :variant="m.role === 'owner' ? 'default' : 'secondary'" class="capitalize">{{ m.role }}</Badge>
             </div>
           </div>
         </section>

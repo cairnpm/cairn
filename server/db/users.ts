@@ -1,5 +1,5 @@
 import { all, get, run, tx } from './client'
-import { hashPassword } from '../utils/password'
+import { hashPassword, verifyPassword } from '../utils/password'
 import { newId } from '../utils/id'
 
 export interface User {
@@ -12,6 +12,7 @@ export interface User {
   avatar_init: string | null
   avatar_url: string | null
   former_names: string | null
+  disabled_at: string | null
   created_at: string
 }
 
@@ -87,15 +88,68 @@ export function findUserByEmail(email: string): User | undefined {
   return get<User>('SELECT * FROM users WHERE lower(email) = lower(?)', email)
 }
 
+// Active members only (a removed member is soft-disabled, keeping its id/name for attribution).
 export function listUsers(): Array<Omit<User, 'password_hash'>> {
   return all<Omit<User, 'password_hash'>>(
-    'SELECT id, name, email, role, avatar_bg, avatar_init, avatar_url, former_names, created_at FROM users ORDER BY created_at',
+    'SELECT id, name, email, role, avatar_bg, avatar_init, avatar_url, former_names, disabled_at, created_at FROM users WHERE disabled_at IS NULL ORDER BY created_at',
   )
+}
+
+// ── Membership management ────────────────────────────────────────────────────
+const AVATAR_PALETTE = ['#2563eb', '#16a34a', '#db2777', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#4f46e5']
+function colorFor(name: string): string {
+  let h = 0
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return AVATAR_PALETTE[h % AVATAR_PALETTE.length]
+}
+
+/** Create a member (used when accepting an invitation). Email is unique (enforced at the DB). */
+export function createUser(fields: { name: string; email: string; password: string; role?: string }): Omit<User, 'password_hash'> {
+  const id = newId()
+  const name = fields.name.trim()
+  run(
+    `INSERT INTO users (id, name, email, password_hash, role, avatar_bg, avatar_init, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    id, name, fields.email.trim().toLowerCase(), hashPassword(fields.password), fields.role || 'member',
+    colorFor(name), name[0]?.toUpperCase() ?? '?',
+  )
+  return getUserById(id)!
+}
+
+export function changePassword(id: string, current: string, next: string): { ok: true } | { error: string } {
+  const u = get<User>('SELECT * FROM users WHERE id = ?', id)
+  if (!u) return { error: 'Utilisateur introuvable' }
+  if (!verifyPassword(current, u.password_hash)) return { error: 'Mot de passe actuel incorrect' }
+  if ((next ?? '').length < 8) return { error: 'Le nouveau mot de passe doit faire au moins 8 caractères' }
+  run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(next), id)
+  return { ok: true }
+}
+
+export function countActiveOwners(): number {
+  return get<{ n: number }>("SELECT COUNT(*) AS n FROM users WHERE role = 'owner' AND disabled_at IS NULL")?.n ?? 0
+}
+
+export function setUserRole(id: string, role: 'owner' | 'member'): { ok: true } | { error: string } {
+  const u = getUserById(id)
+  if (!u) return { error: 'Membre introuvable' }
+  if (u.role === 'owner' && role !== 'owner' && countActiveOwners() <= 1) return { error: 'Impossible de rétrograder le dernier owner' }
+  run('UPDATE users SET role = ? WHERE id = ?', role, id)
+  return { ok: true }
+}
+
+/** Soft-remove a member: they can't log in and drop off the active list, but their id/name stay so
+ *  past attribution and live assignments don't break. */
+export function setUserDisabled(id: string, disabled: boolean): { ok: true } | { error: string } {
+  const u = getUserById(id)
+  if (!u) return { error: 'Membre introuvable' }
+  if (disabled && u.role === 'owner' && countActiveOwners() <= 1) return { error: 'Impossible de retirer le dernier owner' }
+  run('UPDATE users SET disabled_at = ? WHERE id = ?', disabled ? new Date().toISOString() : null, id)
+  return { ok: true }
 }
 
 export function getUserById(id: string): Omit<User, 'password_hash'> | undefined {
   return get<Omit<User, 'password_hash'>>(
-    'SELECT id, name, email, role, avatar_bg, avatar_init, avatar_url, former_names, created_at FROM users WHERE id = ?', id,
+    'SELECT id, name, email, role, avatar_bg, avatar_init, avatar_url, former_names, disabled_at, created_at FROM users WHERE id = ?', id,
   )
 }
 

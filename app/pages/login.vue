@@ -2,7 +2,8 @@
 import { ref } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from '@/components/ui/field'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 definePageMeta({ layout: false })
 
@@ -32,41 +33,42 @@ async function submit() {
 </script>
 
 <template>
-  <div class="bg-background flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
-    <div class="w-full max-w-sm">
-      <form class="flex flex-col gap-6" @submit.prevent="submit">
-        <FieldGroup>
-          <!-- Brand / heading -->
-          <div class="flex flex-col items-center gap-2 text-center">
-            <div class="flex size-10 items-center justify-center rounded-[11px]" style="background: linear-gradient(140deg, #8A7DFF 0%, #5B5BD6 55%, #3F38B5 100%); box-shadow: 0 6px 20px rgba(91,91,214,0.32);">
-              <span style="color: #fff; font-size: 17px; font-weight: 800; letter-spacing: -0.6px; font-family: var(--font-mono);">B</span>
+  <div class="bg-muted flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">
+    <div class="flex w-full max-w-sm flex-col gap-6">
+      <!-- Brand -->
+      <a href="/login" class="flex items-center gap-2 self-center font-medium">
+        <div class="flex size-7 items-center justify-center rounded-md" style="background: linear-gradient(140deg, #8A7DFF 0%, #5B5BD6 55%, #3F38B5 100%);">
+          <span style="color: #fff; font-size: 14px; font-weight: 800; letter-spacing: -0.5px; font-family: var(--font-mono);">B</span>
+        </div>
+        Bicycle · Product OS
+      </a>
+
+      <Card>
+        <CardHeader class="text-center">
+          <CardTitle class="text-xl">{{ t('login.title') }}</CardTitle>
+          <CardDescription>Connectez-vous pour continuer</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form @submit.prevent="submit">
+            <div class="grid gap-6">
+              <div class="grid gap-2">
+                <Label for="email">{{ t('login.email') }}</Label>
+                <Input id="email" v-model="email" type="email" autocomplete="username" placeholder="ceo@bicycle.local" required />
+              </div>
+              <div class="grid gap-2">
+                <Label for="password">{{ t('login.password') }}</Label>
+                <Input id="password" v-model="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
+              </div>
+              <p v-if="error" class="text-destructive text-sm">{{ error }}</p>
+              <Button type="submit" class="w-full" :disabled="pending">{{ pending ? t('login.pending') : t('login.submit') }}</Button>
             </div>
-            <h1 class="text-xl font-bold tracking-tight">{{ t('login.title') }} · Bicycle</h1>
-            <FieldDescription>Product OS — connectez-vous pour continuer</FieldDescription>
-          </div>
+          </form>
+        </CardContent>
+      </Card>
 
-          <Field>
-            <FieldLabel for="email">{{ t('login.email') }}</FieldLabel>
-            <Input id="email" v-model="email" type="email" autocomplete="username" placeholder="ceo@bicycle.local" required />
-          </Field>
-
-          <Field>
-            <FieldLabel for="password">{{ t('login.password') }}</FieldLabel>
-            <Input id="password" v-model="password" type="password" autocomplete="current-password" placeholder="••••••••" required />
-          </Field>
-
-          <p v-if="error" class="text-destructive text-[12.5px]">{{ error }}</p>
-
-          <Field>
-            <Button type="submit" :disabled="pending">{{ pending ? t('login.pending') : t('login.submit') }}</Button>
-          </Field>
-
-          <FieldSeparator>Démo</FieldSeparator>
-          <FieldDescription class="text-center">
-            <code style="font-family: var(--font-mono);">ceo@bicycle.local</code> · mot de passe <code style="font-family: var(--font-mono);">bicycle</code>
-          </FieldDescription>
-        </FieldGroup>
-      </form>
+      <div class="text-muted-foreground text-center text-xs text-balance">
+        Démo · <code style="font-family: var(--font-mono);">ceo@bicycle.local</code> · mot de passe <code style="font-family: var(--font-mono);">bicycle</code>
+      </div>
     </div>
   </div>
 </template>

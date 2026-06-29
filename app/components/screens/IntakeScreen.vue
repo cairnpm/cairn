@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
 import { ArrowDown, ArrowUp, Layers, Paperclip, Sparkles, X } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
@@ -100,6 +101,9 @@ async function send() {
     messages.value.push({ role: 'agent', text: r.agent_message })
     // The agent decided this input covers several problems → it auto-decomposed; show the review.
     if (r.batch) { batch.value = r.batch; reviewOpen.value = true }
+  } catch (e: unknown) {
+    toast.error((e as { statusMessage?: string })?.statusMessage || "L'agent n'a pas pu répondre")
+    messages.value.push({ role: 'agent', text: 'Désolé, une erreur est survenue de mon côté. Réessaie.' })
   } finally { pending.value = false }
 }
 function pick(text: string) { draft.value = text; send() }
@@ -112,7 +116,8 @@ async function accept() {
     proposal.value = null
     // A commit creates/updates a feature → the backlog + counts must re-sync.
     await invalidate(qk.features, qk.featureDetail, qk.overview)
-  } finally { pending.value = false }
+    toast.success(r.action === 'discard' ? 'Signal écarté' : r.action === 'append' ? 'Signal rattaché à la feature' : r.action === 'merge' ? 'Features fusionnées' : 'Feature créée')
+  } catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || 'Écriture impossible') } finally { pending.value = false }
 }
 // ── Batch decomposition (agent-decided: multi-topic input → N features for review) ────────────
 // `batch` holds the decomposition; `reviewOpen` controls the takeover. Closing the review keeps the
@@ -129,7 +134,8 @@ async function confirmBatch(selections: { id: string; action_override: string; t
     batchRecap.value = { created: r.created, updated: r.updated, discarded: r.discarded }
     batch.value = null; reviewOpen.value = false
     await invalidate(qk.features, qk.featureDetail, qk.overview)
-  } finally { pending.value = false }
+    toast.success(`${r.created} créée(s) · ${r.updated} mise(s) à jour`)
+  } catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || 'Écriture impossible') } finally { pending.value = false }
 }
 function cancelBatch() { reviewOpen.value = false } // back to chat; reopen anytime
 

@@ -134,6 +134,19 @@ export function ensureSchema(): void {
       created_at    TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- Workspace invitations. The link carries a high-entropy token; we store only its sha256 hash
+    -- (a DB leak can't be used to join). Single-use (accepted_at) + expiry.
+    CREATE TABLE IF NOT EXISTS invitations (
+      id          TEXT PRIMARY KEY,
+      token_hash  TEXT NOT NULL UNIQUE,
+      email       TEXT NOT NULL,
+      role        TEXT NOT NULL DEFAULT 'member',     -- owner | member
+      invited_by  TEXT,                               -- inviter user id
+      expires_at  TEXT NOT NULL,
+      accepted_at TEXT,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     -- Uploaded files (attached to a feature and/or the feedback that introduced them).
     CREATE TABLE IF NOT EXISTS attachments (
       id           TEXT PRIMARY KEY,
@@ -247,6 +260,9 @@ export function ensureSchema(): void {
 
   // Vote integrity: dedup votes by a stable user id, not the renameable name.
   addColumnIfMissing('betting_votes', 'voter_id', 'voter_id TEXT REFERENCES users(id)')
+
+  // Soft-remove a member (can't log in, drops off the active list) without breaking attribution.
+  addColumnIfMissing('users', 'disabled_at', 'disabled_at TEXT')
 
   // Haiku retired for intake (unreliable routing) — migrate any stored choice to Sonnet.
   db().exec("UPDATE settings SET value = 'claude-sonnet-4-6' WHERE key = 'anthropic_model' AND value = 'claude-haiku-4-5'")

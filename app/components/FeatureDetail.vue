@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ExternalLink } from 'lucide-vue-next'
+import { toast } from 'vue-sonner'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { timeAgo } from '~/utils/time'
@@ -25,10 +26,14 @@ watch(() => props.detail.events, v => { events.value = [...(v ?? [])] })
 async function assign(method: 'POST' | 'DELETE', role: 'shaper' | 'builder', userId: string) {
   // Optimistic: apply the server's fresh response locally, then invalidate the sibling views
   // (backlog Shapers column, hill Builders column, feature page) so they re-sync too.
-  const res = await $fetch<{ assignees: Assignee[], events: FeatureEvent[] }>(`/api/features/${props.detail.feature.id}/assignees`, { method, body: { user_id: userId, role } })
-  assignees.value = res.assignees
-  events.value = res.events
-  await invalidate(qk.features, qk.featureDetail, qk.hillDetail)
+  try {
+    const res = await $fetch<{ assignees: Assignee[], events: FeatureEvent[] }>(`/api/features/${props.detail.feature.id}/assignees`, { method, body: { user_id: userId, role } })
+    assignees.value = res.assignees
+    events.value = res.events
+    await invalidate(qk.features, qk.featureDetail, qk.hillDetail)
+    toast.success(method === 'POST' ? `${role === 'shaper' ? 'Shaper' : 'Builder'} assigné` : 'Assignation retirée')
+  }
+  catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || 'Action impossible') }
 }
 
 const PITCH = [
