@@ -200,14 +200,15 @@ export function ensureSchema(): void {
       UNIQUE(table_id, feature_id)
     );
 
-    -- One vote per (candidate, voter); toggling = delete + insert.
+    -- One vote per (candidate, voter); toggling = delete + insert. Dedup is enforced on the stable
+    -- voter_id (see users.ts → betting_votes_unique_voter index), not the renameable voter_name.
+    -- NOTE: existing DBs keep the legacy UNIQUE(table_id, candidate_id, voter_name) until recreated.
     CREATE TABLE IF NOT EXISTS betting_votes (
       id           TEXT PRIMARY KEY,
       table_id     TEXT NOT NULL REFERENCES betting_tables(id),
       candidate_id TEXT NOT NULL REFERENCES betting_candidates(id),
       voter_name   TEXT NOT NULL,
-      created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(table_id, candidate_id, voter_name)
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     -- Append-only betting-table audit (who did what, when) — mirrors feature_events.

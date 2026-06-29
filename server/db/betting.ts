@@ -1,4 +1,5 @@
-import { all, get, run } from './client'
+import { all, get } from './client'
+import { BETTING_EVENTS, listActivity, logActivity } from './activity'
 
 export type BettingAction = 'generated' | 'vote_cast' | 'vote_cleared' | 'validated' | 'cancelled' | 'deleted' | 'restored'
 
@@ -6,11 +7,7 @@ export function logBettingEvent(
   tableId: string, actor: string | null, action: BettingAction, summary: string,
   detail?: Record<string, unknown>, actorType: 'user' | 'system' = 'user',
 ): void {
-  run(
-    `INSERT INTO betting_events (table_id, actor, actor_type, action, summary, detail, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
-    tableId, actor || 'inconnu', actorType, action, summary, detail ? JSON.stringify(detail) : null,
-  )
+  logActivity(BETTING_EVENTS, tableId, actor, action, summary, detail, actorType)
 }
 
 export interface BettingTableRow {
@@ -58,5 +55,5 @@ export function tableCandidates(tableId: string) {
 }
 
 export function tableEvents(tableId: string) {
-  return all('SELECT seq, actor, actor_type, action, summary, detail, created_at FROM betting_events WHERE table_id = ? ORDER BY seq DESC', tableId)
+  return listActivity(BETTING_EVENTS, tableId)
 }
