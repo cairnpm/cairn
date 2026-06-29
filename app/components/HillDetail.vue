@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { ExternalLink } from 'lucide-vue-next'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatDate } from '~/utils/time'
 import type { HillDetailData } from '~/types/hill'
@@ -17,38 +16,33 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
-    <!-- Header (border-b) -->
-    <header class="flex flex-col gap-3 border-b px-6 py-4">
-      <div class="flex items-start justify-between gap-3">
-        <div class="flex items-center gap-2" :class="compact ? 'pr-24' : ''">
-          <span class="font-mono text-xs text-muted-foreground">{{ shortId(data.hill.id) }}</span>
-          <h2 class="text-base font-semibold tracking-tight">{{ data.hill.name }}</h2>
+  <DetailLayout :compact="compact">
+    <template #title>
+      <div class="flex items-center gap-2">
+        <span class="font-mono text-xs text-muted-foreground">{{ shortId(data.hill.id) }}</span>
+        <h2 class="text-base font-semibold tracking-tight">{{ data.hill.name }}</h2>
+      </div>
+    </template>
+    <template #header-action><slot name="header-action" /></template>
+    <template #meta>
+      <MetaField :label="t('hill.status')"><StatusBadge :status="data.hill.status" /></MetaField>
+      <MetaField :label="t('hill.progress')">
+        <div class="flex items-center gap-2">
+          <div class="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: pct + '%' }" /></div>
+          <span class="tabular-nums">{{ pct }}% · {{ done }}/{{ total }}</span>
         </div>
-        <div class="flex items-center gap-2" :class="compact ? 'mr-24' : ''"><slot name="header-action" /></div>
-      </div>
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <MetaField :label="t('hill.status')"><StatusBadge :status="data.hill.status" /></MetaField>
-        <MetaField :label="t('hill.progress')">
-          <div class="flex items-center gap-2">
-            <div class="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: pct + '%' }" /></div>
-            <span class="tabular-nums">{{ pct }}% · {{ done }}/{{ total }}</span>
-          </div>
-        </MetaField>
-        <MetaField :label="t('hill.features')"><span class="tabular-nums">{{ total }}</span></MetaField>
-        <MetaField :label="t('hill.period')"><span class="text-muted-foreground">{{ formatDate(data.hill.starts_at, locale) }} → {{ formatDate(data.hill.ends_at, locale) }}</span></MetaField>
-        <MetaField v-if="data.betting_table" :label="t('hill.source')">
-          <NuxtLink :to="`/betting/${data.betting_table.id}`" class="inline-flex items-center gap-1 hover:underline">
-            {{ data.betting_table.title }}
-            <ExternalLink class="size-3.5 opacity-60" />
-          </NuxtLink>
-        </MetaField>
-      </div>
-    </header>
+      </MetaField>
+      <MetaField :label="t('hill.features')"><span class="tabular-nums">{{ total }}</span></MetaField>
+      <MetaField :label="t('hill.period')"><span class="text-muted-foreground">{{ formatDate(data.hill.starts_at, locale) }} → {{ formatDate(data.hill.ends_at, locale) }}</span></MetaField>
+      <MetaField v-if="data.betting_table" :label="t('hill.source')">
+        <NuxtLink :to="`/betting/${data.betting_table.id}`" class="inline-flex items-center gap-1 hover:underline">
+          {{ data.betting_table.title }}
+          <ExternalLink class="size-3.5 opacity-60" />
+        </NuxtLink>
+      </MetaField>
+    </template>
 
-    <!-- Features -->
-    <ScrollArea class="min-h-0 flex-1">
-      <div class="p-6">
+    <div class="p-6">
         <div v-if="data.hill.rationale" class="mb-6">
           <SectionLabel class="mb-2">{{ t('hill.whyCycle') }}</SectionLabel>
           <p class="rounded-md border bg-muted/40 p-3 text-sm leading-relaxed">{{ data.hill.rationale }}</p>
@@ -82,6 +76,5 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
           </Table>
         </div>
       </div>
-    </ScrollArea>
-  </div>
+  </DetailLayout>
 </template>

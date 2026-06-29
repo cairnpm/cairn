@@ -3,7 +3,6 @@ import { computed, ref, watch } from 'vue'
 import { ExternalLink } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import type { FeatureDetailData } from '~/types/feature'
 
 const props = defineProps<{ detail: FeatureDetailData }>()
@@ -40,24 +39,18 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
-    <!-- Header -->
-    <header class="flex flex-col gap-2 border-b px-6 py-4">
-      <div class="flex items-start justify-between gap-3">
-        <h2 class="pr-8 text-base font-semibold leading-snug">{{ detail.feature.title }}</h2>
-        <slot name="header-action" />
-      </div>
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <MetaField :label="t('feature.meta.status')"><StatusBadge :status="detail.feature.status" /></MetaField>
-        <MetaField :label="t('feature.meta.appetite')"><Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge></MetaField>
-        <MetaField v-if="detail.feature.hill_name" label="Hill"><Badge variant="secondary">{{ detail.feature.hill_name }}</Badge></MetaField>
-      </div>
-    </header>
+  <DetailLayout :aside-width="360">
+    <template #title>
+      <h2 class="pr-8 text-base font-semibold leading-snug">{{ detail.feature.title }}</h2>
+    </template>
+    <template #header-action><slot name="header-action" /></template>
+    <template #meta>
+      <MetaField :label="t('feature.meta.status')"><StatusBadge :status="detail.feature.status" /></MetaField>
+      <MetaField :label="t('feature.meta.appetite')"><Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge></MetaField>
+      <MetaField v-if="detail.feature.hill_name" label="Hill"><Badge variant="secondary">{{ detail.feature.hill_name }}</Badge></MetaField>
+    </template>
 
-    <!-- Two columns -->
-    <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_360px]">
-      <ScrollArea class="min-h-0">
-        <div class="flex flex-col gap-6 p-6 text-sm">
+    <div class="flex flex-col gap-6 p-6 text-sm">
           <!-- Équipe: shapers affinent le pitch (pré-bet), builders construisent (post-bet) -->
           <div class="grid gap-4 sm:grid-cols-2">
             <AssigneeField label="Shapers" :assignees="shapers" :members="members" @add="assign('POST', 'shaper', $event)" @remove="assign('DELETE', 'shaper', $event)" />
@@ -104,12 +97,10 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
               <ExternalLink class="size-3" />{{ p.repo }}#{{ p.pr_number }} · {{ p.status }}
             </a>
           </div>
-        </div>
-      </ScrollArea>
-
-      <aside class="min-h-0 border-t bg-muted/20 md:border-l md:border-t-0">
-        <ActivityTimeline :events="events" :title="t('feature.activity')" :empty-text="t('feature.noActivity')" />
-      </aside>
     </div>
-  </div>
+
+    <template #aside>
+      <ActivityTimeline :events="events" :title="t('feature.activity')" :empty-text="t('feature.noActivity')" />
+    </template>
+  </DetailLayout>
 </template>

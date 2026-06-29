@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ExternalLink } from 'lucide-vue-next'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import type { BettingTableDetailData } from '~/types/betting'
@@ -14,35 +13,26 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
-    <!-- Header (border-b) -->
-    <header class="flex flex-col gap-3 border-b px-6 py-4">
-      <div class="flex items-start justify-between gap-3">
-        <h2 class="text-base font-semibold tracking-tight" :class="compact ? 'pr-24' : ''">{{ data.table.title }}</h2>
-        <div class="flex items-center gap-2" :class="compact ? 'mr-24' : ''">
-          <slot name="header-action" />
-        </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <MetaField :label="t('betting.status')"><StatusBadge :status="data.table.status" /></MetaField>
-        <MetaField :label="t('betting.createdBy')"><UserAvatar :name="data.table.owner_name" :src="data.table.owner_avatar" class="size-5" />{{ data.table.owner_name }}</MetaField>
-        <MetaField :label="t('betting.candidates')"><span class="tabular-nums">{{ data.candidates.length }}</span></MetaField>
-        <MetaField :label="t('betting.votes')"><span class="tabular-nums">{{ totalVotes() }}</span></MetaField>
-        <MetaField v-if="data.table.validated_by" :label="t('betting.validatedBy')"><UserAvatar :name="data.table.validated_by" class="size-5" />{{ data.table.validated_by }}</MetaField>
-        <MetaField v-if="data.table.hill_id" label="Hill">
-          <NuxtLink :to="`/hills/${data.table.hill_id}`" class="inline-flex items-center gap-1 hover:underline">
-            {{ data.table.hill_name || t('betting.cycle') }}
-            <ExternalLink class="size-3.5 opacity-60" />
-          </NuxtLink>
-        </MetaField>
-      </div>
-    </header>
+  <DetailLayout :aside-width="340" :compact="compact">
+    <template #title>
+      <h2 class="text-base font-semibold tracking-tight">{{ data.table.title }}</h2>
+    </template>
+    <template #header-action><slot name="header-action" /></template>
+    <template #meta>
+      <MetaField :label="t('betting.status')"><StatusBadge :status="data.table.status" /></MetaField>
+      <MetaField :label="t('betting.createdBy')"><UserAvatar :name="data.table.owner_name" :src="data.table.owner_avatar" class="size-5" />{{ data.table.owner_name }}</MetaField>
+      <MetaField :label="t('betting.candidates')"><span class="tabular-nums">{{ data.candidates.length }}</span></MetaField>
+      <MetaField :label="t('betting.votes')"><span class="tabular-nums">{{ totalVotes() }}</span></MetaField>
+      <MetaField v-if="data.table.validated_by" :label="t('betting.validatedBy')"><UserAvatar :name="data.table.validated_by" class="size-5" />{{ data.table.validated_by }}</MetaField>
+      <MetaField v-if="data.table.hill_id" label="Hill">
+        <NuxtLink :to="`/hills/${data.table.hill_id}`" class="inline-flex items-center gap-1 hover:underline">
+          {{ data.table.hill_name || t('betting.cycle') }}
+          <ExternalLink class="size-3.5 opacity-60" />
+        </NuxtLink>
+      </MetaField>
+    </template>
 
-    <!-- Two columns -->
-    <div class="grid min-h-0 flex-1 grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_340px]">
-      <!-- Left: candidates -->
-      <ScrollArea class="min-h-0">
-        <div class="p-6">
+    <div class="p-6">
           <SectionLabel class="mb-3">{{ t('betting.candidates') }} ({{ data.candidates.length }})</SectionLabel>
           <div class="rounded-lg border">
             <Table class="table-fixed">
@@ -76,12 +66,9 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
             <slot name="candidates-footer" />
           </div>
         </div>
-      </ScrollArea>
 
-      <!-- Right: timeline -->
-      <aside class="min-h-0 border-t bg-muted/20 md:border-l md:border-t-0">
-        <ActivityTimeline :events="data.events" :title="t('betting.timeline')" :empty-text="t('betting.noActivity')" />
-      </aside>
-    </div>
-  </div>
+    <template #aside>
+      <ActivityTimeline :events="data.events" :title="t('betting.timeline')" :empty-text="t('betting.noActivity')" />
+    </template>
+  </DetailLayout>
 </template>
