@@ -1,27 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import {
-  type ColumnDef, type ColumnFiltersState, type SortingState, type VisibilityState,
-  getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useVueTable,
-} from '@tanstack/vue-table'
-import {
-  ArrowDown, ArrowUp, Check, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
-  ChevronsUpDown, Columns3, ExternalLink, MoreHorizontal, Plus, RotateCcw, Trash2,
-} from 'lucide-vue-next'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { type ColumnDef } from '@tanstack/vue-table'
+import { Check, ExternalLink, MoreHorizontal, Plus, RotateCcw, Trash2 } from 'lucide-vue-next'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
 import { formatDate } from '~/utils/time'
 import type { BettingTableDetailData } from '~/types/betting'
 import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -125,19 +113,11 @@ const FILTERS = computed(() => [
   { key: 'deleted', label: t('betting.filter.deleted'), n: counts.value.deleted },
 ])
 
-function valueUpdater<T>(u: T | ((old: T) => T), r: { value: T }) {
-  r.value = typeof u === 'function' ? (u as (o: T) => T)(r.value) : u
-}
-const sorting = ref<SortingState>([{ id: 'generated_at', desc: true }])
-const columnFilters = ref<ColumnFiltersState>([])
-const columnVisibility = ref<VisibilityState>({})
-const rowSelection = ref({})
-
 const COL_LABEL = computed<Record<string, string>>(() => ({ title: t('betting.col.title'), status: t('betting.col.status'), candidate_count: t('betting.col.candidates'), vote_count: t('betting.col.votes'), owner: t('betting.col.owner'), generated_at: t('betting.col.created') }))
 const columns: ColumnDef<TableRowT>[] = [
-  { id: 'title', accessorKey: 'title', header: 'Table', enableHiding: false },
+  { id: 'title', accessorKey: 'title', enableHiding: false },
   {
-    id: 'status', accessorKey: 'status', header: 'Statut',
+    id: 'status', accessorKey: 'status',
     filterFn: (row, _id, val) => {
       const s = row.getValue('status') as string
       if (val === 'all') return s !== 'deleted'
@@ -145,71 +125,28 @@ const columns: ColumnDef<TableRowT>[] = [
       return s === val
     },
   },
-  { id: 'candidate_count', accessorKey: 'candidate_count', header: 'Candidats' },
-  { id: 'vote_count', accessorKey: 'vote_count', header: 'Votes' },
-  { id: 'owner', accessorFn: r => r.owner_name || '', header: 'Owner', enableSorting: false },
-  { id: 'generated_at', accessorKey: 'generated_at', header: 'Créée' },
+  { id: 'candidate_count', accessorKey: 'candidate_count' },
+  { id: 'vote_count', accessorKey: 'vote_count' },
+  { id: 'owner', accessorFn: r => r.owner_name || '', enableSorting: false },
+  { id: 'generated_at', accessorKey: 'generated_at' },
 ]
 
-const table = useVueTable({
-  get data() { return tables.value },
+// Betting's filterFn handles the 'all'/'deleted' tabs itself, so the raw value is forwarded as-is.
+const { table, vis, hideableCols } = useDataTable({
+  data: tables,
   columns,
-  state: {
-    get sorting() { return sorting.value },
-    get columnFilters() { return columnFilters.value },
-    get columnVisibility() { return columnVisibility.value },
-    get rowSelection() { return rowSelection.value },
-  },
-  getRowId: row => row.id,
-  enableRowSelection: true,
-  onSortingChange: u => valueUpdater(u, sorting),
-  onColumnFiltersChange: u => valueUpdater(u, columnFilters),
-  onColumnVisibilityChange: u => valueUpdater(u, columnVisibility),
-  onRowSelectionChange: u => valueUpdater(u, rowSelection),
-  getCoreRowModel: getCoreRowModel(),
-  getSortedRowModel: getSortedRowModel(),
-  getFilteredRowModel: getFilteredRowModel(),
-  getPaginationRowModel: getPaginationRowModel(),
-  initialState: { pagination: { pageSize: 10 } },
+  initialSort: [{ id: 'generated_at', desc: true }],
+  statusFilter,
 })
-
-watch(statusFilter, (v) => {
-  table.getColumn('status')?.setFilterValue(v)
-}, { immediate: true })
-
-const hideableCols = computed(() => table.getAllColumns().filter(c => c.getCanHide()))
-function sortIcon(id: string) {
-  const s = table.getColumn(id)?.getIsSorted()
-  return s === 'asc' ? ArrowUp : s === 'desc' ? ArrowDown : ChevronsUpDown
-}
-function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
 </script>
 
 <template>
   <div class="flex h-full flex-col gap-4 overflow-hidden p-4">
     <!-- Toolbar -->
     <div class="flex items-center justify-between gap-2">
-      <Tabs :model-value="statusFilter" @update:model-value="(v) => statusFilter = String(v)">
-        <TabsList>
-          <TabsTrigger v-for="f in FILTERS" :key="f.key" :value="f.key" class="group gap-1.5">
-            {{ f.label }}
-            <Badge variant="secondary" class="h-5 min-w-5 justify-center rounded-full border-transparent bg-background px-1.5 tabular-nums text-foreground group-data-[state=active]:bg-muted">{{ f.n }}</Badge>
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <StatusFilterTabs v-model="statusFilter" :filters="FILTERS" />
       <div class="flex items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <Button variant="outline" size="sm"><Columns3 class="size-4" /> {{ t('betting.columns') }} <ChevronsUpDown class="size-4 opacity-50" /></Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" class="w-40">
-            <DropdownMenuCheckboxItem
-              v-for="col in hideableCols" :key="col.id"
-              class="capitalize" :model-value="col.getIsVisible()"
-              @update:model-value="(v: boolean) => col.toggleVisibility(!!v)"
-            >{{ COL_LABEL[col.id] || col.id }}</DropdownMenuCheckboxItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ColumnToggle :columns="hideableCols" :labels="COL_LABEL" :button-text="t('betting.columns')" />
         <Button size="sm" :disabled="creating" @click="createTable"><Plus class="size-4" /> {{ creating ? t('betting.generating') : t('betting.newTable') }}</Button>
       </div>
     </div>
@@ -219,33 +156,19 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
       <Table>
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
-            <TableHead class="w-10">
-              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" :aria-label="t('betting.selectAll')" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
-            </TableHead>
-            <TableHead>
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('title')?.toggleSorting()">{{ t('betting.col.title') }} <component :is="sortIcon('title')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
-            <TableHead v-if="vis('status')" class="w-32">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">{{ t('betting.col.status') }} <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
-            <TableHead v-if="vis('candidate_count')" class="w-28 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('candidate_count')?.toggleSorting()">{{ t('betting.col.candidates') }} <component :is="sortIcon('candidate_count')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
-            <TableHead v-if="vis('vote_count')" class="w-24 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('vote_count')?.toggleSorting()">{{ t('betting.col.votes') }} <component :is="sortIcon('vote_count')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
+            <TableHead class="w-10"><SelectAllCheckbox :table="table" :aria-label="t('betting.selectAll')" /></TableHead>
+            <TableHead><SortHeaderButton :table="table" column="title" :label="t('betting.col.title')" /></TableHead>
+            <TableHead v-if="vis('status')" class="w-32"><SortHeaderButton :table="table" column="status" :label="t('betting.col.status')" /></TableHead>
+            <TableHead v-if="vis('candidate_count')" class="w-28 text-right"><SortHeaderButton :table="table" column="candidate_count" :label="t('betting.col.candidates')" /></TableHead>
+            <TableHead v-if="vis('vote_count')" class="w-24 text-right"><SortHeaderButton :table="table" column="vote_count" :label="t('betting.col.votes')" /></TableHead>
             <TableHead v-if="vis('owner')" class="w-32">{{ t('betting.col.owner') }}</TableHead>
-            <TableHead v-if="vis('generated_at')" class="w-28 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('generated_at')?.toggleSorting()">{{ t('betting.col.created') }} <component :is="sortIcon('generated_at')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
+            <TableHead v-if="vis('generated_at')" class="w-28 text-right"><SortHeaderButton :table="table" column="generated_at" :label="t('betting.col.created')" /></TableHead>
             <TableHead class="w-10" />
           </TableRow>
         </TableHeader>
         <TableBody>
           <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
-            <TableCell @click.stop>
-              <Checkbox :model-value="row.getIsSelected()" :aria-label="t('betting.selectRow')" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
-            </TableCell>
+            <TableCell @click.stop><SelectRowCheckbox :row="row" :aria-label="t('betting.selectRow')" /></TableCell>
             <TableCell>
               <div class="flex items-center gap-2 font-medium">
                 {{ row.original.title }}
@@ -287,27 +210,12 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
     </div>
 
     <!-- Footer / pagination -->
-    <div class="flex items-center justify-between gap-4 text-sm">
-      <div class="text-muted-foreground">{{ t('betting.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length }) }}</div>
-      <div class="flex items-center gap-6">
-        <div class="flex items-center gap-2">
-          <span class="text-muted-foreground hidden sm:inline">{{ t('betting.rowsPerPage') }}</span>
-          <Select :model-value="String(table.getState().pagination.pageSize)" @update:model-value="(v: any) => table.setPageSize(Number(v))">
-            <SelectTrigger size="sm" class="w-16"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="n in [10, 20, 30, 50]" :key="n" :value="String(n)">{{ n }}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div class="text-muted-foreground tabular-nums">{{ t('betting.page', { page: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) }) }}</div>
-        <div class="flex items-center gap-1">
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.setPageIndex(0)"><ChevronFirst class="size-4" /></Button>
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.previousPage()"><ChevronLeft class="size-4" /></Button>
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanNextPage()" @click="table.nextPage()"><ChevronRight class="size-4" /></Button>
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanNextPage()" @click="table.setPageIndex(table.getPageCount() - 1)"><ChevronLast class="size-4" /></Button>
-        </div>
-      </div>
-    </div>
+    <DataTablePagination
+      :table="table"
+      :selected-label="t('betting.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })"
+      :rows-per-page-label="t('betting.rowsPerPage')"
+      :page-label="t('betting.page', { page: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) })"
+    />
 
     <p v-if="role !== 'owner'" class="text-xs text-muted-foreground">{{ t('betting.voterHint') }}</p>
 

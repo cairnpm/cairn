@@ -1,23 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import {
-  type ColumnDef, type ColumnFiltersState, type SortingState, type VisibilityState,
-  getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useVueTable,
-} from '@tanstack/vue-table'
-import {
-  ArrowDown, ArrowUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
-  ChevronsUpDown, Columns3, ExternalLink,
-} from 'lucide-vue-next'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { type ColumnDef } from '@tanstack/vue-table'
+import { ExternalLink } from 'lucide-vue-next'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDate } from '~/utils/time'
 import type { HillDetailData } from '~/types/hill'
 
@@ -56,80 +42,29 @@ const FILTERS = computed(() => [
   { key: 'closed', label: t('hill.filter.closed'), n: counts.value.closed },
 ])
 
-function valueUpdater<T>(u: T | ((old: T) => T), r: { value: T }) {
-  r.value = typeof u === 'function' ? (u as (o: T) => T)(r.value) : u
-}
-const sorting = ref<SortingState>([{ id: 'period', desc: true }])
-const columnFilters = ref<ColumnFiltersState>([])
-const columnVisibility = ref<VisibilityState>({})
-const rowSelection = ref({})
-
 const COL_LABEL = computed<Record<string, string>>(() => ({ name: 'Hill', status: t('hill.col.status'), progress: t('hill.col.progress'), period: t('hill.col.period') }))
 const columns: ColumnDef<HillRow>[] = [
-  { id: 'name', accessorKey: 'name', header: 'Hill', enableHiding: false },
-  { id: 'status', accessorKey: 'status', header: t('hill.col.status'), filterFn: (row, _id, val) => row.getValue('status') === val },
-  { id: 'progress', accessorFn: r => (r.total ? r.done / r.total : 0), header: t('hill.col.progress') },
-  { id: 'period', accessorFn: r => r.starts_at || '', header: t('hill.col.period') },
+  { id: 'name', accessorKey: 'name', enableHiding: false },
+  { id: 'status', accessorKey: 'status', filterFn: (row, _id, val) => row.getValue('status') === val },
+  { id: 'progress', accessorFn: r => (r.total ? r.done / r.total : 0) },
+  { id: 'period', accessorFn: r => r.starts_at || '' },
 ]
 
-const table = useVueTable({
-  get data() { return hills.value },
+const { table, vis, hideableCols } = useDataTable({
+  data: hills,
   columns,
-  state: {
-    get sorting() { return sorting.value },
-    get columnFilters() { return columnFilters.value },
-    get columnVisibility() { return columnVisibility.value },
-    get rowSelection() { return rowSelection.value },
-  },
-  getRowId: row => row.id,
-  enableRowSelection: true,
-  onSortingChange: u => valueUpdater(u, sorting),
-  onColumnFiltersChange: u => valueUpdater(u, columnFilters),
-  onColumnVisibilityChange: u => valueUpdater(u, columnVisibility),
-  onRowSelectionChange: u => valueUpdater(u, rowSelection),
-  getCoreRowModel: getCoreRowModel(),
-  getSortedRowModel: getSortedRowModel(),
-  getFilteredRowModel: getFilteredRowModel(),
-  getPaginationRowModel: getPaginationRowModel(),
-  initialState: { pagination: { pageSize: 10 } },
+  initialSort: [{ id: 'period', desc: true }],
+  statusFilter,
+  mapStatusValue: v => (v === 'all' ? undefined : v),
 })
-
-watch(statusFilter, (v) => {
-  table.getColumn('status')?.setFilterValue(v === 'all' ? undefined : v)
-}, { immediate: true })
-
-const hideableCols = computed(() => table.getAllColumns().filter(c => c.getCanHide()))
-function sortIcon(id: string) {
-  const s = table.getColumn(id)?.getIsSorted()
-  return s === 'asc' ? ArrowUp : s === 'desc' ? ArrowDown : ChevronsUpDown
-}
-function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
 </script>
 
 <template>
   <div class="flex h-full flex-col gap-4 overflow-hidden p-4">
     <!-- Toolbar -->
     <div class="flex items-center justify-between gap-2">
-      <Tabs :model-value="statusFilter" @update:model-value="(v) => statusFilter = String(v)">
-        <TabsList>
-          <TabsTrigger v-for="f in FILTERS" :key="f.key" :value="f.key" class="group gap-1.5">
-            {{ f.label }}
-            <Badge variant="secondary" class="h-5 min-w-5 justify-center rounded-full border-transparent bg-background px-1.5 tabular-nums text-foreground group-data-[state=active]:bg-muted">{{ f.n }}</Badge>
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <DropdownMenu>
-        <DropdownMenuTrigger as-child>
-          <Button variant="outline" size="sm"><Columns3 class="size-4" /> {{ t('hill.columns') }} <ChevronsUpDown class="size-4 opacity-50" /></Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" class="w-40">
-          <DropdownMenuCheckboxItem
-            v-for="col in hideableCols" :key="col.id"
-            class="capitalize" :model-value="col.getIsVisible()"
-            @update:model-value="(v: boolean) => col.toggleVisibility(!!v)"
-          >{{ COL_LABEL[col.id] || col.id }}</DropdownMenuCheckboxItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <StatusFilterTabs v-model="statusFilter" :filters="FILTERS" />
+      <ColumnToggle :columns="hideableCols" :labels="COL_LABEL" :button-text="t('hill.columns')" />
     </div>
 
     <!-- Table -->
@@ -137,28 +72,16 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
       <Table>
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
-            <TableHead class="w-10">
-              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" :aria-label="t('hill.selectAll')" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
-            </TableHead>
-            <TableHead>
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('name')?.toggleSorting()">Hill <component :is="sortIcon('name')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
-            <TableHead v-if="vis('status')" class="w-28">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">{{ t('hill.col.status') }} <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
-            <TableHead v-if="vis('progress')" class="w-48">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('progress')?.toggleSorting()">{{ t('hill.col.progress') }} <component :is="sortIcon('progress')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
-            <TableHead v-if="vis('period')" class="w-44">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('period')?.toggleSorting()">{{ t('hill.col.period') }} <component :is="sortIcon('period')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
+            <TableHead class="w-10"><SelectAllCheckbox :table="table" :aria-label="t('hill.selectAll')" /></TableHead>
+            <TableHead><SortHeaderButton :table="table" column="name" label="Hill" /></TableHead>
+            <TableHead v-if="vis('status')" class="w-28"><SortHeaderButton :table="table" column="status" :label="t('hill.col.status')" /></TableHead>
+            <TableHead v-if="vis('progress')" class="w-48"><SortHeaderButton :table="table" column="progress" :label="t('hill.col.progress')" /></TableHead>
+            <TableHead v-if="vis('period')" class="w-44"><SortHeaderButton :table="table" column="period" :label="t('hill.col.period')" /></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
-            <TableCell @click.stop>
-              <Checkbox :model-value="row.getIsSelected()" :aria-label="t('hill.selectRow')" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
-            </TableCell>
+            <TableCell @click.stop><SelectRowCheckbox :row="row" :aria-label="t('hill.selectRow')" /></TableCell>
             <TableCell>
               <span class="mr-2 font-mono text-xs text-muted-foreground">{{ shortId(row.original.id) }}</span>
               <span class="font-medium">{{ row.original.name }}</span>
@@ -180,27 +103,12 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
     </div>
 
     <!-- Footer / pagination -->
-    <div class="flex items-center justify-between gap-4 text-sm">
-      <div class="text-muted-foreground">{{ t('hill.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length }) }}</div>
-      <div class="flex items-center gap-6">
-        <div class="flex items-center gap-2">
-          <span class="text-muted-foreground hidden sm:inline">{{ t('hill.rowsPerPage') }}</span>
-          <Select :model-value="String(table.getState().pagination.pageSize)" @update:model-value="(v: any) => table.setPageSize(Number(v))">
-            <SelectTrigger size="sm" class="w-16"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="n in [10, 20, 30, 50]" :key="n" :value="String(n)">{{ n }}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div class="text-muted-foreground tabular-nums">{{ t('hill.pageOf', { n: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) }) }}</div>
-        <div class="flex items-center gap-1">
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.setPageIndex(0)"><ChevronFirst class="size-4" /></Button>
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.previousPage()"><ChevronLeft class="size-4" /></Button>
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanNextPage()" @click="table.nextPage()"><ChevronRight class="size-4" /></Button>
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanNextPage()" @click="table.setPageIndex(table.getPageCount() - 1)"><ChevronLast class="size-4" /></Button>
-        </div>
-      </div>
-    </div>
+    <DataTablePagination
+      :table="table"
+      :selected-label="t('hill.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })"
+      :rows-per-page-label="t('hill.rowsPerPage')"
+      :page-label="t('hill.pageOf', { n: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) })"
+    />
 
     <!-- Quick-view Sheet -->
     <Sheet v-model:open="sheetOpen">

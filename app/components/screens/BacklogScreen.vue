@@ -1,30 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import {
-  type ColumnDef, type ColumnFiltersState, type SortingState, type VisibilityState,
-  getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useVueTable,
-} from '@tanstack/vue-table'
-import {
-  ArrowDown, ArrowUp, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight,
-  ChevronsUpDown, Columns3, ExternalLink, MoreHorizontal, RotateCcw, Trash2,
-} from 'lucide-vue-next'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { type ColumnDef } from '@tanstack/vue-table'
+import { ExternalLink, MoreHorizontal, RotateCcw, Trash2 } from 'lucide-vue-next'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { keepOverlayOpen } from '~/utils/overlay'
 import { formatDate } from '~/utils/time'
 
 interface Feature {
@@ -80,20 +66,15 @@ async function restore(id: string) {
   try { await mutate(`/api/features/${id}/restore`, { invalidates: [qk.features, qk.overview], success: t('backlog.toastRestored') }) } finally { restoring.value = false }
 }
 
-// ── @tanstack/vue-table ───────────────────────────────────────────────────
-function valueUpdater<T>(updaterOrValue: T | ((old: T) => T), ref: { value: T }) {
-  ref.value = typeof updaterOrValue === 'function' ? (updaterOrValue as (o: T) => T)(ref.value) : updaterOrValue
-}
-const sorting = ref<SortingState>([{ id: 'updated_at', desc: true }])
-const columnFilters = ref<ColumnFiltersState>([])
-const columnVisibility = ref<VisibilityState>({})
-const rowSelection = ref({})
+// ── Table ─────────────────────────────────────────────────────────────────
+// Backlog's status filter lives in the store (so it survives navigation); expose a writable model.
+const statusModel = computed({ get: () => statusFilter.value, set: (v: string) => bike.setStatusFilter(v) })
 
 const COL_LABEL = computed<Record<string, string>>(() => ({ title: t('backlog.col.title'), status: t('backlog.col.status'), signal_count: t('backlog.col.signals'), shapers: 'Shapers', hill: 'Hill', updated_at: t('backlog.col.updated'), actor: t('backlog.col.actor') }))
 const columns: ColumnDef<Feature>[] = [
-  { id: 'title', accessorKey: 'title', header: 'Feature', enableHiding: false },
+  { id: 'title', accessorKey: 'title', enableHiding: false },
   {
-    id: 'status', accessorKey: 'status', header: 'Statut',
+    id: 'status', accessorKey: 'status',
     filterFn: (row, _id, val) => {
       const s = row.getValue('status') as string
       if (val === 'all') return s !== 'deleted'
@@ -101,46 +82,20 @@ const columns: ColumnDef<Feature>[] = [
       return s === val
     },
   },
-  { id: 'signal_count', accessorKey: 'signal_count', header: 'Signaux' },
-  { id: 'shapers', accessorFn: r => r.shapers?.length ?? 0, header: 'Shapers', enableSorting: false },
-  { id: 'hill', accessorFn: r => r.hill_name || '', header: 'Hill' },
-  { id: 'updated_at', accessorKey: 'updated_at', header: 'Modifié' },
-  { id: 'actor', accessorFn: r => r.last_actor || '', header: 'Auteur', enableSorting: false },
+  { id: 'signal_count', accessorKey: 'signal_count' },
+  { id: 'shapers', accessorFn: r => r.shapers?.length ?? 0, enableSorting: false },
+  { id: 'hill', accessorFn: r => r.hill_name || '' },
+  { id: 'updated_at', accessorKey: 'updated_at' },
+  { id: 'actor', accessorFn: r => r.last_actor || '', enableSorting: false },
 ]
 
-const table = useVueTable({
-  get data() { return features.value },
+// Backlog's filterFn handles the 'all'/'deleted' tabs itself, so the raw value is forwarded as-is.
+const { table, vis, hideableCols } = useDataTable({
+  data: features,
   columns,
-  state: {
-    get sorting() { return sorting.value },
-    get columnFilters() { return columnFilters.value },
-    get columnVisibility() { return columnVisibility.value },
-    get rowSelection() { return rowSelection.value },
-  },
-  getRowId: row => row.id,
-  enableRowSelection: true,
-  onSortingChange: u => valueUpdater(u, sorting),
-  onColumnFiltersChange: u => valueUpdater(u, columnFilters),
-  onColumnVisibilityChange: u => valueUpdater(u, columnVisibility),
-  onRowSelectionChange: u => valueUpdater(u, rowSelection),
-  getCoreRowModel: getCoreRowModel(),
-  getSortedRowModel: getSortedRowModel(),
-  getFilteredRowModel: getFilteredRowModel(),
-  getPaginationRowModel: getPaginationRowModel(),
-  initialState: { pagination: { pageSize: 10 } },
+  initialSort: [{ id: 'updated_at', desc: true }],
+  statusFilter,
 })
-
-// Status filter Tabs drive the 'status' column filter (custom filterFn handles 'all'/'deleted').
-watch(statusFilter, (v) => {
-  table.getColumn('status')?.setFilterValue(v)
-}, { immediate: true })
-
-const hideableCols = computed(() => table.getAllColumns().filter(c => c.getCanHide()))
-function sortIcon(id: string) {
-  const s = table.getColumn(id)?.getIsSorted()
-  return s === 'asc' ? ArrowUp : s === 'desc' ? ArrowDown : ChevronsUpDown
-}
-function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
 
 // ── Detail Sheet ──────────────────────────────────────────────────────────
 interface FeatureFull extends Feature { solution: string | null; rabbit_holes: string | null; out_of_bounds: string | null }
@@ -168,26 +123,8 @@ const open = computed({
   <div class="flex h-full flex-col gap-4 overflow-hidden p-4">
     <!-- Toolbar -->
     <div class="flex items-center justify-between gap-2">
-      <Tabs :model-value="statusFilter" @update:model-value="bike.setStatusFilter(String($event))">
-        <TabsList>
-          <TabsTrigger v-for="f in FILTERS" :key="f.key" :value="f.key" class="group gap-1.5">
-            {{ f.label }}
-            <Badge variant="secondary" class="h-5 min-w-5 justify-center rounded-full border-transparent bg-background px-1.5 tabular-nums text-foreground group-data-[state=active]:bg-muted">{{ f.n }}</Badge>
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <DropdownMenu>
-        <DropdownMenuTrigger as-child>
-          <Button variant="outline" size="sm"><Columns3 class="size-4" /> {{ t('backlog.columns') }} <ChevronsUpDown class="size-4 opacity-50" /></Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" class="w-40">
-          <DropdownMenuCheckboxItem
-            v-for="col in hideableCols" :key="col.id"
-            class="capitalize" :model-value="col.getIsVisible()"
-            @update:model-value="(v: boolean) => col.toggleVisibility(!!v)"
-          >{{ COL_LABEL[col.id] || col.id }}</DropdownMenuCheckboxItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <StatusFilterTabs v-model="statusModel" :filters="FILTERS" />
+      <ColumnToggle :columns="hideableCols" :labels="COL_LABEL" :button-text="t('backlog.columns')" />
     </div>
 
     <!-- Table -->
@@ -195,25 +132,13 @@ const open = computed({
       <Table class="table-fixed">
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
-            <TableHead class="w-10">
-              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" :aria-label="t('backlog.selectAll')" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
-            </TableHead>
-            <TableHead>
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('title')?.toggleSorting()">{{ t('backlog.col.title') }} <component :is="sortIcon('title')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
-            <TableHead v-if="vis('status')" class="w-28">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">{{ t('backlog.col.status') }} <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
-            <TableHead v-if="vis('signal_count')" class="w-24 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('signal_count')?.toggleSorting()">{{ t('backlog.col.signals') }} <component :is="sortIcon('signal_count')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
+            <TableHead class="w-10"><SelectAllCheckbox :table="table" :aria-label="t('backlog.selectAll')" /></TableHead>
+            <TableHead><SortHeaderButton :table="table" column="title" :label="t('backlog.col.title')" /></TableHead>
+            <TableHead v-if="vis('status')" class="w-28"><SortHeaderButton :table="table" column="status" :label="t('backlog.col.status')" /></TableHead>
+            <TableHead v-if="vis('signal_count')" class="w-24 text-right"><SortHeaderButton :table="table" column="signal_count" :label="t('backlog.col.signals')" /></TableHead>
             <TableHead v-if="vis('shapers')" class="w-28">Shapers</TableHead>
-            <TableHead v-if="vis('hill')" class="w-44">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('hill')?.toggleSorting()">Hill <component :is="sortIcon('hill')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
-            <TableHead v-if="vis('updated_at')" class="w-28 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('updated_at')?.toggleSorting()">{{ t('backlog.col.updated') }} <component :is="sortIcon('updated_at')" class="size-3.5 opacity-60" /></button>
-            </TableHead>
+            <TableHead v-if="vis('hill')" class="w-44"><SortHeaderButton :table="table" column="hill" label="Hill" /></TableHead>
+            <TableHead v-if="vis('updated_at')" class="w-28 text-right"><SortHeaderButton :table="table" column="updated_at" :label="t('backlog.col.updated')" /></TableHead>
             <TableHead v-if="vis('actor')" class="w-32">{{ t('backlog.col.actor') }}</TableHead>
             <TableHead class="w-10" />
           </TableRow>
@@ -225,9 +150,7 @@ const open = computed({
             class="cursor-pointer"
             @click="bike.selectFeature(row.original.id)"
           >
-            <TableCell @click.stop>
-              <Checkbox :model-value="row.getIsSelected()" :aria-label="t('backlog.selectRow')" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
-            </TableCell>
+            <TableCell @click.stop><SelectRowCheckbox :row="row" :aria-label="t('backlog.selectRow')" /></TableCell>
             <TableCell>
               <div class="flex items-center gap-2 font-medium">
                 <span class="truncate">{{ row.original.title }}</span>
@@ -274,29 +197,12 @@ const open = computed({
     </div>
 
     <!-- Footer / pagination -->
-    <div class="flex items-center justify-between gap-4 text-sm">
-      <div class="text-muted-foreground">
-        {{ t('backlog.rowsSelected', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length }) }}
-      </div>
-      <div class="flex items-center gap-6">
-        <div class="flex items-center gap-2">
-          <span class="text-muted-foreground hidden sm:inline">{{ t('backlog.rowsPerPage') }}</span>
-          <Select :model-value="String(table.getState().pagination.pageSize)" @update:model-value="(v: any) => table.setPageSize(Number(v))">
-            <SelectTrigger size="sm" class="w-16"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem v-for="n in [10, 20, 30, 50]" :key="n" :value="String(n)">{{ n }}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div class="text-muted-foreground tabular-nums">{{ t('backlog.page', { current: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) }) }}</div>
-        <div class="flex items-center gap-1">
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.setPageIndex(0)"><ChevronFirst class="size-4" /></Button>
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.previousPage()"><ChevronLeft class="size-4" /></Button>
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanNextPage()" @click="table.nextPage()"><ChevronRight class="size-4" /></Button>
-          <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanNextPage()" @click="table.setPageIndex(table.getPageCount() - 1)"><ChevronLast class="size-4" /></Button>
-        </div>
-      </div>
-    </div>
+    <DataTablePagination
+      :table="table"
+      :selected-label="t('backlog.rowsSelected', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })"
+      :rows-per-page-label="t('backlog.rowsPerPage')"
+      :page-label="t('backlog.page', { current: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) })"
+    />
 
     <!-- Detail Sheet -->
     <Sheet v-model:open="open">
