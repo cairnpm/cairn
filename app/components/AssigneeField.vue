@@ -17,7 +17,7 @@ const available = computed(() => props.members.filter(m => !props.assignees.some
 
 <template>
   <div>
-    <div class="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ label }}</div>
+    <SectionLabel class="mb-1.5">{{ label }}</SectionLabel>
     <div class="flex flex-wrap items-center gap-1.5">
       <span v-for="a in assignees" :key="a.user_id" class="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 py-0.5 pl-0.5 pr-2 text-sm">
         <UserAvatar :name="a.name" :src="a.avatar_url" class="size-5" />

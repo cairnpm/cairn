@@ -50,10 +50,10 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
     <ScrollArea class="min-h-0 flex-1">
       <div class="p-6">
         <div v-if="data.hill.rationale" class="mb-6">
-          <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('hill.whyCycle') }}</div>
+          <SectionLabel class="mb-2">{{ t('hill.whyCycle') }}</SectionLabel>
           <p class="rounded-md border bg-muted/40 p-3 text-sm leading-relaxed">{{ data.hill.rationale }}</p>
         </div>
-        <div class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('hill.betFeatures', { n: total }) }}</div>
+        <SectionLabel class="mb-3">{{ t('hill.betFeatures', { n: total }) }}</SectionLabel>
         <div class="rounded-lg border">
           <Table class="table-fixed">
             <TableHeader>
@@ -70,10 +70,7 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
                 <TableCell class="font-medium"><div class="truncate">{{ f.title }}</div></TableCell>
                 <TableCell><StatusBadge :status="f.status" /></TableCell>
                 <TableCell>
-                  <div v-if="f.builders?.length" class="flex items-center">
-                    <UserAvatar v-for="b in f.builders" :key="b.user_id" :name="b.name" :src="b.avatar_url" class="-mr-1.5 size-6 ring-2 ring-background" />
-                  </div>
-                  <span v-else class="text-xs text-muted-foreground">—</span>
+                  <AvatarStack :people="(f.builders ?? []).map(b => ({ name: b.name, src: b.avatar_url, key: b.user_id }))" />
                 </TableCell>
                 <TableCell class="text-muted-foreground text-xs"><div class="truncate">{{ f.decision?.rationale || '—' }}</div></TableCell>
                 <TableCell @click.stop>

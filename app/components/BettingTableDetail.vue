@@ -43,7 +43,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
       <!-- Left: candidates -->
       <ScrollArea class="min-h-0">
         <div class="p-6">
-          <div class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('betting.candidates') }} ({{ data.candidates.length }})</div>
+          <SectionLabel class="mb-3">{{ t('betting.candidates') }} ({{ data.candidates.length }})</SectionLabel>
           <div class="rounded-lg border">
             <Table class="table-fixed">
               <TableHeader>
@@ -64,10 +64,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
                     <div v-if="!compact" class="truncate text-xs text-muted-foreground">{{ c.problem_snap }}</div>
                   </TableCell>
                   <TableCell>
-                    <div v-if="c.voters.length" class="flex items-center">
-                      <UserAvatar v-for="v in c.voters" :key="v" :name="v" class="-mr-1.5 size-5 ring-2 ring-background" />
-                    </div>
-                    <span v-else class="text-xs text-muted-foreground">—</span>
+                    <AvatarStack :people="c.voters.map(v => ({ name: v }))" :size="5" />
                   </TableCell>
                   <TableCell><Badge variant="outline">{{ impact(c.score) }}</Badge></TableCell>
                   <TableCell class="text-right" @click.stop><slot name="candidate-action" :candidate="c" /></TableCell>
@@ -81,26 +78,9 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
         </div>
       </ScrollArea>
 
-      <!-- Right: timeline (plain) -->
+      <!-- Right: timeline -->
       <aside class="min-h-0 border-t bg-muted/20 md:border-l md:border-t-0">
-        <ScrollArea class="h-full">
-          <div class="p-6">
-            <div class="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('betting.timeline') }} ({{ data.events.length }})</div>
-            <div class="relative flex flex-col gap-4">
-              <div v-for="(e, i) in data.events" :key="e.seq" class="flex gap-2.5">
-                <div class="relative flex flex-col items-center">
-                  <UserAvatar :name="e.actor" class="size-6 shrink-0" />
-                  <div v-if="i < data.events.length - 1" class="mt-1 w-px flex-1 bg-border" />
-                </div>
-                <div class="min-w-0 pb-1 text-sm">
-                  <div class="leading-snug">{{ e.summary }}</div>
-                  <TimeAgo :date="e.created_at" class="mt-0.5 block text-xs text-muted-foreground" />
-                </div>
-              </div>
-              <div v-if="!data.events.length" class="text-sm text-muted-foreground">{{ t('betting.noActivity') }}</div>
-            </div>
-          </div>
-        </ScrollArea>
+        <ActivityTimeline :events="data.events" :title="t('betting.timeline')" :empty-text="t('betting.noActivity')" />
       </aside>
     </div>
   </div>

@@ -42,10 +42,6 @@ const sheetOpen = computed({
   set: (v: boolean) => { if (!v) selectedId.value = null },
 })
 const featPeek = ref<string | null>(null)
-function keepSheetOpen(e: any) {
-  const t = (e?.detail?.originalEvent?.target ?? e?.target) as HTMLElement | null
-  if (t?.closest?.('[role="menu"],[role="dialog"],[role="alertdialog"],[data-reka-popper-content-wrapper]')) e.preventDefault()
-}
 
 const statusFilter = useState<string>('bike-hills-filter', () => 'all')
 const counts = computed(() => {
@@ -208,7 +204,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
 
     <!-- Quick-view Sheet -->
     <Sheet v-model:open="sheetOpen">
-      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepSheetOpen" @focus-outside="keepSheetOpen">
+      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
         <template v-if="detail">
           <SheetTitle class="sr-only">{{ detail.hill.name }}</SheetTitle>
           <NuxtLink

@@ -64,17 +64,17 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
             <AssigneeField label="Builders" :assignees="builders" :members="members" @add="assign('POST', 'builder', $event)" @remove="assign('DELETE', 'builder', $event)" />
           </div>
           <div v-for="p in PITCH" :key="p" v-show="detail.feature[p]">
-            <div class="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.pitch.' + p) }}</div>
+            <SectionLabel class="mb-1">{{ t('feature.pitch.' + p) }}</SectionLabel>
             <p class="leading-relaxed">{{ detail.feature[p] }}</p>
           </div>
           <div v-if="detail.attachments.length">
-            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.attachments') }}</div>
+            <SectionLabel class="mb-2">{{ t('feature.attachments') }}</SectionLabel>
             <div class="flex flex-wrap gap-2">
               <AttachmentPreview v-for="a in detail.attachments" :key="a.id" :attachment="a" size="size-16" />
             </div>
           </div>
           <div v-if="detail.feedback.length">
-            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.signals') }} ({{ detail.feedback.length }})</div>
+            <SectionLabel class="mb-2">{{ t('feature.signals') }} ({{ detail.feedback.length }})</SectionLabel>
             <div class="flex flex-col gap-2">
               <div v-for="fb in detail.feedback" :key="fb.id" class="rounded-md border bg-muted/40 p-3">
                 <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -91,7 +91,7 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
             </div>
           </div>
           <div v-if="detail.decisions.length">
-            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.decisions') }}</div>
+            <SectionLabel class="mb-2">{{ t('feature.decisions') }}</SectionLabel>
             <div v-for="d in detail.decisions" :key="d.id" class="mb-2 rounded-md border bg-muted/40 p-3">
               <div class="mb-1 flex items-center gap-2"><Badge variant="secondary" class="capitalize">{{ d.verdict }}</Badge><TimeAgo :date="d.decided_at" class="text-xs text-muted-foreground" /></div>
               <p>{{ d.rationale }}</p>
@@ -99,7 +99,7 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
             </div>
           </div>
           <div v-if="detail.pr_links.length">
-            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.prGithub') }}</div>
+            <SectionLabel class="mb-2">{{ t('feature.prGithub') }}</SectionLabel>
             <a v-for="p in detail.pr_links" :key="p.id" :href="p.pr_url" target="_blank" class="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground">
               <ExternalLink class="size-3" />{{ p.repo }}#{{ p.pr_number }} · {{ p.status }}
             </a>
@@ -108,24 +108,7 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
       </ScrollArea>
 
       <aside class="min-h-0 border-t bg-muted/20 md:border-l md:border-t-0">
-        <ScrollArea class="h-full">
-          <div class="p-6">
-            <div class="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.activity') }} ({{ events.length }})</div>
-            <div class="relative flex flex-col gap-4">
-              <div v-for="(e, i) in events" :key="e.seq" class="flex gap-2.5">
-                <div class="relative flex flex-col items-center">
-                  <UserAvatar :name="e.actor" class="size-6 shrink-0" />
-                  <div v-if="i < events.length - 1" class="mt-1 w-px flex-1 bg-border" />
-                </div>
-                <div class="min-w-0 pb-1 text-sm">
-                  <div class="leading-snug">{{ e.summary }}</div>
-                  <TimeAgo :date="e.created_at" class="mt-0.5 block text-xs text-muted-foreground" />
-                </div>
-              </div>
-              <div v-if="!events.length" class="text-sm text-muted-foreground">{{ t('feature.noActivity') }}</div>
-            </div>
-          </div>
-        </ScrollArea>
+        <ActivityTimeline :events="events" :title="t('feature.activity')" :empty-text="t('feature.noActivity')" />
       </aside>
     </div>
   </div>

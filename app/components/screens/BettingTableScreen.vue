@@ -13,7 +13,7 @@ const { t } = useUiLang()
 const bike = useCairn()
 const { author, role, selectedBettingTable } = bike
 const id = selectedBettingTable
-const { data } = await useApiData<BettingTableDetailData>(qk.bettingTableDetail, () => `/api/betting-tables/${id.value}`)
+const { data, error } = await useApiData<BettingTableDetailData>(qk.bettingTableDetail, () => `/api/betting-tables/${id.value}`)
 const { mutate } = useApiMutation()
 function onValidated() { return invalidate(qk.bettingTableDetail, qk.bettingTables, qk.hills, qk.features, qk.overview) }
 
@@ -57,7 +57,8 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
 </script>
 
 <template>
-  <div v-if="data" class="h-full">
+  <DetailState :has-data="!!data" :error="error" :loading-text="t('common.loading')" :not-found-text="t('betting.notFound')">
+    <div v-if="data" class="h-full">
     <BettingTableDetail :data="data" @select-feature="featPeek = $event">
       <template #header-action>
         <DropdownMenu>
@@ -101,5 +102,6 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  </div>
+    </div>
+  </DetailState>
 </template>

@@ -2,6 +2,7 @@
 import { onUnmounted, ref, watchEffect } from 'vue'
 import type { HillDetailData } from '~/types/hill'
 
+const { t } = useUiLang()
 const bike = useCairn()
 const { selectedHill } = bike
 const { data, error } = await useApiData<HillDetailData>(qk.hillDetail, () => `/api/hills/${selectedHill.value}`)
@@ -15,11 +16,8 @@ const featPeek = ref<string | null>(null)
 </script>
 
 <template>
-  <div class="h-full">
+  <DetailState :has-data="!!data" :error="error" :loading-text="t('common.loading')" :not-found-text="t('hill.notFound')">
     <HillDetail v-if="data" :data="data" @select-feature="featPeek = $event" />
-    <div v-else class="flex h-full items-center justify-center text-sm text-muted-foreground">
-      {{ error ? 'Hill introuvable.' : 'Chargement…' }}
-    </div>
     <FeatureDetailOverlay v-model:feature-id="featPeek" mode="sheet" />
-  </div>
+  </DetailState>
 </template>

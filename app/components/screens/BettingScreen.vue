@@ -92,13 +92,6 @@ async function vote(candidateId: string) {
   } finally { voting.value = false }
 }
 
-// Menus/dialogs opened from inside the Sheet portal their content outside the focus trap; without
-// this the Sheet would dismiss itself when they are clicked. Keep it open for those interactions.
-function keepSheetOpenOnMenu(e: any) {
-  const t = (e?.detail?.originalEvent?.target ?? e?.target) as HTMLElement | null
-  if (t?.closest?.('[role="menu"],[role="dialog"],[role="alertdialog"],[data-reka-popper-content-wrapper],[data-radix-popper-content-wrapper]')) e.preventDefault()
-}
-
 // Validate from the Sheet (owner). Mirrors the dedicated page.
 const validateOpen = ref(false)
 // Peek a candidate's feature as a modal Dialog (we're already in a Sheet).
@@ -320,7 +313,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
 
     <!-- Quick-view Sheet -->
     <Sheet v-model:open="sheetOpen">
-      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepSheetOpenOnMenu" @focus-outside="keepSheetOpenOnMenu">
+      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
         <template v-if="detail">
           <SheetTitle class="sr-only">{{ detail.table.title }}</SheetTitle>
           <DropdownMenu>

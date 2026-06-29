@@ -46,7 +46,7 @@ async function restore() {
 </script>
 
 <template>
-  <div class="h-full">
+  <DetailState :has-data="!!detail" :error="error" :loading-text="t('common.loading')" :not-found-text="t('feature.notFound')">
     <FeatureDetail v-if="detail" :detail="detail">
       <template #header-action>
         <DropdownMenu>
@@ -60,9 +60,6 @@ async function restore() {
         </DropdownMenu>
       </template>
     </FeatureDetail>
-    <div v-else class="flex h-full items-center justify-center text-sm text-muted-foreground">
-      {{ error ? t('feature.notFound') : t('feature.loading') }}
-    </div>
 
     <AlertDialog v-model:open="confirmOpen">
       <AlertDialogContent>
@@ -78,5 +75,5 @@ async function restore() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  </div>
+  </DetailState>
 </template>
