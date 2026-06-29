@@ -1,0 +1,42 @@
+name: 🐛 Bug report
+description: Something is broken or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. See …
+    validations:
+      required: true
+  - type: dropdown
+    id: how
+    attributes:
+      label: How are you running Cairn?
+      options:
+        - Self-hosted (Docker)
+        - Self-hosted (Fly.io)
+        - Local dev (pnpm dev)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `git rev-parse --short HEAD`, or the release tag.
+  - type: textarea
+    id: context
+    attributes:
+      label: Logs / screenshots
+      description: Relevant server logs or a screenshot. Redact any API keys or secrets.

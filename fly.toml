@@ -1,0 +1,26 @@
+# Fly.io configuration for a self-hosted Cairn instance.
+# SQLite is single-writer → run exactly ONE machine (no horizontal scaling).
+app = "cairn"
+primary_region = "cdg"
+
+[build]
+
+[env]
+  PORT = "3000"
+  NUXT_DB_URL = "file:/data/app.db"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 1
+
+# Persistent volume for the SQLite database + uploaded files.
+[[mounts]]
+  source = "cairn_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

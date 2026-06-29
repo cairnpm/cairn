@@ -1,74 +1,126 @@
-# Cairn — Product OS
+<p align="center">
+  <img src="./public/apple-touch-icon.png" width="84" alt="Cairn" />
+</p>
 
-A constrained Shape Up product pipeline. This repo currently holds the **UI shell** —
-the read-only views and the conversational intake surface — mirroring the
-**minnanonihongo** technical stack. The write gateway + DB land next (see the brief).
+<h1 align="center">Cairn</h1>
 
-## Stack (ISO)
+<p align="center">
+  <strong>The PM agent that turns scattered feedback into a clear roadmap.</strong><br/>
+  An open, self-hosted Product OS built on Shape Up — not another feature factory.
+</p>
 
-- **Nuxt 4** + **Tailwind v4** (`@tailwindcss/vite`)
-- **shadcn-vue** (`shadcn-nuxt`, new-york style, neutral base) — `Button`, `Card`,
-  `Input`, `Sheet`, `Table`, `Tabs`
-- **Inter** type, real **file-based routing** (one page per screen)
+<p align="center">
+  <a href="./DEPLOY.md">Self-host</a> ·
+  <a href="./ROADMAP.md">Roadmap</a> ·
+  <a href="./docs/intake.md">How the agent works</a> ·
+  <a href="./CONTRIBUTING.md">Contributing</a>
+</p>
 
-## Requirements
+<p align="center">
+  <img alt="License: FSL-1.1-ALv2" src="https://img.shields.io/badge/license-FSL--1.1--ALv2-18181B" />
+  <img alt="Nuxt 4" src="https://img.shields.io/badge/Nuxt-4-00DC82?logo=nuxtdotjs&logoColor=white" />
+  <img alt="Self-hosted" src="https://img.shields.io/badge/hosting-self--hosted-71717A" />
+  <img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-A1A1AA" />
+</p>
 
-- Node **>= 22** (the upcoming DB layer uses the built-in `node:sqlite`).
+<p align="center">
+  <img src="./docs/screenshots/intake.png" width="820" alt="Cairn intake" />
+</p>
 
-## Setup
+---
+
+## Why Cairn?
+
+Most product tools are databases with a form on top. You pour in tickets; they
+pile up. Cairn takes the opposite stance — **an agent does the messy part** (read,
+deduplicate, shape, route) so the backlog stays small and every item is a real,
+bounded problem.
+
+- **🪨 An agent, not a form.** Paste a Slack thread, a bug report, or a whole
+  meeting transcript. The intake agent extracts the distinct signals, recontextualizes
+  each one, deduplicates against the backlog, and proposes where it belongs — you
+  confirm. Writing only ever happens on confirmation.
+- **🧗 Shape Up, natively.** Pitches with a real problem and an appetite, a betting
+  table to choose what's worth doing, hills to track in-flight work, frozen scope
+  once a bet is placed. The method is the product, not a template.
+- **🧹 Anti feature-factory.** No artificial caps, no vanity metrics. The backlog is
+  meant to stay *small*: duplicates get merged, noise gets discarded, shaping is a
+  discipline — not a place where requests go to die.
+- **🔌 Bring your own LLM key.** The agent runs on your Anthropic key. No data
+  detour through us — there is no "us" in the loop.
+- **🏠 Self-hosted, you own the data.** One Node process, one embedded SQLite file.
+  No external database, no telemetry, no account on someone else's server.
+- **🔓 Source-available.** Read every line, audit it, run it for free forever. It
+  even becomes Apache-2.0 over time (see [License](#license)).
+
+## What's inside
+
+| | |
+|---|---|
+| **Intake** | Conversational agent: triage → clarify → propose → commit. Reads `.docx`/images, splits transcripts into N features, dedupes, attributes every change. |
+| **Backlog** | Shaped features with problem · appetite · solution · rabbit holes · no-gos. Manually-assigned shapers. |
+| **Betting table** | Collaborative deliberation: members vote, the owner validates → it bets features and opens a hill. |
+| **Hills** | In-flight cycles with builders, periods and frozen scope. |
+| **Workspace** | Email + password auth, token invitations, roles, avatars, full attribution/audit trail. |
+
+## Get started (self-host)
+
+Cairn ships as a single container. Bring an Anthropic API key (or add it later in
+the UI) and a place to keep `/data`.
+
+```bash
+docker build -t cairn .
+docker run -d -p 3000:3000 -v cairn_data:/data \
+  -e NUXT_SESSION_PASSWORD="$(openssl rand -base64 32)" \
+  -e ANTHROPIC_API_KEY="sk-ant-…" \
+  cairn
+```
+
+Full instructions (Docker, Fly.io, backups, env vars) → **[DEPLOY.md](./DEPLOY.md)**.
+
+First boot seeds a demo team — `ceo@cairn.local` / `cairn` — change the password
+right away.
+
+### Develop locally
 
 ```bash
 pnpm install
-pnpm dev          # http://localhost:3000
+echo 'ANTHROPIC_API_KEY=sk-ant-…' > .env
+pnpm dev            # http://localhost:3000
+pnpm test:members   # hermetic auth/invitations test suite
 ```
 
-If `pnpm dev` misbehaves inside a git worktree (vite-node socket), use the prod build:
+## Why source-available and not "free for everyone"?
 
-```bash
-pnpm build && PORT=3000 node .output/server/index.mjs
-```
+Cairn is free to **run, read, modify and self-host** — for any purpose except
+re-selling it as a competing hosted product. That single restriction is what lets
+a small team keep building it in the open instead of behind a closed door.
 
-## Routes
+It's licensed under the **[Functional Source License](./LICENSE)** (FSL-1.1-ALv2):
+two years after each release, that version automatically becomes **Apache-2.0**.
+So the protection is temporary and the openness is permanent — you're never locked
+out of your own infrastructure, and our infra is never in your critical path.
 
-| Route          | Screen                                            |
-|----------------|---------------------------------------------------|
-| `/`            | Intake (conversational, in-memory for now)        |
-| `/backlog`     | Backlog — table/pipeline view + detail Sheet      |
-| `/betting`     | Betting Table — candidates + vote, detail Sheet   |
-| `/hills`       | Hills overview                                     |
-| `/hills/[id]`  | Hill detail (e.g. `/hills/12`)                     |
+> Today everything is free and self-hostable. Team/organisation capabilities
+> (SSO, multi-workspace, advanced integrations) may later require a license key —
+> the core always runs without one. See the [roadmap](./ROADMAP.md).
 
-## Documentation
+## Tech
 
-- [`docs/intake.md`](docs/intake.md) — règles & fonctionnement de l'intake/gateway :
-  flux bottom-up Shape Up (signal → feature → menu → Hill), déduplication, merge/group,
-  mise à jour des seules features non livrées, tracking de l'historique, et comment
-  l'agent challenge la prise de contexte pour router correctement.
+- **[Nuxt 4](https://nuxt.com)** (Vue 3) + Nitro — SSR app and single write gateway
+- **`node:sqlite`** — embedded database, zero native deps
+- **[shadcn-vue](https://www.shadcn-vue.com)** + Tailwind v4 — dark, calm UI
+- **[Anthropic Claude](https://www.anthropic.com)** via a thin provider interface
+  (swap-able; deterministic offline fallback)
 
-## Structure
+## Contributing
 
-```
-app/
-  app.vue                       # NuxtLayout + NuxtPage
-  layouts/default.vue           # sidebar + header shell
-  assets/css/tailwind.css       # Tailwind v4 + shadcn neutral theme
-  lib/utils.ts                  # cn() helper
-  composables/useCairn.ts     # in-memory state + derived data (no DB yet)
-  components/
-    AppSidebar.vue, AppHeader.vue
-    screens/                    # IntakeScreen, BacklogScreen, BettingScreen, HillsScreen
-    ui/                         # shadcn-vue components
-  pages/                        # index, backlog, betting, hills/(index|[id])
-components.json                 # shadcn-vue config
-nuxt.config.ts
-```
+Issues and PRs are welcome — see **[CONTRIBUTING.md](./CONTRIBUTING.md)** for the
+setup, commit convention and how routing decisions are tested. Be kind; assume
+good intent.
 
-> ⚠️ State is in-memory only — nothing is persisted. The next phase introduces the
-> single write gateway (Nitro server routes), the Shape Up domain model
-> (`feedback → feature → hill → decision`) and a local SQLite DB via `node:sqlite`.
+## License
 
-## Adding more shadcn components
-
-```bash
-pnpm dlx shadcn-vue@latest add dialog
-```
+[FSL-1.1-ALv2](./LICENSE) — source-available now, **Apache-2.0** two years after
+each release. © 2026 Jean-Romain Persico. "Cairn" and the logo are trademarks and
+are not covered by the code license.

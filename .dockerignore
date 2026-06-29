@@ -1,0 +1,13 @@
+node_modules
+.output
+.nuxt
+.data
+.git
+.github
+.shots
+*.log
+.env
+.env.*
+.DS_Store
+docs/monetisation-distribution.md
+README.md

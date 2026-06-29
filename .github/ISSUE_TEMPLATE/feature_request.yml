@@ -1,0 +1,27 @@
+name: 💡 Feature request
+description: Suggest an idea — framed as a problem, Shape Up style
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: The concrete pain today — not the solution. What breaks or is missing?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Rough idea (optional)
+      description: A sketch of a direction, if you have one. No need for a full spec.
+  - type: textarea
+    id: appetite
+    attributes:
+      label: How much does it matter?
+      description: Who hits this, how often, and what's the cost of not having it?
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Fit
+      options:
+        - label: This keeps Cairn focused (Shape Up product OS), not a generic tracker.
