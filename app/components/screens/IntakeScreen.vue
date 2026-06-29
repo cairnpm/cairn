@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { ArrowDown, ArrowUp, Layers, Paperclip, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Card, CardContent } from '@/components/ui/card'
@@ -20,6 +20,7 @@ interface BatchSegment { id: string; signal: { title: string; problem: string; c
 interface TurnResponse { session_id: string; state: string; agent_message: string; proposal: Proposal | null; batch?: { session_id: string; segments: BatchSegment[] } }
 interface Msg { role: 'user' | 'agent'; text: string; attachments?: Att[] }
 
+const { t } = useUiLang()
 const bike = useCairn()
 const { author } = bike
 
@@ -102,8 +103,8 @@ async function send() {
     // The agent decided this input covers several problems → it auto-decomposed; show the review.
     if (r.batch) { batch.value = r.batch; reviewOpen.value = true }
   } catch (e: unknown) {
-    toast.error((e as { statusMessage?: string })?.statusMessage || "L'agent n'a pas pu répondre")
-    messages.value.push({ role: 'agent', text: 'Désolé, une erreur est survenue de mon côté. Réessaie.' })
+    toast.error((e as { statusMessage?: string })?.statusMessage || t('intake.errAgentNoReply'))
+    messages.value.push({ role: 'agent', text: t('intake.errAgentMessage') })
   } finally { pending.value = false }
 }
 function pick(text: string) { draft.value = text; send() }
@@ -116,8 +117,8 @@ async function accept() {
     proposal.value = null
     // A commit creates/updates a feature → the backlog + counts must re-sync.
     await invalidate(qk.features, qk.featureDetail, qk.overview)
-    toast.success(r.action === 'discard' ? 'Signal écarté' : r.action === 'append' ? 'Signal rattaché à la feature' : r.action === 'merge' ? 'Features fusionnées' : 'Feature créée')
-  } catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || 'Écriture impossible') } finally { pending.value = false }
+    toast.success(r.action === 'discard' ? t('intake.toastDiscarded') : r.action === 'append' ? t('intake.toastAppended') : r.action === 'merge' ? t('intake.toastMerged') : t('intake.toastCreated'))
+  } catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || t('intake.errWriteFailed')) } finally { pending.value = false }
 }
 // ── Batch decomposition (agent-decided: multi-topic input → N features for review) ────────────
 // `batch` holds the decomposition; `reviewOpen` controls the takeover. Closing the review keeps the
@@ -134,8 +135,8 @@ async function confirmBatch(selections: { id: string; action_override: string; t
     batchRecap.value = { created: r.created, updated: r.updated, discarded: r.discarded }
     batch.value = null; reviewOpen.value = false
     await invalidate(qk.features, qk.featureDetail, qk.overview)
-    toast.success(`${r.created} créée(s) · ${r.updated} mise(s) à jour`)
-  } catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || 'Écriture impossible') } finally { pending.value = false }
+    toast.success(t('intake.batch.recapToast', { created: r.created, updated: r.updated }))
+  } catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || t('intake.errWriteFailed')) } finally { pending.value = false }
 }
 function cancelBatch() { reviewOpen.value = false } // back to chat; reopen anytime
 
@@ -146,16 +147,16 @@ function reset() {
 }
 function onKey(e: KeyboardEvent) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
 
-const ACTION_LABEL: Record<string, string> = {
-  create_feature: 'Créer une nouvelle feature', append: 'Rattacher à une feature',
-  merge: 'Fusionner des features', discard: 'Écarter (doublon / hors-scope)',
-}
-const QUICK = [
-  'Les utilisateurs se plaignent que ',
-  'Où en est-on sur ',
-  'Sur le ticket …, précise que ',
-  'Bug critique : ',
-]
+const ACTION_LABEL = computed<Record<string, string>>(() => ({
+  create_feature: t('intake.action.createFeature'), append: t('intake.action.append'),
+  merge: t('intake.action.merge'), discard: t('intake.action.discard'),
+}))
+const QUICK = computed(() => [
+  t('intake.quick.complain'),
+  t('intake.quick.status'),
+  t('intake.quick.ticket'),
+  t('intake.quick.bug'),
+])
 </script>
 
 <template>
@@ -164,10 +165,10 @@ const QUICK = [
     <div v-if="batchRecap" class="flex flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
       <CairnMark inverted class="h-14 w-auto" />
       <div>
-        <h1 class="text-xl font-semibold tracking-tight">Décomposition appliquée</h1>
-        <p class="mt-1 text-sm text-muted-foreground">{{ batchRecap.created }} feature(s) créée(s) · {{ batchRecap.updated }} mise(s) à jour<template v-if="batchRecap.discarded"> · {{ batchRecap.discarded }} écartée(s)</template></p>
+        <h1 class="text-xl font-semibold tracking-tight">{{ t('intake.batch.applied') }}</h1>
+        <p class="mt-1 text-sm text-muted-foreground">{{ t('intake.batch.recapCreated', { n: batchRecap.created }) }} · {{ t('intake.batch.recapUpdated', { n: batchRecap.updated }) }}<template v-if="batchRecap.discarded"> · {{ t('intake.batch.recapDiscarded', { n: batchRecap.discarded }) }}</template></p>
       </div>
-      <Button @click="reset">Nouveau signal</Button>
+      <Button @click="reset">{{ t('intake.newSignal') }}</Button>
     </div>
 
     <!-- BATCH REVIEW (takeover) -->
@@ -179,21 +180,21 @@ const QUICK = [
         <div class="mb-6 flex flex-col items-center gap-3 text-center">
           <CairnMark inverted class="h-14 w-auto" />
           <div>
-            <h1 class="text-xl font-semibold tracking-tight">Comment puis-je vous aider ?</h1>
-            <p class="mt-1 text-sm text-muted-foreground">Décrivez un signal, posez une question, ou affinez un ticket. L'écriture n'a lieu qu'à la confirmation.</p>
+            <h1 class="text-xl font-semibold tracking-tight">{{ t('intake.heroTitle') }}</h1>
+            <p class="mt-1 text-sm text-muted-foreground">{{ t('intake.heroSubtitle') }}</p>
           </div>
         </div>
 
         <Card class="py-0 transition-colors" :class="dragOver ? 'border-primary ring-2 ring-primary/30' : ''" @dragover.prevent="dragOver = true" @dragleave="onDragLeave" @drop.prevent="onDrop">
           <CardContent class="p-2">
-            <Textarea v-model="draft" placeholder="Ex: l'export PDF est très lent pour les rapports >100Mo, 5 plaintes cette semaine…" class="min-h-28 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
+            <Textarea v-model="draft" :placeholder="t('intake.placeholder')" class="min-h-28 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
             <div v-if="attachments.length" class="flex flex-wrap gap-1.5 px-2 pb-2">
               <Badge v-for="a in attachments" :key="a.id" variant="secondary" class="gap-1">{{ a.kind === 'image' ? '🖼️' : '📄' }} {{ a.filename }}<button @click="removeAttachment(a.id)"><X class="size-3" /></button></Badge>
             </div>
             <div class="flex items-center justify-between px-1 pb-1">
               <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" @change="onFiles">
-              <Button variant="ghost" size="sm" :disabled="uploading" @click="fileInput?.click()"><Paperclip class="size-4" /> {{ uploading ? 'Envoi…' : 'Joindre' }}</Button>
-              <Button size="sm" :disabled="pending || (!draft.trim() && !attachments.length)" @click="send">Envoyer <ArrowUp class="size-4" /></Button>
+              <Button variant="ghost" size="sm" :disabled="uploading" @click="fileInput?.click()"><Paperclip class="size-4" /> {{ uploading ? t('intake.uploading') : t('intake.attach') }}</Button>
+              <Button size="sm" :disabled="pending || (!draft.trim() && !attachments.length)" @click="send">{{ t('intake.send') }} <ArrowUp class="size-4" /></Button>
             </div>
           </CardContent>
         </Card>
@@ -227,13 +228,13 @@ const QUICK = [
           <!-- Routing proposal -->
           <Card v-if="proposal" class="ml-8 gap-0 overflow-hidden py-0">
             <div class="flex items-center justify-between border-b px-4 py-2.5">
-              <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ state === 'pending_review' ? 'Arbitrage requis' : 'Décision de routing' }}</span>
-              <Badge variant="outline" class="font-mono">conf. {{ (proposal.confidence * 100) | 0 }}%</Badge>
+              <span class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ state === 'pending_review' ? t('intake.arbitrationRequired') : t('intake.routingDecision') }}</span>
+              <Badge variant="outline" class="font-mono">{{ t('intake.confShort') }} {{ (proposal.confidence * 100) | 0 }}%</Badge>
             </div>
             <CardContent class="flex flex-col gap-3 p-4">
               <div v-if="state === 'pending_review'" class="flex flex-wrap gap-2 rounded-md border border-dashed p-2.5">
-                <Button variant="outline" size="sm" :disabled="pending" @click="pick('Crée une nouvelle feature pour ça.')">+ Nouvelle feature</Button>
-                <Button v-for="c in proposal.candidates" :key="c.feature_id" variant="outline" size="sm" :disabled="pending" @click="pick(`Rattache plutôt à la feature « ${c.title} ».`)">→ {{ c.title }}</Button>
+                <Button variant="outline" size="sm" :disabled="pending" @click="pick(t('intake.pickNewFeature'))">+ {{ t('intake.newFeature') }}</Button>
+                <Button v-for="c in proposal.candidates" :key="c.feature_id" variant="outline" size="sm" :disabled="pending" @click="pick(t('intake.pickAttach', { title: c.title }))">→ {{ c.title }}</Button>
               </div>
 
               <div class="flex items-center gap-2">
@@ -246,17 +247,17 @@ const QUICK = [
                 <CardContent class="p-3">
                   <div class="font-medium">{{ proposal.proposed_spec.title }}</div>
                   <p class="mt-1 text-sm text-muted-foreground">{{ proposal.proposed_spec.problem }}</p>
-                  <div v-if="proposal.proposed_spec.solution" class="mt-1.5 text-sm"><span class="font-medium">Solution :</span> {{ proposal.proposed_spec.solution }}</div>
-                  <div class="mt-2 flex gap-1.5"><Badge variant="outline">appétit · {{ proposal.proposed_spec.appetite }}</Badge><Badge variant="secondary">{{ proposal.classification }}</Badge></div>
+                  <div v-if="proposal.proposed_spec.solution" class="mt-1.5 text-sm"><span class="font-medium">{{ t('intake.solutionLabel') }}</span> {{ proposal.proposed_spec.solution }}</div>
+                  <div class="mt-2 flex gap-1.5"><Badge variant="outline">{{ t('intake.appetite') }} · {{ proposal.proposed_spec.appetite }}</Badge><Badge variant="secondary">{{ proposal.classification }}</Badge></div>
                 </CardContent>
               </Card>
 
               <div v-if="proposal.candidates.length" class="text-sm">
-                <div class="mb-1 text-xs text-muted-foreground">Doublons proches</div>
+                <div class="mb-1 text-xs text-muted-foreground">{{ t('intake.closeDuplicates') }}</div>
                 <div v-for="c in proposal.candidates" :key="c.feature_id" class="flex justify-between text-muted-foreground"><span>{{ c.title }}</span><span class="font-mono">{{ (c.similarity * 100) | 0 }}%</span></div>
               </div>
 
-              <Button class="w-full" :disabled="pending" @click="accept">{{ proposal.action === 'discard' ? 'Écarter (archiver)' : proposal.action === 'merge' ? 'Confirmer la fusion' : 'Confirmer & écrire' }}</Button>
+              <Button class="w-full" :disabled="pending" @click="accept">{{ proposal.action === 'discard' ? t('intake.confirmDiscard') : proposal.action === 'merge' ? t('intake.confirmMerge') : t('intake.confirmWrite') }}</Button>
             </CardContent>
           </Card>
 
@@ -264,22 +265,22 @@ const QUICK = [
           <Card v-if="committed" class="ml-8 py-0">
             <CardContent class="flex items-center gap-3 p-3 text-sm">
               <span class="flex-1">
-                <template v-if="committed.action === 'discard'">Signal écarté — archivé.</template>
-                <template v-else>✓ Écrit en base — {{ committed.action === 'append' ? 'rattaché à' : committed.action === 'merge' ? 'survivante' : 'nouvelle feature' }} <code class="font-mono">{{ committed.feature_id?.slice(0, 8) }}</code></template>
+                <template v-if="committed.action === 'discard'">{{ t('intake.committedDiscard') }}</template>
+                <template v-else>✓ {{ t('intake.committedWritten') }} {{ committed.action === 'append' ? t('intake.committedAppend') : committed.action === 'merge' ? t('intake.committedSurvivor') : t('intake.committedNewFeature') }} <code class="font-mono">{{ committed.feature_id?.slice(0, 8) }}</code></template>
               </span>
-              <Button variant="outline" size="sm" @click="reset">Nouveau signal</Button>
+              <Button variant="outline" size="sm" @click="reset">{{ t('intake.newSignal') }}</Button>
             </CardContent>
           </Card>
 
           <!-- Batch recap closed → always re-openable (no dead end) -->
           <div v-if="batch && !reviewOpen" class="ml-8">
-            <Button size="sm" @click="reviewOpen = true"><Layers class="size-4" /> Ouvrir l'écran de validation ({{ batch.segments.length }})</Button>
+            <Button size="sm" @click="reviewOpen = true"><Layers class="size-4" /> {{ t('intake.openReview', { n: batch.segments.length }) }}</Button>
           </div>
 
           </div>
         </div>
         <Transition enter-active-class="transition duration-150" enter-from-class="translate-y-1 opacity-0" leave-active-class="transition duration-150" leave-to-class="translate-y-1 opacity-0">
-          <Button v-if="!atBottom" size="icon" variant="secondary" class="absolute bottom-3 left-1/2 size-9 -translate-x-1/2 rounded-full border shadow-md" aria-label="Aller en bas" @click="scrollToBottom('smooth')"><ArrowDown class="size-4" /></Button>
+          <Button v-if="!atBottom" size="icon" variant="secondary" class="absolute bottom-3 left-1/2 size-9 -translate-x-1/2 rounded-full border shadow-md" :aria-label="t('intake.scrollToBottom')" @click="scrollToBottom('smooth')"><ArrowDown class="size-4" /></Button>
         </Transition>
       </div>
 
@@ -292,8 +293,8 @@ const QUICK = [
               </div>
               <div class="flex items-end gap-1.5">
                 <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" @change="onFiles">
-                <Button variant="ghost" size="icon" class="size-9 shrink-0 text-muted-foreground" :disabled="uploading" :title="uploading ? 'Envoi…' : 'Joindre un fichier'" @click="fileInput?.click()"><Paperclip class="size-4" /></Button>
-                <Textarea v-model="draft" :placeholder="dragOver ? 'Déposez vos fichiers ici…' : 'Réponds, précise ou corrige le routing…'" rows="1" class="min-h-9 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
+                <Button variant="ghost" size="icon" class="size-9 shrink-0 text-muted-foreground" :disabled="uploading" :title="uploading ? t('intake.uploading') : t('intake.attachFile')" @click="fileInput?.click()"><Paperclip class="size-4" /></Button>
+                <Textarea v-model="draft" :placeholder="dragOver ? t('intake.dropHere') : t('intake.replyPlaceholder')" rows="1" class="min-h-9 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
                 <Button size="icon" :disabled="pending || (!draft.trim() && !attachments.length)" @click="send"><ArrowUp class="size-4" /></Button>
               </div>
             </CardContent>

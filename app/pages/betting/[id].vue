@@ -1,5 +1,6 @@
 <script setup lang="ts">
-useSeoMeta({ title: 'Table de paris', description: "Délibération collaborative : votez, validez, ouvrez un hill." })
+const { t } = useUiLang()
+useSeoMeta({ title: () => t('betting.seo.title'), description: () => t('betting.seo.description') })
 </script>
 
 <template>

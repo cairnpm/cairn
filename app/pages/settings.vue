@@ -1,5 +1,6 @@
 <script setup lang="ts">
-useSeoMeta({ title: 'Réglages', description: "Profil, workspace, membres et configuration de l'agent." })
+const { t } = useUiLang()
+useSeoMeta({ title: () => t('settings.seo.title'), description: () => t('settings.seo.description') })
 </script>
 
 <template>

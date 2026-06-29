@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'vue-sonner'
 
+const { t } = useUiLang()
+
 interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; model: string; models: string[] }
 interface Profile { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 interface Member { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
@@ -28,10 +30,10 @@ const { mutate } = useApiMutation()
 const { fetch: refreshSession } = useUserSession()
 
 const SECTIONS = [
-  { key: 'profile', label: 'Profil' },
-  { key: 'workspace', label: 'Workspace' },
-  { key: 'ia', label: 'Intelligence' },
-  { key: 'members', label: 'Membres' },
+  { key: 'profile', label: t('settings.tabs.profile') },
+  { key: 'workspace', label: t('settings.tabs.workspace') },
+  { key: 'ia', label: t('settings.tabs.ia') },
+  { key: 'members', label: t('settings.tabs.members') },
 ] as const
 const active = ref<typeof SECTIONS[number]['key']>('profile')
 
@@ -52,7 +54,7 @@ async function saveProfile() {
   if (savingProfile.value || !profile.name.trim()) return
   savingProfile.value = true; profileSaved.value = false
   try {
-    await mutate('/api/profile', { body: { name: profile.name.trim(), email: profile.email.trim(), avatar_url: avatarUrl.value ?? '' }, invalidates: [qk.profile, qk.members, qk.overview], success: 'Profil enregistré' })
+    await mutate('/api/profile', { body: { name: profile.name.trim(), email: profile.email.trim(), avatar_url: avatarUrl.value ?? '' }, invalidates: [qk.profile, qk.members, qk.overview], success: t('settings.toast.profileSaved') })
     await refreshSession()
     profileSaved.value = true
   } finally { savingProfile.value = false }
@@ -65,7 +67,7 @@ async function changePassword() {
   if (changingPwd.value || !pwd.current || pwd.next.length < 8) return
   changingPwd.value = true
   try {
-    await mutate('/api/profile/password', { body: { current: pwd.current, next: pwd.next }, success: 'Mot de passe changé' })
+    await mutate('/api/profile/password', { body: { current: pwd.current, next: pwd.next }, success: t('settings.toast.passwordChanged') })
     pwd.current = ''; pwd.next = ''
   } catch { /* error toast shown by mutate */ } finally { changingPwd.value = false }
 }
@@ -92,21 +94,21 @@ async function sendInvite() {
     const r = await mutate<{ url: string }>('/api/members/invite', { body: { email: invite.email.trim(), role: invite.role }, errorToast: false })
     inviteUrl.value = r.url; invite.email = ''
     await loadInvites()
-  } catch (e: unknown) { inviteErr.value = (e as { statusMessage?: string })?.statusMessage || 'Échec de l\'invitation' } finally { inviting.value = false }
+  } catch (e: unknown) { inviteErr.value = (e as { statusMessage?: string })?.statusMessage || t('settings.inviteFailed') } finally { inviting.value = false }
 }
 async function copyInvite() {
-  try { await navigator.clipboard.writeText(inviteUrl.value); copied.value = true; toast.success('Lien copié'); setTimeout(() => copied.value = false, 1500) } catch { /* clipboard blocked */ }
+  try { await navigator.clipboard.writeText(inviteUrl.value); copied.value = true; toast.success(t('settings.toast.linkCopied')); setTimeout(() => copied.value = false, 1500) } catch { /* clipboard blocked */ }
 }
 async function revokeInvite(id: string) {
-  try { await mutate(`/api/members/invites/${id}`, { method: 'DELETE', success: 'Invitation révoquée' }); await loadInvites() } catch { /* toast shown */ }
+  try { await mutate(`/api/members/invites/${id}`, { method: 'DELETE', success: t('settings.toast.inviteRevoked') }); await loadInvites() } catch { /* toast shown */ }
 }
 async function setMemberRole(id: string, role: string) {
-  try { await mutate(`/api/members/${id}/role`, { body: { role }, invalidates: [qk.members], success: 'Rôle mis à jour' }) }
+  try { await mutate(`/api/members/${id}/role`, { body: { role }, invalidates: [qk.members], success: t('settings.toast.roleUpdated') }) }
   catch { await invalidate(qk.members) } // revert the optimistic Select value
 }
 async function removeMember(m: Member) {
-  if (!confirm(`Retirer ${m.name} du workspace ?`)) return
-  try { await mutate(`/api/members/${m.id}`, { method: 'DELETE', invalidates: [qk.members], success: `${m.name} retiré·e du workspace` }) } catch { /* toast shown */ }
+  if (!confirm(t('settings.removeConfirm', { name: m.name }))) return
+  try { await mutate(`/api/members/${m.id}`, { method: 'DELETE', invalidates: [qk.members], success: t('settings.memberRemoved', { name: m.name }) }) } catch { /* toast shown */ }
 }
 
 // ── Workspace + IA ──────────────────────────────────────────────────────
@@ -125,11 +127,11 @@ async function onLogoFile(e: Event) {
 const saving = ref(false)
 const saved = ref(false)
 
-const MODEL_META: Record<string, { name: string; desc: string }> = {
-  'claude-sonnet-4-6': { name: 'Sonnet 4.6', desc: 'Équilibré · routage fiable (recommandé)' },
-  'claude-opus-4-8': { name: 'Opus 4.8', desc: 'Profond · routage optimal' },
-}
-const models = computed(() => cfg.value?.models ?? Object.keys(MODEL_META))
+const MODEL_META = computed<Record<string, { name: string; desc: string }>>(() => ({
+  'claude-sonnet-4-6': { name: 'Sonnet 4.6', desc: t('settings.model.sonnetDesc') },
+  'claude-opus-4-8': { name: 'Opus 4.8', desc: t('settings.model.opusDesc') },
+}))
+const models = computed(() => cfg.value?.models ?? Object.keys(MODEL_META.value))
 
 async function save() {
   if (saving.value) return
@@ -140,7 +142,7 @@ async function save() {
       workspace_logo_id: workspaceLogo.value ?? '',
       anthropic_api_key: keyInput.value.trim() || undefined,
       anthropic_model: modelInput.value,
-    }, invalidates: [qk.settings, qk.overview], success: 'Réglages enregistrés' })
+    }, invalidates: [qk.settings, qk.overview], success: t('settings.toast.settingsSaved') })
     keyInput.value = ''
     saved.value = true
   } finally { saving.value = false }
@@ -150,8 +152,8 @@ async function save() {
 <template>
   <div class="flex h-full flex-col overflow-hidden">
     <div class="mx-auto w-full max-w-5xl px-6 pt-8">
-      <h1 class="text-lg font-semibold tracking-tight">Réglages</h1>
-      <p class="text-sm text-muted-foreground">Profil, workspace et configuration de l'agent.</p>
+      <h1 class="text-lg font-semibold tracking-tight">{{ t('settings.title') }}</h1>
+      <p class="text-sm text-muted-foreground">{{ t('settings.subtitle') }}</p>
       <Separator class="mt-6" />
     </div>
 
@@ -171,8 +173,8 @@ async function save() {
         <!-- Profil -->
         <section v-show="active === 'profile'" class="flex max-w-xl flex-col gap-5">
           <div>
-            <h2 class="text-base font-medium">Profil</h2>
-            <p class="text-sm text-muted-foreground">Votre identité dans le workspace (utilisée pour l'attribution).</p>
+            <h2 class="text-base font-medium">{{ t('settings.profile.heading') }}</h2>
+            <p class="text-sm text-muted-foreground">{{ t('settings.profile.description') }}</p>
           </div>
           <Separator />
           <div class="flex items-center gap-4">
@@ -180,48 +182,48 @@ async function save() {
             <div class="flex flex-col items-start gap-1.5">
               <input id="avatarFile" type="file" accept="image/*" class="hidden" @change="onAvatarFile">
               <Button as-child variant="outline" size="sm" :disabled="uploadingAvatar">
-                <label for="avatarFile" class="cursor-pointer">{{ uploadingAvatar ? 'Chargement…' : 'Choisir une image' }}</label>
+                <label for="avatarFile" class="cursor-pointer">{{ uploadingAvatar ? t('settings.uploading') : t('settings.chooseImage') }}</label>
               </Button>
-              <button v-if="avatarUrl" type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="avatarUrl = null">Retirer</button>
-              <span v-else class="text-xs text-muted-foreground">Sinon, l'initiale du nom est utilisée.</span>
+              <button v-if="avatarUrl" type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="avatarUrl = null">{{ t('settings.remove') }}</button>
+              <span v-else class="text-xs text-muted-foreground">{{ t('settings.avatarFallback') }}</span>
             </div>
           </div>
           <div class="grid gap-2 sm:max-w-sm">
-            <Label for="name">Nom</Label>
-            <Input id="name" v-model="profile.name" placeholder="Votre nom" />
+            <Label for="name">{{ t('settings.fields.name') }}</Label>
+            <Input id="name" v-model="profile.name" :placeholder="t('settings.fields.namePlaceholder')" />
           </div>
           <div class="grid gap-2 sm:max-w-sm">
-            <Label for="email">Email</Label>
-            <Input id="email" v-model="profile.email" type="email" placeholder="vous@exemple.com" />
+            <Label for="email">{{ t('settings.fields.email') }}</Label>
+            <Input id="email" v-model="profile.email" type="email" :placeholder="t('settings.fields.emailPlaceholder')" />
           </div>
           <div class="flex items-center justify-end gap-3">
-            <span v-if="profileSaved" class="text-sm text-muted-foreground">✓ Profil enregistré</span>
-            <Button variant="outline" :disabled="savingProfile || !profile.name.trim()" @click="saveProfile">{{ savingProfile ? 'Enregistrement…' : 'Enregistrer le profil' }}</Button>
+            <span v-if="profileSaved" class="text-sm text-muted-foreground">✓ {{ t('settings.toast.profileSaved') }}</span>
+            <Button variant="outline" :disabled="savingProfile || !profile.name.trim()" @click="saveProfile">{{ savingProfile ? t('settings.saving') : t('settings.saveProfile') }}</Button>
           </div>
 
           <Separator />
           <div>
-            <h3 class="text-sm font-medium">Mot de passe</h3>
-            <p class="text-sm text-muted-foreground">Au moins 8 caractères.</p>
+            <h3 class="text-sm font-medium">{{ t('settings.password.heading') }}</h3>
+            <p class="text-sm text-muted-foreground">{{ t('settings.password.hint') }}</p>
           </div>
           <div class="grid gap-2 sm:max-w-sm">
-            <Label for="curpwd">Mot de passe actuel</Label>
+            <Label for="curpwd">{{ t('settings.password.current') }}</Label>
             <Input id="curpwd" v-model="pwd.current" type="password" autocomplete="current-password" />
           </div>
           <div class="grid gap-2 sm:max-w-sm">
-            <Label for="newpwd">Nouveau mot de passe</Label>
+            <Label for="newpwd">{{ t('settings.password.new') }}</Label>
             <Input id="newpwd" v-model="pwd.next" type="password" autocomplete="new-password" />
           </div>
           <div class="flex items-center justify-end gap-3">
-            <Button variant="outline" :disabled="changingPwd || !pwd.current || pwd.next.length < 8" @click="changePassword">{{ changingPwd ? 'Changement…' : 'Changer le mot de passe' }}</Button>
+            <Button variant="outline" :disabled="changingPwd || !pwd.current || pwd.next.length < 8" @click="changePassword">{{ changingPwd ? t('settings.password.changing') : t('settings.password.change') }}</Button>
           </div>
         </section>
 
         <!-- Workspace -->
         <section v-show="active === 'workspace'" class="flex max-w-xl flex-col gap-5">
           <div>
-            <h2 class="text-base font-medium">Workspace</h2>
-            <p class="text-sm text-muted-foreground">Le nom affiché dans la barre latérale.</p>
+            <h2 class="text-base font-medium">{{ t('settings.workspace.heading') }}</h2>
+            <p class="text-sm text-muted-foreground">{{ t('settings.workspace.description') }}</p>
           </div>
           <Separator />
           <div class="flex items-center gap-4">
@@ -232,18 +234,18 @@ async function save() {
             <div class="flex flex-col items-start gap-1.5">
               <input id="logoFile" type="file" accept="image/*" class="hidden" @change="onLogoFile">
               <Button as-child variant="outline" size="sm" :disabled="uploadingLogo">
-                <label for="logoFile" class="cursor-pointer">{{ uploadingLogo ? 'Chargement…' : 'Choisir une image' }}</label>
+                <label for="logoFile" class="cursor-pointer">{{ uploadingLogo ? t('settings.uploading') : t('settings.chooseImage') }}</label>
               </Button>
-              <button v-if="workspaceLogo" type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="workspaceLogo = null">Retirer</button>
+              <button v-if="workspaceLogo" type="button" class="text-xs text-muted-foreground hover:text-foreground" @click="workspaceLogo = null">{{ t('settings.remove') }}</button>
             </div>
           </div>
           <div class="grid gap-2 sm:max-w-sm">
-            <Label for="ws">Nom du workspace</Label>
+            <Label for="ws">{{ t('settings.workspace.nameLabel') }}</Label>
             <Input id="ws" v-model="workspaceName" placeholder="Cairn" />
           </div>
           <div class="flex items-center justify-end gap-3">
-            <span v-if="saved" class="text-sm text-muted-foreground">✓ Enregistré</span>
-            <Button :disabled="saving" @click="save">{{ saving ? 'Enregistrement…' : 'Enregistrer' }}</Button>
+            <span v-if="saved" class="text-sm text-muted-foreground">✓ {{ t('settings.saved') }}</span>
+            <Button :disabled="saving" @click="save">{{ saving ? t('settings.saving') : t('settings.save') }}</Button>
           </div>
         </section>
 
@@ -251,19 +253,19 @@ async function save() {
         <section v-show="active === 'ia'" class="flex max-w-xl flex-col gap-5">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <h2 class="text-base font-medium">Intelligence (Intake)</h2>
-              <p class="text-sm text-muted-foreground">Clé API et modèle utilisés par l'agent.</p>
+              <h2 class="text-base font-medium">{{ t('settings.ia.heading') }}</h2>
+              <p class="text-sm text-muted-foreground">{{ t('settings.ia.description') }}</p>
             </div>
-            <Badge :variant="cfg?.has_key ? 'default' : 'destructive'">{{ cfg?.has_key ? 'Opérationnelle' : 'Absente' }}</Badge>
+            <Badge :variant="cfg?.has_key ? 'default' : 'destructive'">{{ cfg?.has_key ? t('settings.ia.keyOk') : t('settings.ia.keyMissing') }}</Badge>
           </div>
           <Separator />
           <div class="grid gap-2 sm:max-w-sm">
-            <Label for="key">Clé API Anthropic</Label>
+            <Label for="key">{{ t('settings.ia.keyLabel') }}</Label>
             <Input id="key" v-model="keyInput" type="password" placeholder="sk-ant-…" autocomplete="off" class="font-mono" />
-            <p class="text-xs text-muted-foreground">{{ cfg?.key_source === 'env' ? 'Héritée de l\'environnement.' : cfg?.key_source === 'settings' ? 'Définie ici.' : 'Aucune clé.' }} Jamais réaffichée ; saisissez-en une nouvelle pour la remplacer.</p>
+            <p class="text-xs text-muted-foreground">{{ cfg?.key_source === 'env' ? t('settings.ia.keyFromEnv') : cfg?.key_source === 'settings' ? t('settings.ia.keyFromSettings') : t('settings.ia.keyNone') }} {{ t('settings.ia.keyNeverShown') }}</p>
           </div>
           <div class="grid gap-2">
-            <Label>Modèle</Label>
+            <Label>{{ t('settings.ia.modelLabel') }}</Label>
             <div class="grid gap-2 sm:grid-cols-2">
               <button v-for="m in models" :key="m" type="button" class="flex flex-col items-start gap-0.5 rounded-lg border p-3 text-left transition-colors hover:bg-accent" :class="modelInput === m ? 'border-primary ring-1 ring-primary' : ''" @click="modelInput = m">
                 <div class="flex w-full items-center justify-between"><span class="text-sm font-medium">{{ MODEL_META[m]?.name || m }}</span><Check v-if="modelInput === m" class="size-4" /></div>
@@ -272,8 +274,8 @@ async function save() {
             </div>
           </div>
           <div class="flex items-center justify-end gap-3">
-            <span v-if="saved" class="text-sm text-muted-foreground">✓ Enregistré</span>
-            <Button :disabled="saving" @click="save">{{ saving ? 'Enregistrement…' : 'Enregistrer' }}</Button>
+            <span v-if="saved" class="text-sm text-muted-foreground">✓ {{ t('settings.saved') }}</span>
+            <Button :disabled="saving" @click="save">{{ saving ? t('settings.saving') : t('settings.save') }}</Button>
           </div>
         </section>
 
@@ -281,10 +283,10 @@ async function save() {
         <section v-show="active === 'members'" class="flex max-w-xl flex-col gap-5">
           <div class="flex items-start justify-between gap-3">
             <div>
-              <h2 class="text-base font-medium">Membres</h2>
-              <p class="text-sm text-muted-foreground">{{ isOwner ? 'Invitez par lien et gérez les rôles.' : "L'équipe du workspace." }}</p>
+              <h2 class="text-base font-medium">{{ t('settings.members.heading') }}</h2>
+              <p class="text-sm text-muted-foreground">{{ isOwner ? t('settings.members.ownerDescription') : t('settings.members.memberDescription') }}</p>
             </div>
-            <Button v-if="isOwner" size="sm" @click="openInvite"><UserPlus class="size-4" /> Inviter un membre</Button>
+            <Button v-if="isOwner" size="sm" @click="openInvite"><UserPlus class="size-4" /> {{ t('settings.invite') }}</Button>
           </div>
           <Separator />
 
@@ -292,21 +294,21 @@ async function save() {
           <Dialog v-if="isOwner" v-model:open="inviteOpen">
             <DialogContent class="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Inviter un membre</DialogTitle>
-                <DialogDescription>{{ inviteUrl ? 'Partage ce lien — valable 7 jours, usage unique.' : 'Génère un lien d’invitation à partager (Slack, email…).' }}</DialogDescription>
+                <DialogTitle>{{ t('settings.invite') }}</DialogTitle>
+                <DialogDescription>{{ inviteUrl ? t('settings.inviteDialog.linkReady') : t('settings.inviteDialog.prompt') }}</DialogDescription>
               </DialogHeader>
 
               <div v-if="!inviteUrl" class="flex flex-col gap-4 py-2">
                 <div class="grid gap-2">
-                  <Label for="inviteEmail">Email</Label>
-                  <Input id="inviteEmail" v-model="invite.email" type="email" placeholder="personne@exemple.com" @keydown.enter="sendInvite" />
+                  <Label for="inviteEmail">{{ t('settings.fields.email') }}</Label>
+                  <Input id="inviteEmail" v-model="invite.email" type="email" :placeholder="t('settings.inviteDialog.emailPlaceholder')" @keydown.enter="sendInvite" />
                 </div>
                 <div class="grid gap-2">
-                  <Label>Rôle</Label>
+                  <Label>{{ t('settings.fields.role') }}</Label>
                   <Select v-model="invite.role">
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="member">Membre</SelectItem>
+                      <SelectItem value="member">{{ t('settings.role.member') }}</SelectItem>
                       <SelectItem value="owner">Owner</SelectItem>
                     </SelectContent>
                   </Select>
@@ -316,16 +318,16 @@ async function save() {
 
               <div v-else class="flex items-center gap-2 rounded-md bg-muted p-2">
                 <code class="min-w-0 flex-1 truncate text-xs">{{ inviteUrl }}</code>
-                <Button variant="outline" size="sm" @click="copyInvite">{{ copied ? '✓ Copié' : 'Copier' }}</Button>
+                <Button variant="outline" size="sm" @click="copyInvite">{{ copied ? '✓ ' + t('settings.copied') : t('settings.copy') }}</Button>
               </div>
 
               <DialogFooter :class="inviteUrl ? 'sm:justify-between' : ''">
                 <template v-if="!inviteUrl">
-                  <Button :disabled="inviting || !invite.email.trim()" @click="sendInvite">{{ inviting ? 'Génération…' : 'Générer le lien' }}</Button>
+                  <Button :disabled="inviting || !invite.email.trim()" @click="sendInvite">{{ inviting ? t('settings.inviteDialog.generating') : t('settings.inviteDialog.generate') }}</Button>
                 </template>
                 <template v-else>
-                  <Button variant="ghost" @click="openInvite">Inviter quelqu'un d'autre</Button>
-                  <Button @click="inviteOpen = false">Terminé</Button>
+                  <Button variant="ghost" @click="openInvite">{{ t('settings.inviteDialog.inviteAnother') }}</Button>
+                  <Button @click="inviteOpen = false">{{ t('settings.done') }}</Button>
                 </template>
               </DialogFooter>
             </DialogContent>
@@ -333,34 +335,34 @@ async function save() {
 
           <!-- Pending invites -->
           <div v-if="isOwner && invites.length" class="flex flex-col gap-1">
-            <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">En attente ({{ invites.length }})</div>
+            <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('settings.members.pending', { count: invites.length }) }}</div>
             <div v-for="i in invites" :key="i.id" class="flex items-center gap-3 py-1.5">
               <div class="min-w-0 flex-1 truncate text-sm text-muted-foreground">{{ i.email }}</div>
-              <Badge variant="secondary" class="capitalize">{{ i.role }}</Badge>
-              <button type="button" class="text-xs text-muted-foreground hover:text-destructive" @click="revokeInvite(i.id)">Révoquer</button>
+              <Badge variant="secondary" class="capitalize">{{ i.role === 'owner' ? 'Owner' : t('settings.role.member') }}</Badge>
+              <button type="button" class="text-xs text-muted-foreground hover:text-destructive" @click="revokeInvite(i.id)">{{ t('settings.revoke') }}</button>
             </div>
           </div>
 
           <!-- Active members -->
           <div class="flex flex-col gap-1">
-            <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Équipe ({{ members.length }})</div>
+            <div class="text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('settings.members.team', { count: members.length }) }}</div>
             <div v-for="m in members" :key="m.id" class="flex items-center gap-3 py-2">
               <UserAvatar :name="m.name" :src="m.avatar_url" class="size-8 rounded-full" />
               <div class="min-w-0 flex-1">
-                <div class="text-sm font-medium">{{ m.name }}{{ m.id === profileData?.id ? ' (vous)' : '' }}</div>
+                <div class="text-sm font-medium">{{ m.name }}{{ m.id === profileData?.id ? ' ' + t('settings.members.you') : '' }}</div>
                 <div class="truncate text-xs text-muted-foreground">{{ m.email || '—' }}</div>
               </div>
               <template v-if="isOwner && m.id !== profileData?.id">
                 <Select :model-value="m.role" @update:model-value="(v) => setMemberRole(m.id, v as string)">
                   <SelectTrigger class="h-8 w-[120px] text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="member">Membre</SelectItem>
+                    <SelectItem value="member">{{ t('settings.role.member') }}</SelectItem>
                     <SelectItem value="owner">Owner</SelectItem>
                   </SelectContent>
                 </Select>
-                <button type="button" class="text-muted-foreground transition-colors hover:text-destructive" title="Retirer" @click="removeMember(m)"><Trash2 class="size-4" /></button>
+                <button type="button" class="text-muted-foreground transition-colors hover:text-destructive" :title="t('settings.removeMember')" @click="removeMember(m)"><Trash2 class="size-4" /></button>
               </template>
-              <Badge v-else :variant="m.role === 'owner' ? 'default' : 'secondary'" class="capitalize">{{ m.role }}</Badge>
+              <Badge v-else :variant="m.role === 'owner' ? 'default' : 'secondary'" class="capitalize">{{ m.role === 'owner' ? 'Owner' : t('settings.role.member') }}</Badge>
             </div>
           </div>
         </section>

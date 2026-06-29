@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { formatDate } from '~/utils/time'
 import type { HillDetailData } from '~/types/hill'
 
+const { t } = useUiLang()
 const props = defineProps<{ data: HillDetailData; compact?: boolean }>()
 const emit = defineEmits<{ 'select-feature': [featureId: string] }>()
 
@@ -27,16 +28,16 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
         <div class="flex items-center gap-2" :class="compact ? 'mr-24' : ''"><slot name="header-action" /></div>
       </div>
       <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <MetaField label="Statut"><StatusBadge :status="data.hill.status" /></MetaField>
-        <MetaField label="Avancement">
+        <MetaField :label="t('hill.status')"><StatusBadge :status="data.hill.status" /></MetaField>
+        <MetaField :label="t('hill.progress')">
           <div class="flex items-center gap-2">
             <div class="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: pct + '%' }" /></div>
             <span class="tabular-nums">{{ pct }}% · {{ done }}/{{ total }}</span>
           </div>
         </MetaField>
-        <MetaField label="Features"><span class="tabular-nums">{{ total }}</span></MetaField>
-        <MetaField label="Période"><span class="text-muted-foreground">{{ formatDate(data.hill.starts_at) }} → {{ formatDate(data.hill.ends_at) }}</span></MetaField>
-        <MetaField v-if="data.betting_table" label="Source">
+        <MetaField :label="t('hill.features')"><span class="tabular-nums">{{ total }}</span></MetaField>
+        <MetaField :label="t('hill.period')"><span class="text-muted-foreground">{{ formatDate(data.hill.starts_at) }} → {{ formatDate(data.hill.ends_at) }}</span></MetaField>
+        <MetaField v-if="data.betting_table" :label="t('hill.source')">
           <NuxtLink :to="`/betting/${data.betting_table.id}`" class="inline-flex items-center gap-1 hover:underline">
             {{ data.betting_table.title }}
             <ExternalLink class="size-3.5 opacity-60" />
@@ -49,19 +50,19 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
     <ScrollArea class="min-h-0 flex-1">
       <div class="p-6">
         <div v-if="data.hill.rationale" class="mb-6">
-          <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Pourquoi ce cycle</div>
+          <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('hill.whyCycle') }}</div>
           <p class="rounded-md border bg-muted/40 p-3 text-sm leading-relaxed">{{ data.hill.rationale }}</p>
         </div>
-        <div class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Features pariées ({{ total }})</div>
+        <div class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('hill.betFeatures', { n: total }) }}</div>
         <div class="rounded-lg border">
           <Table class="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>Feature</TableHead>
-                <TableHead class="w-24">Statut</TableHead>
-                <TableHead class="w-28">Builders</TableHead>
-                <TableHead>Pari</TableHead>
-                <TableHead class="w-24">Par</TableHead>
+                <TableHead>{{ t('hill.col.feature') }}</TableHead>
+                <TableHead class="w-24">{{ t('hill.col.status') }}</TableHead>
+                <TableHead class="w-28">{{ t('hill.col.builders') }}</TableHead>
+                <TableHead>{{ t('hill.col.bet') }}</TableHead>
+                <TableHead class="w-24">{{ t('hill.col.by') }}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -79,7 +80,7 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
                   <div v-if="f.decision" class="flex items-center gap-1.5 text-xs"><UserAvatar :name="f.decision.decided_by" class="size-5" />{{ f.decision.decided_by }}</div>
                 </TableCell>
               </TableRow>
-              <TableRow v-if="!data.features.length"><TableCell :colspan="5" class="h-24 text-center text-muted-foreground">Aucune feature pariée.</TableCell></TableRow>
+              <TableRow v-if="!data.features.length"><TableCell :colspan="5" class="h-24 text-center text-muted-foreground">{{ t('hill.empty') }}</TableCell></TableRow>
             </TableBody>
           </Table>
         </div>

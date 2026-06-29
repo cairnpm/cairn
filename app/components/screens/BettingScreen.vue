@@ -33,6 +33,7 @@ interface TableRowT {
   candidate_count: number; voter_count: number; vote_count: number
 }
 
+const { t } = useUiLang()
 const bike = useCairn()
 const { role } = bike
 const { data: tables } = await useApiData<TableRowT[]>(qk.bettingTables, '/api/betting-tables', { default: () => [] })
@@ -50,7 +51,7 @@ async function confirmDelete() {
   deleting.value = true
   const id = toDelete.value.id
   try {
-    await mutate(`/api/betting-tables/${id}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview], success: 'Table supprimée' })
+    await mutate(`/api/betting-tables/${id}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview], success: t('betting.toast.deleted') })
     if (selectedId.value === id) selectedId.value = null
   } finally { deleting.value = false; confirmOpen.value = false; toDelete.value = null }
 }
@@ -59,7 +60,7 @@ async function createTable() {
   if (creating.value) return
   creating.value = true
   try {
-    const r = await mutate<{ id: string }>('/api/betting-tables', { body: { title: '' }, invalidates: [qk.bettingTables, qk.overview], success: 'Table créée' })
+    const r = await mutate<{ id: string }>('/api/betting-tables', { body: { title: '' }, invalidates: [qk.bettingTables, qk.overview], success: t('betting.toast.created') })
     await bike.selectBettingTable(r.id)
   } finally { creating.value = false }
 }
@@ -85,7 +86,7 @@ async function vote(candidateId: string) {
   voting.value = true
   try {
     const cand = detail.value?.candidates.find(c => c.id === candidateId)
-    const success = cand && iVoted(cand) ? 'Vote retiré' : 'Vote ajouté'
+    const success = cand && iVoted(cand) ? t('betting.toast.voteRemoved') : t('betting.toast.voteAdded')
     await mutate(`/api/betting-tables/${selectedId.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTables], success })
     await loadDetail()
   } finally { voting.value = false }
@@ -112,7 +113,7 @@ const restoring = ref(false)
 async function restore(id: string) {
   if (restoring.value) return
   restoring.value = true
-  try { await mutate(`/api/betting-tables/${id}/restore`, { invalidates: [qk.bettingTables, qk.overview], success: 'Table réactivée' }) } finally { restoring.value = false }
+  try { await mutate(`/api/betting-tables/${id}/restore`, { invalidates: [qk.bettingTables, qk.overview], success: t('betting.toast.restored') }) } finally { restoring.value = false }
 }
 
 
@@ -124,11 +125,11 @@ const counts = computed(() => {
   return { all: t.length - deleted, open: by('open'), validated: by('validated'), cancelled: by('cancelled'), deleted }
 })
 const FILTERS = computed(() => [
-  { key: 'all', label: 'Toutes', n: counts.value.all },
-  { key: 'open', label: 'Ouvertes', n: counts.value.open },
-  { key: 'validated', label: 'Validées', n: counts.value.validated },
-  { key: 'cancelled', label: 'Annulées', n: counts.value.cancelled },
-  { key: 'deleted', label: 'Supprimées', n: counts.value.deleted },
+  { key: 'all', label: t('betting.filter.all'), n: counts.value.all },
+  { key: 'open', label: t('betting.filter.open'), n: counts.value.open },
+  { key: 'validated', label: t('betting.filter.validated'), n: counts.value.validated },
+  { key: 'cancelled', label: t('betting.filter.cancelled'), n: counts.value.cancelled },
+  { key: 'deleted', label: t('betting.filter.deleted'), n: counts.value.deleted },
 ])
 
 function valueUpdater<T>(u: T | ((old: T) => T), r: { value: T }) {
@@ -139,7 +140,7 @@ const columnFilters = ref<ColumnFiltersState>([])
 const columnVisibility = ref<VisibilityState>({})
 const rowSelection = ref({})
 
-const COL_LABEL: Record<string, string> = { title: 'Table', status: 'Statut', candidate_count: 'Candidats', vote_count: 'Votes', owner: 'Owner', generated_at: 'Créée' }
+const COL_LABEL = computed<Record<string, string>>(() => ({ title: t('betting.col.title'), status: t('betting.col.status'), candidate_count: t('betting.col.candidates'), vote_count: t('betting.col.votes'), owner: t('betting.col.owner'), generated_at: t('betting.col.created') }))
 const columns: ColumnDef<TableRowT>[] = [
   { id: 'title', accessorKey: 'title', header: 'Table', enableHiding: false },
   {
@@ -206,7 +207,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
       <div class="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
-            <Button variant="outline" size="sm"><Columns3 class="size-4" /> Colonnes <ChevronsUpDown class="size-4 opacity-50" /></Button>
+            <Button variant="outline" size="sm"><Columns3 class="size-4" /> {{ t('betting.columns') }} <ChevronsUpDown class="size-4 opacity-50" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" class="w-40">
             <DropdownMenuCheckboxItem
@@ -216,7 +217,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
             >{{ COL_LABEL[col.id] || col.id }}</DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button size="sm" :disabled="creating" @click="createTable"><Plus class="size-4" /> {{ creating ? 'Génération…' : 'Nouvelle table' }}</Button>
+        <Button size="sm" :disabled="creating" @click="createTable"><Plus class="size-4" /> {{ creating ? t('betting.generating') : t('betting.newTable') }}</Button>
       </div>
     </div>
 
@@ -226,23 +227,23 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
             <TableHead class="w-10">
-              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" aria-label="Tout sélectionner" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
+              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" :aria-label="t('betting.selectAll')" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
             </TableHead>
             <TableHead>
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('title')?.toggleSorting()">Table <component :is="sortIcon('title')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('title')?.toggleSorting()">{{ t('betting.col.title') }} <component :is="sortIcon('title')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('status')" class="w-32">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">Statut <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">{{ t('betting.col.status') }} <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('candidate_count')" class="w-28 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('candidate_count')?.toggleSorting()">Candidats <component :is="sortIcon('candidate_count')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('candidate_count')?.toggleSorting()">{{ t('betting.col.candidates') }} <component :is="sortIcon('candidate_count')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('vote_count')" class="w-24 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('vote_count')?.toggleSorting()">Votes <component :is="sortIcon('vote_count')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('vote_count')?.toggleSorting()">{{ t('betting.col.votes') }} <component :is="sortIcon('vote_count')" class="size-3.5 opacity-60" /></button>
             </TableHead>
-            <TableHead v-if="vis('owner')" class="w-32">Owner</TableHead>
+            <TableHead v-if="vis('owner')" class="w-32">{{ t('betting.col.owner') }}</TableHead>
             <TableHead v-if="vis('generated_at')" class="w-28 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('generated_at')?.toggleSorting()">Créée <component :is="sortIcon('generated_at')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('generated_at')?.toggleSorting()">{{ t('betting.col.created') }} <component :is="sortIcon('generated_at')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead class="w-10" />
           </TableRow>
@@ -250,7 +251,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
         <TableBody>
           <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
             <TableCell @click.stop>
-              <Checkbox :model-value="row.getIsSelected()" aria-label="Sélectionner la ligne" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
+              <Checkbox :model-value="row.getIsSelected()" :aria-label="t('betting.selectRow')" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
             </TableCell>
             <TableCell>
               <div class="flex items-center gap-2 font-medium">
@@ -261,7 +262,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
                   class="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-foreground hover:underline"
                   @click.stop
                 >
-                  {{ row.original.hill_name || 'Cycle' }}
+                  {{ row.original.hill_name || t('betting.cycle') }}
                   <ExternalLink class="size-3" />
                 </NuxtLink>
               </div>
@@ -276,17 +277,17 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
             <TableCell @click.stop>
               <DropdownMenu>
                 <DropdownMenuTrigger as-child>
-                  <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
+                  <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">{{ t('betting.actions') }}</span></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem v-if="row.original.status === 'deleted'" :disabled="restoring" @click="restore(row.original.id)"><RotateCcw /> Réactiver</DropdownMenuItem>
-                  <DropdownMenuItem v-else variant="destructive" @click="askDelete({ id: row.original.id, title: row.original.title })"><Trash2 /> Supprimer</DropdownMenuItem>
+                  <DropdownMenuItem v-if="row.original.status === 'deleted'" :disabled="restoring" @click="restore(row.original.id)"><RotateCcw /> {{ t('betting.restore') }}</DropdownMenuItem>
+                  <DropdownMenuItem v-else variant="destructive" @click="askDelete({ id: row.original.id, title: row.original.title })"><Trash2 /> {{ t('betting.delete') }}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </TableCell>
           </TableRow>
           <TableRow v-if="!table.getRowModel().rows.length">
-            <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">Aucune table.</TableCell>
+            <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">{{ t('betting.empty') }}</TableCell>
           </TableRow>
         </TableBody>
       </Table>
@@ -294,10 +295,10 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
 
     <!-- Footer / pagination -->
     <div class="flex items-center justify-between gap-4 text-sm">
-      <div class="text-muted-foreground">{{ table.getFilteredSelectedRowModel().rows.length }} / {{ table.getFilteredRowModel().rows.length }} table(s) sélectionnée(s)</div>
+      <div class="text-muted-foreground">{{ t('betting.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length }) }}</div>
       <div class="flex items-center gap-6">
         <div class="flex items-center gap-2">
-          <span class="text-muted-foreground hidden sm:inline">Lignes / page</span>
+          <span class="text-muted-foreground hidden sm:inline">{{ t('betting.rowsPerPage') }}</span>
           <Select :model-value="String(table.getState().pagination.pageSize)" @update:model-value="(v: any) => table.setPageSize(Number(v))">
             <SelectTrigger size="sm" class="w-16"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -305,7 +306,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
             </SelectContent>
           </Select>
         </div>
-        <div class="text-muted-foreground tabular-nums">Page {{ table.getState().pagination.pageIndex + 1 }} / {{ Math.max(1, table.getPageCount()) }}</div>
+        <div class="text-muted-foreground tabular-nums">{{ t('betting.page', { page: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) }) }}</div>
         <div class="flex items-center gap-1">
           <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.setPageIndex(0)"><ChevronFirst class="size-4" /></Button>
           <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.previousPage()"><ChevronLeft class="size-4" /></Button>
@@ -315,7 +316,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
       </div>
     </div>
 
-    <p v-if="role !== 'owner'" class="text-xs text-muted-foreground">Vous pouvez voter ; seul l'owner valide une table.</p>
+    <p v-if="role !== 'owner'" class="text-xs text-muted-foreground">{{ t('betting.voterHint') }}</p>
 
     <!-- Quick-view Sheet -->
     <Sheet v-model:open="sheetOpen">
@@ -325,33 +326,33 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
           <DropdownMenu>
             <DropdownMenuTrigger as-child>
               <button
-                title="Actions"
+                :title="t('betting.actions')"
                 class="ring-offset-background focus:ring-ring absolute top-4 right-[4.75rem] rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
               >
                 <MoreHorizontal class="size-4" />
-                <span class="sr-only">Actions</span>
+                <span class="sr-only">{{ t('betting.actions') }}</span>
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem variant="destructive" @click="askDelete({ id: detail.table.id, title: detail.table.title }); selectedId = null"><Trash2 /> Supprimer</DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" @click="askDelete({ id: detail.table.id, title: detail.table.title }); selectedId = null"><Trash2 /> {{ t('betting.delete') }}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <NuxtLink
             :to="`/betting/${detail.table.id}`"
-            title="Ouvrir la page de la table"
+            :title="t('betting.openTablePage')"
             class="ring-offset-background focus:ring-ring absolute top-4 right-12 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
           >
             <ExternalLink class="size-4" />
-            <span class="sr-only">Ouvrir la page</span>
+            <span class="sr-only">{{ t('betting.openPage') }}</span>
           </NuxtLink>
           <BettingTableDetail :data="detail" compact @select-feature="featPeek = $event">
             <template #candidate-action="{ candidate }">
               <Button v-if="detail.table.status === 'open'" :variant="iVoted(candidate) ? 'default' : 'outline'" size="sm" :disabled="voting" @click="vote(candidate.id)">
-                <Check class="size-3.5" /> {{ iVoted(candidate) ? 'Voté' : 'Voter' }}
+                <Check class="size-3.5" /> {{ iVoted(candidate) ? t('betting.voted') : t('betting.vote') }}
               </Button>
             </template>
             <template v-if="detail.table.status === 'open' && role === 'owner'" #candidates-footer>
-              <Button @click="validateOpen = true">Valider la table</Button>
+              <Button @click="validateOpen = true">{{ t('betting.validate') }}</Button>
             </template>
           </BettingTableDetail>
           <ValidateTableDialog v-model:open="validateOpen" :table-id="detail.table.id" :candidates="detail.candidates" @validated="onValidated" />
@@ -366,14 +367,14 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
     <AlertDialog v-model:open="confirmOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Supprimer cette betting table ?</AlertDialogTitle>
+          <AlertDialogTitle>{{ t('betting.deleteDialog.title') }}</AlertDialogTitle>
           <AlertDialogDescription>
-            « {{ toDelete?.title }} » passera au statut « Supprimée ». Ses candidats, votes et historique sont conservés et tu pourras la réactiver depuis l'onglet « Supprimées ».
+            {{ t('betting.deleteDialog.description', { title: toDelete?.title }) }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel :disabled="deleting">Annuler</AlertDialogCancel>
-          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? 'Suppression…' : 'Supprimer' }}</AlertDialogAction>
+          <AlertDialogCancel :disabled="deleting">{{ t('betting.cancel') }}</AlertDialogCancel>
+          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? t('betting.deleting') : t('betting.delete') }}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

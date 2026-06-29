@@ -6,10 +6,11 @@ import { Badge } from '@/components/ui/badge'
 import { timeAgo } from '~/utils/time'
 import type { BettingTableDetailData } from '~/types/betting'
 
+const { t } = useUiLang()
 const props = defineProps<{ data: BettingTableDetailData; compact?: boolean }>()
 const emit = defineEmits<{ 'select-feature': [featureId: string] }>()
 
-function impact(score: number) { return score >= 2.5 ? 'Très haute' : score >= 1.5 ? 'Haute' : score >= 0.8 ? 'Moyenne' : 'Basse' }
+function impact(score: number) { return score >= 2.5 ? t('betting.impactVeryHigh') : score >= 1.5 ? t('betting.impactHigh') : score >= 0.8 ? t('betting.impactMedium') : t('betting.impactLow') }
 const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.length, 0)
 </script>
 
@@ -24,14 +25,14 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <MetaField label="Statut"><StatusBadge :status="data.table.status" /></MetaField>
-        <MetaField label="Créée par"><UserAvatar :name="data.table.owner_name" :src="data.table.owner_avatar" class="size-5" />{{ data.table.owner_name }}</MetaField>
-        <MetaField label="Candidats"><span class="tabular-nums">{{ data.candidates.length }}</span></MetaField>
-        <MetaField label="Votes"><span class="tabular-nums">{{ totalVotes() }}</span></MetaField>
-        <MetaField v-if="data.table.validated_by" label="Validée par"><UserAvatar :name="data.table.validated_by" class="size-5" />{{ data.table.validated_by }}</MetaField>
+        <MetaField :label="t('betting.status')"><StatusBadge :status="data.table.status" /></MetaField>
+        <MetaField :label="t('betting.createdBy')"><UserAvatar :name="data.table.owner_name" :src="data.table.owner_avatar" class="size-5" />{{ data.table.owner_name }}</MetaField>
+        <MetaField :label="t('betting.candidates')"><span class="tabular-nums">{{ data.candidates.length }}</span></MetaField>
+        <MetaField :label="t('betting.votes')"><span class="tabular-nums">{{ totalVotes() }}</span></MetaField>
+        <MetaField v-if="data.table.validated_by" :label="t('betting.validatedBy')"><UserAvatar :name="data.table.validated_by" class="size-5" />{{ data.table.validated_by }}</MetaField>
         <MetaField v-if="data.table.hill_id" label="Hill">
           <NuxtLink :to="`/hills/${data.table.hill_id}`" class="inline-flex items-center gap-1 hover:underline">
-            {{ data.table.hill_name || 'Cycle' }}
+            {{ data.table.hill_name || t('betting.cycle') }}
             <ExternalLink class="size-3.5 opacity-60" />
           </NuxtLink>
         </MetaField>
@@ -43,14 +44,14 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
       <!-- Left: candidates -->
       <ScrollArea class="min-h-0">
         <div class="p-6">
-          <div class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Candidats ({{ data.candidates.length }})</div>
+          <div class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('betting.candidates') }} ({{ data.candidates.length }})</div>
           <div class="rounded-lg border">
             <Table class="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Candidat</TableHead>
-                  <TableHead class="w-20">Votes</TableHead>
-                  <TableHead class="w-24">Impact</TableHead>
+                  <TableHead>{{ t('betting.candidate') }}</TableHead>
+                  <TableHead class="w-20">{{ t('betting.votes') }}</TableHead>
+                  <TableHead class="w-24">{{ t('betting.impact') }}</TableHead>
                   <TableHead class="w-28 text-right" />
                 </TableRow>
               </TableHeader>
@@ -59,7 +60,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
                   <TableCell>
                     <div class="flex items-center gap-2 font-medium">
                       <span class="truncate">{{ c.title_snap }}</span>
-                      <Badge v-if="c.selected" class="shrink-0 text-[10px]">parié</Badge>
+                      <Badge v-if="c.selected" class="shrink-0 text-[10px]">{{ t('betting.betBadge') }}</Badge>
                     </div>
                     <div v-if="!compact" class="truncate text-xs text-muted-foreground">{{ c.problem_snap }}</div>
                   </TableCell>
@@ -85,7 +86,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
       <aside class="min-h-0 border-t bg-muted/20 md:border-l md:border-t-0">
         <ScrollArea class="h-full">
           <div class="p-6">
-            <div class="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">Timeline ({{ data.events.length }})</div>
+            <div class="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('betting.timeline') }} ({{ data.events.length }})</div>
             <div class="relative flex flex-col gap-4">
               <div v-for="(e, i) in data.events" :key="e.seq" class="flex gap-2.5">
                 <div class="relative flex flex-col items-center">
@@ -97,7 +98,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
                   <div class="mt-0.5 text-xs text-muted-foreground">{{ timeAgo(e.created_at) }}</div>
                 </div>
               </div>
-              <div v-if="!data.events.length" class="text-sm text-muted-foreground">Aucune activité.</div>
+              <div v-if="!data.events.length" class="text-sm text-muted-foreground">{{ t('betting.noActivity') }}</div>
             </div>
           </div>
         </ScrollArea>

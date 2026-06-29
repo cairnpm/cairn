@@ -1,5 +1,6 @@
 <script setup lang="ts">
-useSeoMeta({ title: 'Intake', description: "Décrivez un signal — l'agent le trie, le déduplique et propose où il va." })
+const { t } = useUiLang()
+useSeoMeta({ title: () => t('intake.seoTitle'), description: () => t('intake.seoDesc') })
 </script>
 
 <template>

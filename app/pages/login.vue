@@ -6,9 +6,9 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 definePageMeta({ layout: false })
-useSeoMeta({ title: 'Connexion' })
 
 const { t } = useUiLang()
+useSeoMeta({ title: () => t('login.seoTitle') })
 const { fetch: refreshSession, loggedIn } = useUserSession()
 if (loggedIn.value) await navigateTo('/')
 
@@ -26,7 +26,7 @@ async function submit() {
     await refreshSession()
     await navigateTo('/')
   } catch (e: unknown) {
-    error.value = (e as { statusMessage?: string })?.statusMessage || 'Connexion impossible'
+    error.value = (e as { statusMessage?: string })?.statusMessage || t('login.error')
   } finally {
     pending.value = false
   }
@@ -45,7 +45,7 @@ async function submit() {
       <Card>
         <CardHeader class="text-center">
           <CardTitle class="text-xl">{{ t('login.title') }}</CardTitle>
-          <CardDescription>Connectez-vous pour continuer</CardDescription>
+          <CardDescription>{{ t('login.subtitle') }}</CardDescription>
         </CardHeader>
         <CardContent>
           <form @submit.prevent="submit">
@@ -66,7 +66,7 @@ async function submit() {
       </Card>
 
       <div class="text-muted-foreground text-center text-xs text-balance">
-        Démo · <code style="font-family: var(--font-mono);">ceo@cairn.local</code> · mot de passe <code style="font-family: var(--font-mono);">cairn</code>
+        {{ t('login.demo') }} · <code style="font-family: var(--font-mono);">ceo@cairn.local</code> · {{ t('login.demoPassword') }} <code style="font-family: var(--font-mono);">cairn</code>
       </div>
     </div>
   </div>

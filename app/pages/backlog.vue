@@ -1,5 +1,6 @@
 <script setup lang="ts">
-useSeoMeta({ title: 'Backlog', description: "Les features shapées, prêtes à être pariées." })
+const { t } = useUiLang()
+useSeoMeta({ title: () => t('backlog.seoTitle'), description: () => t('backlog.seoDesc') })
 </script>
 
 <template>

@@ -13,6 +13,7 @@ interface Proposal { action: 'create_feature' | 'append' | 'merge' | 'discard'; 
 interface Segment { id: string; signal: { title: string; problem: string; classification: string }; proposal: Proposal; include: boolean; duplicate_of?: string | null }
 type Action = 'create_feature' | 'append'
 
+const { t } = useUiLang()
 const props = defineProps<{ segments: Segment[]; pending?: boolean }>()
 const emit = defineEmits<{ confirm: [sel: { id: string; action_override: Action; target_override: string | null }[]]; cancel: [] }>()
 
@@ -29,7 +30,7 @@ const rows = reactive(props.segments.map(s => ({
   showWhy: false,
 })))
 
-const ACTION_LABEL: Record<Action, string> = { create_feature: 'Nouvelle feature', append: 'Rattacher' }
+const ACTION_LABEL = computed<Record<Action, string>>(() => ({ create_feature: t('intake.batch.newFeature'), append: t('intake.batch.attach') }))
 const includedCount = computed(() => rows.filter(r => r.include).length)
 const createdCount = computed(() => rows.filter(r => r.include && r.action === 'create_feature').length)
 const updatedCount = computed(() => rows.filter(r => r.include && r.action === 'append').length)
@@ -48,12 +49,12 @@ function confirm() {
   <div class="flex h-full flex-col">
     <header class="flex items-center justify-between gap-3 border-b px-6 py-4">
       <div class="min-w-0">
-        <h2 class="text-base font-semibold tracking-tight">{{ segments.length }} sujets détectés</h2>
-        <p class="text-sm text-muted-foreground">{{ createdCount }} nouvelle(s) · {{ updatedCount }} mise(s) à jour · {{ segments.length - includedCount }} ignoré(s)</p>
+        <h2 class="text-base font-semibold tracking-tight">{{ t('intake.batch.topicsDetected', { n: segments.length }) }}</h2>
+        <p class="text-sm text-muted-foreground">{{ t('intake.batch.headerNew', { n: createdCount }) }} · {{ t('intake.batch.headerUpdated', { n: updatedCount }) }} · {{ t('intake.batch.headerIgnored', { n: segments.length - includedCount }) }}</p>
       </div>
       <div class="flex shrink-0 gap-2">
-        <Button variant="ghost" :disabled="pending" @click="emit('cancel')">Retour au chat</Button>
-        <Button :disabled="pending || !includedCount" @click="confirm">{{ pending ? 'Écriture…' : `Confirmer (${includedCount})` }}</Button>
+        <Button variant="ghost" :disabled="pending" @click="emit('cancel')">{{ t('intake.batch.backToChat') }}</Button>
+        <Button :disabled="pending || !includedCount" @click="confirm">{{ pending ? t('intake.batch.writing') : t('intake.batch.confirm', { n: includedCount }) }}</Button>
       </div>
     </header>
 
@@ -75,7 +76,7 @@ function confirm() {
               <!-- Why this routing — collapsed by default so it doesn't dominate -->
               <div v-if="r.proposal.rationale">
                 <button type="button" class="flex items-center gap-1 text-xs font-medium text-muted-foreground/70 transition-colors hover:text-foreground" @click="r.showWhy = !r.showWhy">
-                  <ChevronRight class="size-3 transition-transform" :class="r.showWhy ? 'rotate-90' : ''" /> Pourquoi ce routage
+                  <ChevronRight class="size-3 transition-transform" :class="r.showWhy ? 'rotate-90' : ''" /> {{ t('intake.batch.whyRouting') }}
                 </button>
                 <p v-if="r.showWhy" class="mt-1.5 border-l-2 pl-3 text-xs italic leading-relaxed text-muted-foreground/80">{{ r.proposal.rationale }}</p>
               </div>
@@ -84,14 +85,14 @@ function confirm() {
               <div class="flex flex-wrap items-center gap-2 border-t pt-2.5">
                 <Badge :variant="r.action === 'create_feature' ? 'default' : 'secondary'">{{ ACTION_LABEL[r.action] }}</Badge>
                 <span v-if="r.action === 'append'" class="min-w-0 max-w-[14rem] truncate text-xs text-muted-foreground">→ {{ candTitle(r.target) }}</span>
-                <Badge v-if="r.wasDiscard" variant="outline" class="border-muted-foreground/40 text-muted-foreground">déjà couvert</Badge>
-                <Badge v-if="r.duplicate_of" variant="outline" class="border-amber-500/40 text-amber-500">doublon possible</Badge>
+                <Badge v-if="r.wasDiscard" variant="outline" class="border-muted-foreground/40 text-muted-foreground">{{ t('intake.batch.alreadyCovered') }}</Badge>
+                <Badge v-if="r.duplicate_of" variant="outline" class="border-amber-500/40 text-amber-500">{{ t('intake.batch.possibleDuplicate') }}</Badge>
                 <DropdownMenu>
                   <DropdownMenuTrigger as-child>
-                    <Button variant="ghost" size="sm" class="ml-auto h-7 gap-1.5 text-muted-foreground"><Pencil class="size-3.5" /> Modifier</Button>
+                    <Button variant="ghost" size="sm" class="ml-auto h-7 gap-1.5 text-muted-foreground"><Pencil class="size-3.5" /> {{ t('intake.batch.edit') }}</Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem class="gap-2" @select="r.action = 'create_feature'; r.target = null"><Plus class="size-3.5" /> Nouvelle feature</DropdownMenuItem>
+                    <DropdownMenuItem class="gap-2" @select="r.action = 'create_feature'; r.target = null"><Plus class="size-3.5" /> {{ t('intake.batch.newFeature') }}</DropdownMenuItem>
                     <DropdownMenuItem v-for="c in r.proposal.candidates" :key="c.feature_id" class="gap-2" @select="r.action = 'append'; r.target = c.feature_id">
                       → {{ c.title }} <span class="ml-auto font-mono text-xs text-muted-foreground">{{ (c.similarity * 100) | 0 }}%</span>
                     </DropdownMenuItem>

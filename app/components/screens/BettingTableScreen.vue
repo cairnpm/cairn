@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import type { BettingCandidate, BettingTableDetailData } from '~/types/betting'
 
+const { t } = useUiLang()
 const bike = useCairn()
 const { author, role, selectedBettingTable } = bike
 const id = selectedBettingTable
@@ -27,7 +28,7 @@ async function confirmDelete() {
   if (deleting.value) return
   deleting.value = true
   try {
-    await mutate(`/api/betting-tables/${id.value}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview], success: 'Table supprimée' })
+    await mutate(`/api/betting-tables/${id.value}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview], success: t('betting.toast.deleted') })
     await navigateTo('/betting')
   } finally { deleting.value = false }
 }
@@ -35,7 +36,7 @@ const restoring = ref(false)
 async function restore() {
   if (restoring.value) return
   restoring.value = true
-  try { await mutate(`/api/betting-tables/${id.value}/restore`, { invalidates: [qk.bettingTableDetail, qk.bettingTables, qk.overview], success: 'Table réactivée' }) } finally { restoring.value = false }
+  try { await mutate(`/api/betting-tables/${id.value}/restore`, { invalidates: [qk.bettingTableDetail, qk.bettingTables, qk.overview], success: t('betting.toast.restored') }) } finally { restoring.value = false }
 }
 
 const busy = ref(false)
@@ -44,7 +45,7 @@ async function toggleVote(candidateId: string) {
   busy.value = true
   try {
     const cand = data.value?.candidates.find(c => c.id === candidateId)
-    const success = cand && iVoted(cand) ? 'Vote retiré' : 'Vote ajouté'
+    const success = cand && iVoted(cand) ? t('betting.toast.voteRemoved') : t('betting.toast.voteAdded')
     await mutate(`/api/betting-tables/${id.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTableDetail, qk.bettingTables], success })
   } finally { busy.value = false }
 }
@@ -61,21 +62,21 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
       <template #header-action>
         <DropdownMenu>
           <DropdownMenuTrigger as-child>
-            <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
+            <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">{{ t('betting.actions') }}</span></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem v-if="isDeleted" :disabled="restoring" @click="restore"><RotateCcw /> Réactiver</DropdownMenuItem>
-            <DropdownMenuItem v-else variant="destructive" @click="confirmOpen = true"><Trash2 /> Supprimer</DropdownMenuItem>
+            <DropdownMenuItem v-if="isDeleted" :disabled="restoring" @click="restore"><RotateCcw /> {{ t('betting.restore') }}</DropdownMenuItem>
+            <DropdownMenuItem v-else variant="destructive" @click="confirmOpen = true"><Trash2 /> {{ t('betting.delete') }}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </template>
       <template #candidate-action="{ candidate }">
         <Button v-if="isOpen" :variant="iVoted(candidate) ? 'default' : 'outline'" size="sm" :disabled="busy" @click="toggleVote(candidate.id)">
-          <Check class="size-3.5" /> {{ iVoted(candidate) ? 'Voté' : 'Voter' }}
+          <Check class="size-3.5" /> {{ iVoted(candidate) ? t('betting.voted') : t('betting.vote') }}
         </Button>
       </template>
       <template v-if="isOpen && role === 'owner'" #candidates-footer>
-        <Button @click="showValidate = true">Valider la table</Button>
+        <Button @click="showValidate = true">{{ t('betting.validate') }}</Button>
       </template>
     </BettingTableDetail>
 
@@ -89,14 +90,14 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
     <AlertDialog v-model:open="confirmOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Supprimer cette betting table ?</AlertDialogTitle>
+          <AlertDialogTitle>{{ t('betting.deleteDialog.title') }}</AlertDialogTitle>
           <AlertDialogDescription>
-            « {{ data.table.title }} » passera au statut « Supprimée ». Ses candidats, votes et historique sont conservés et tu pourras la réactiver depuis l'onglet « Supprimées ».
+            {{ t('betting.deleteDialog.description', { title: data.table.title }) }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel :disabled="deleting">Annuler</AlertDialogCancel>
-          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? 'Suppression…' : 'Supprimer' }}</AlertDialogAction>
+          <AlertDialogCancel :disabled="deleting">{{ t('betting.cancel') }}</AlertDialogCancel>
+          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? t('betting.deleting') : t('betting.delete') }}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

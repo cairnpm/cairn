@@ -21,6 +21,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatDate } from '~/utils/time'
 import type { HillDetailData } from '~/types/hill'
 
+const { t } = useUiLang()
+
 interface HillRow { id: string; name: string; starts_at: string | null; ends_at: string | null; status: string; total: number; done: number }
 
 const { data: hills } = await useApiData<HillRow[]>(qk.hills, '/api/hills', { default: () => [] })
@@ -52,10 +54,10 @@ const counts = computed(() => {
   return { all: h.length, active: by('active'), planned: by('planned'), closed: by('closed') }
 })
 const FILTERS = computed(() => [
-  { key: 'all', label: 'Tous', n: counts.value.all },
-  { key: 'active', label: 'Actifs', n: counts.value.active },
-  { key: 'planned', label: 'Planifiés', n: counts.value.planned },
-  { key: 'closed', label: 'Clos', n: counts.value.closed },
+  { key: 'all', label: t('hill.filter.all'), n: counts.value.all },
+  { key: 'active', label: t('hill.filter.active'), n: counts.value.active },
+  { key: 'planned', label: t('hill.filter.planned'), n: counts.value.planned },
+  { key: 'closed', label: t('hill.filter.closed'), n: counts.value.closed },
 ])
 
 function valueUpdater<T>(u: T | ((old: T) => T), r: { value: T }) {
@@ -66,12 +68,12 @@ const columnFilters = ref<ColumnFiltersState>([])
 const columnVisibility = ref<VisibilityState>({})
 const rowSelection = ref({})
 
-const COL_LABEL: Record<string, string> = { name: 'Hill', status: 'Statut', progress: 'Avancement', period: 'Période' }
+const COL_LABEL = computed<Record<string, string>>(() => ({ name: 'Hill', status: t('hill.col.status'), progress: t('hill.col.progress'), period: t('hill.col.period') }))
 const columns: ColumnDef<HillRow>[] = [
   { id: 'name', accessorKey: 'name', header: 'Hill', enableHiding: false },
-  { id: 'status', accessorKey: 'status', header: 'Statut', filterFn: (row, _id, val) => row.getValue('status') === val },
-  { id: 'progress', accessorFn: r => (r.total ? r.done / r.total : 0), header: 'Avancement' },
-  { id: 'period', accessorFn: r => r.starts_at || '', header: 'Période' },
+  { id: 'status', accessorKey: 'status', header: t('hill.col.status'), filterFn: (row, _id, val) => row.getValue('status') === val },
+  { id: 'progress', accessorFn: r => (r.total ? r.done / r.total : 0), header: t('hill.col.progress') },
+  { id: 'period', accessorFn: r => r.starts_at || '', header: t('hill.col.period') },
 ]
 
 const table = useVueTable({
@@ -122,7 +124,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
       </Tabs>
       <DropdownMenu>
         <DropdownMenuTrigger as-child>
-          <Button variant="outline" size="sm"><Columns3 class="size-4" /> Colonnes <ChevronsUpDown class="size-4 opacity-50" /></Button>
+          <Button variant="outline" size="sm"><Columns3 class="size-4" /> {{ t('hill.columns') }} <ChevronsUpDown class="size-4 opacity-50" /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" class="w-40">
           <DropdownMenuCheckboxItem
@@ -140,26 +142,26 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
             <TableHead class="w-10">
-              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" aria-label="Tout sélectionner" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
+              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" :aria-label="t('hill.selectAll')" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
             </TableHead>
             <TableHead>
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('name')?.toggleSorting()">Hill <component :is="sortIcon('name')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('status')" class="w-28">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">Statut <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">{{ t('hill.col.status') }} <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('progress')" class="w-48">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('progress')?.toggleSorting()">Avancement <component :is="sortIcon('progress')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('progress')?.toggleSorting()">{{ t('hill.col.progress') }} <component :is="sortIcon('progress')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('period')" class="w-44">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('period')?.toggleSorting()">Période <component :is="sortIcon('period')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('period')?.toggleSorting()">{{ t('hill.col.period') }} <component :is="sortIcon('period')" class="size-3.5 opacity-60" /></button>
             </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
             <TableCell @click.stop>
-              <Checkbox :model-value="row.getIsSelected()" aria-label="Sélectionner la ligne" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
+              <Checkbox :model-value="row.getIsSelected()" :aria-label="t('hill.selectRow')" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
             </TableCell>
             <TableCell>
               <span class="mr-2 font-mono text-xs text-muted-foreground">{{ shortId(row.original.id) }}</span>
@@ -175,7 +177,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
             <TableCell v-if="vis('period')" class="text-xs text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.starts_at) }} → {{ formatDate(row.original.ends_at) }}</TableCell>
           </TableRow>
           <TableRow v-if="!table.getRowModel().rows.length">
-            <TableCell :colspan="5" class="h-24 text-center text-muted-foreground">Aucune hill.</TableCell>
+            <TableCell :colspan="5" class="h-24 text-center text-muted-foreground">{{ t('hill.emptyList') }}</TableCell>
           </TableRow>
         </TableBody>
       </Table>
@@ -183,10 +185,10 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
 
     <!-- Footer / pagination -->
     <div class="flex items-center justify-between gap-4 text-sm">
-      <div class="text-muted-foreground">{{ table.getFilteredSelectedRowModel().rows.length }} / {{ table.getFilteredRowModel().rows.length }} hill(s) sélectionnée(s)</div>
+      <div class="text-muted-foreground">{{ t('hill.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length }) }}</div>
       <div class="flex items-center gap-6">
         <div class="flex items-center gap-2">
-          <span class="text-muted-foreground hidden sm:inline">Lignes / page</span>
+          <span class="text-muted-foreground hidden sm:inline">{{ t('hill.rowsPerPage') }}</span>
           <Select :model-value="String(table.getState().pagination.pageSize)" @update:model-value="(v: any) => table.setPageSize(Number(v))">
             <SelectTrigger size="sm" class="w-16"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -194,7 +196,7 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
             </SelectContent>
           </Select>
         </div>
-        <div class="text-muted-foreground tabular-nums">Page {{ table.getState().pagination.pageIndex + 1 }} / {{ Math.max(1, table.getPageCount()) }}</div>
+        <div class="text-muted-foreground tabular-nums">{{ t('hill.pageOf', { n: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) }) }}</div>
         <div class="flex items-center gap-1">
           <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.setPageIndex(0)"><ChevronFirst class="size-4" /></Button>
           <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.previousPage()"><ChevronLeft class="size-4" /></Button>
@@ -210,11 +212,11 @@ function vis(id: string) { return table.getColumn(id)?.getIsVisible() ?? true }
         <template v-if="detail">
           <SheetTitle class="sr-only">{{ detail.hill.name }}</SheetTitle>
           <NuxtLink
-            :to="`/hills/${detail.hill.id}`" title="Ouvrir la page du hill"
+            :to="`/hills/${detail.hill.id}`" :title="t('hill.openHillPage')"
             class="ring-offset-background focus:ring-ring absolute top-4 right-12 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
           >
             <ExternalLink class="size-4" />
-            <span class="sr-only">Ouvrir la page</span>
+            <span class="sr-only">{{ t('hill.openPage') }}</span>
           </NuxtLink>
           <HillDetail :data="detail" @select-feature="featPeek = $event" />
         </template>

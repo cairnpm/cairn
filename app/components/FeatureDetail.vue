@@ -8,6 +8,7 @@ import { timeAgo } from '~/utils/time'
 import type { FeatureDetailData } from '~/types/feature'
 
 const props = defineProps<{ detail: FeatureDetailData }>()
+const { t } = useUiLang()
 
 // Manually-assigned team (member-driven, never the intake agent). Local copy synced with the server.
 const { members } = useMembers()
@@ -31,17 +32,12 @@ async function assign(method: 'POST' | 'DELETE', role: 'shaper' | 'builder', use
     assignees.value = res.assignees
     events.value = res.events
     await invalidate(qk.features, qk.featureDetail, qk.hillDetail)
-    toast.success(method === 'POST' ? `${role === 'shaper' ? 'Shaper' : 'Builder'} assigné` : 'Assignation retirée')
+    toast.success(method === 'POST' ? t('feature.assigned', { role: role === 'shaper' ? 'Shaper' : 'Builder' }) : t('feature.unassigned'))
   }
-  catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || 'Action impossible') }
+  catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || t('feature.actionFailed')) }
 }
 
-const PITCH = [
-  { key: 'problem', label: 'Problème' },
-  { key: 'solution', label: 'Solution esquissée' },
-  { key: 'rabbit_holes', label: 'Rabbit holes' },
-  { key: 'out_of_bounds', label: 'No-gos' },
-] as const
+const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
 </script>
 
 <template>
@@ -53,8 +49,8 @@ const PITCH = [
         <slot name="header-action" />
       </div>
       <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <MetaField label="Statut"><StatusBadge :status="detail.feature.status" /></MetaField>
-        <MetaField label="Appétit"><Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge></MetaField>
+        <MetaField :label="t('feature.meta.status')"><StatusBadge :status="detail.feature.status" /></MetaField>
+        <MetaField :label="t('feature.meta.appetite')"><Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge></MetaField>
         <MetaField v-if="detail.feature.hill_name" label="Hill"><Badge variant="secondary">{{ detail.feature.hill_name }}</Badge></MetaField>
       </div>
     </header>
@@ -68,23 +64,23 @@ const PITCH = [
             <AssigneeField label="Shapers" :assignees="shapers" :members="members" @add="assign('POST', 'shaper', $event)" @remove="assign('DELETE', 'shaper', $event)" />
             <AssigneeField label="Builders" :assignees="builders" :members="members" @add="assign('POST', 'builder', $event)" @remove="assign('DELETE', 'builder', $event)" />
           </div>
-          <div v-for="p in PITCH" :key="p.key" v-show="detail.feature[p.key]">
-            <div class="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ p.label }}</div>
-            <p class="leading-relaxed">{{ detail.feature[p.key] }}</p>
+          <div v-for="p in PITCH" :key="p" v-show="detail.feature[p]">
+            <div class="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.pitch.' + p) }}</div>
+            <p class="leading-relaxed">{{ detail.feature[p] }}</p>
           </div>
           <div v-if="detail.attachments.length">
-            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Pièces jointes</div>
+            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.attachments') }}</div>
             <div class="flex flex-wrap gap-2">
               <AttachmentPreview v-for="a in detail.attachments" :key="a.id" :attachment="a" size="size-16" />
             </div>
           </div>
           <div v-if="detail.feedback.length">
-            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Signaux ({{ detail.feedback.length }})</div>
+            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.signals') }} ({{ detail.feedback.length }})</div>
             <div class="flex flex-col gap-2">
               <div v-for="fb in detail.feedback" :key="fb.id" class="rounded-md border bg-muted/40 p-3">
                 <div class="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <UserAvatar :name="fb.captured_by" class="size-5" />
-                  <span class="font-medium text-foreground">{{ fb.captured_by || 'Inconnu' }}</span>
+                  <span class="font-medium text-foreground">{{ fb.captured_by || t('feature.unknown') }}</span>
                   <Badge variant="outline" class="font-normal capitalize">{{ fb.classification }}</Badge>
                   <span class="ml-auto">{{ timeAgo(fb.created_at) }}</span>
                 </div>
@@ -96,7 +92,7 @@ const PITCH = [
             </div>
           </div>
           <div v-if="detail.decisions.length">
-            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Décisions</div>
+            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.decisions') }}</div>
             <div v-for="d in detail.decisions" :key="d.id" class="mb-2 rounded-md border bg-muted/40 p-3">
               <div class="mb-1 flex items-center gap-2"><Badge variant="secondary" class="capitalize">{{ d.verdict }}</Badge><span class="text-xs text-muted-foreground">{{ timeAgo(d.decided_at) }}</span></div>
               <p>{{ d.rationale }}</p>
@@ -104,7 +100,7 @@ const PITCH = [
             </div>
           </div>
           <div v-if="detail.pr_links.length">
-            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">PR GitHub</div>
+            <div class="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.prGithub') }}</div>
             <a v-for="p in detail.pr_links" :key="p.id" :href="p.pr_url" target="_blank" class="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground">
               <ExternalLink class="size-3" />{{ p.repo }}#{{ p.pr_number }} · {{ p.status }}
             </a>
@@ -115,7 +111,7 @@ const PITCH = [
       <aside class="min-h-0 border-t bg-muted/20 md:border-l md:border-t-0">
         <ScrollArea class="h-full">
           <div class="p-6">
-            <div class="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">Activité ({{ events.length }})</div>
+            <div class="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{ t('feature.activity') }} ({{ events.length }})</div>
             <div class="relative flex flex-col gap-4">
               <div v-for="(e, i) in events" :key="e.seq" class="flex gap-2.5">
                 <div class="relative flex flex-col items-center">
@@ -127,7 +123,7 @@ const PITCH = [
                   <div class="mt-0.5 text-xs text-muted-foreground">{{ timeAgo(e.created_at) }}</div>
                 </div>
               </div>
-              <div v-if="!events.length" class="text-sm text-muted-foreground">Aucune activité.</div>
+              <div v-if="!events.length" class="text-sm text-muted-foreground">{{ t('feature.noActivity') }}</div>
             </div>
           </div>
         </ScrollArea>

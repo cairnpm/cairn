@@ -19,8 +19,15 @@ const VARIANT: Record<string, 'default' | 'secondary' | 'outline' | 'destructive
   deleted: 'destructive',
 }
 const variant = computed(() => VARIANT[props.status] ?? 'outline')
+
+const { t } = useUiLang()
+const label = computed(() => {
+  const key = `common.status.${props.status}`
+  const translated = t(key)
+  return translated === key ? props.status : translated
+})
 </script>
 
 <template>
-  <Badge :variant="variant" class="capitalize font-medium">{{ status }}</Badge>
+  <Badge :variant="variant" class="capitalize font-medium">{{ label }}</Badge>
 </template>

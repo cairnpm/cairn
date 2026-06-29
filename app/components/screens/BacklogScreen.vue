@@ -34,6 +34,7 @@ interface Feature {
   shapers: { user_id: string; name: string; avatar_url: string | null }[]
 }
 
+const { t } = useUiLang()
 const bike = useCairn()
 const { statusFilter, selectedFeatureId } = bike
 const { data: features } = await useApiData<Feature[]>(qk.features, '/api/features', { default: () => [] })
@@ -50,7 +51,7 @@ async function confirmDelete() {
   deleting.value = true
   const id = toDelete.value.id
   try {
-    await mutate(`/api/features/${id}`, { method: 'DELETE', invalidates: [qk.features, qk.overview], success: 'Feature supprimée' })
+    await mutate(`/api/features/${id}`, { method: 'DELETE', invalidates: [qk.features, qk.overview], success: t('backlog.toastDeleted') })
     if (selectedFeatureId.value === id) bike.clearFeature()
   } finally { deleting.value = false; confirmOpen.value = false; toDelete.value = null }
 }
@@ -63,12 +64,12 @@ const counts = computed(() => {
   return { all: f.length - deleted, shaped: by('shaped'), bet: by('bet'), building: by('building'), done: by('done'), deleted }
 })
 const FILTERS = computed(() => [
-  { key: 'all', label: 'Tous', n: counts.value.all },
+  { key: 'all', label: t('backlog.filters.all'), n: counts.value.all },
   { key: 'shaped', label: 'Shaped', n: counts.value.shaped },
   { key: 'bet', label: 'Bet', n: counts.value.bet },
   { key: 'building', label: 'Building', n: counts.value.building },
   { key: 'done', label: 'Done', n: counts.value.done },
-  { key: 'deleted', label: 'Supprimées', n: counts.value.deleted },
+  { key: 'deleted', label: t('backlog.filters.deleted'), n: counts.value.deleted },
 ])
 
 // Restore a soft-deleted feature.
@@ -76,7 +77,7 @@ const restoring = ref(false)
 async function restore(id: string) {
   if (restoring.value) return
   restoring.value = true
-  try { await mutate(`/api/features/${id}/restore`, { invalidates: [qk.features, qk.overview], success: 'Feature réactivée' }) } finally { restoring.value = false }
+  try { await mutate(`/api/features/${id}/restore`, { invalidates: [qk.features, qk.overview], success: t('backlog.toastRestored') }) } finally { restoring.value = false }
 }
 
 // ── @tanstack/vue-table ───────────────────────────────────────────────────
@@ -88,7 +89,7 @@ const columnFilters = ref<ColumnFiltersState>([])
 const columnVisibility = ref<VisibilityState>({})
 const rowSelection = ref({})
 
-const COL_LABEL: Record<string, string> = { title: 'Feature', status: 'Statut', signal_count: 'Signaux', shapers: 'Shapers', hill: 'Hill', updated_at: 'Modifié', actor: 'Auteur' }
+const COL_LABEL = computed<Record<string, string>>(() => ({ title: t('backlog.col.title'), status: t('backlog.col.status'), signal_count: t('backlog.col.signals'), shapers: 'Shapers', hill: 'Hill', updated_at: t('backlog.col.updated'), actor: t('backlog.col.actor') }))
 const columns: ColumnDef<Feature>[] = [
   { id: 'title', accessorKey: 'title', header: 'Feature', enableHiding: false },
   {
@@ -177,7 +178,7 @@ const open = computed({
       </Tabs>
       <DropdownMenu>
         <DropdownMenuTrigger as-child>
-          <Button variant="outline" size="sm"><Columns3 class="size-4" /> Colonnes <ChevronsUpDown class="size-4 opacity-50" /></Button>
+          <Button variant="outline" size="sm"><Columns3 class="size-4" /> {{ t('backlog.columns') }} <ChevronsUpDown class="size-4 opacity-50" /></Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" class="w-40">
           <DropdownMenuCheckboxItem
@@ -195,25 +196,25 @@ const open = computed({
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
             <TableHead class="w-10">
-              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" aria-label="Tout sélectionner" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
+              <Checkbox :model-value="table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')" :aria-label="t('backlog.selectAll')" @update:model-value="(v: boolean) => table.toggleAllPageRowsSelected(!!v)" />
             </TableHead>
             <TableHead>
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('title')?.toggleSorting()">Feature <component :is="sortIcon('title')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('title')?.toggleSorting()">{{ t('backlog.col.title') }} <component :is="sortIcon('title')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('status')" class="w-28">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">Statut <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('status')?.toggleSorting()">{{ t('backlog.col.status') }} <component :is="sortIcon('status')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('signal_count')" class="w-24 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('signal_count')?.toggleSorting()">Signaux <component :is="sortIcon('signal_count')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('signal_count')?.toggleSorting()">{{ t('backlog.col.signals') }} <component :is="sortIcon('signal_count')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('shapers')" class="w-28">Shapers</TableHead>
             <TableHead v-if="vis('hill')" class="w-44">
               <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('hill')?.toggleSorting()">Hill <component :is="sortIcon('hill')" class="size-3.5 opacity-60" /></button>
             </TableHead>
             <TableHead v-if="vis('updated_at')" class="w-28 text-right">
-              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('updated_at')?.toggleSorting()">Modifié <component :is="sortIcon('updated_at')" class="size-3.5 opacity-60" /></button>
+              <button class="inline-flex items-center gap-1 hover:text-foreground" @click="table.getColumn('updated_at')?.toggleSorting()">{{ t('backlog.col.updated') }} <component :is="sortIcon('updated_at')" class="size-3.5 opacity-60" /></button>
             </TableHead>
-            <TableHead v-if="vis('actor')" class="w-32">Auteur</TableHead>
+            <TableHead v-if="vis('actor')" class="w-32">{{ t('backlog.col.actor') }}</TableHead>
             <TableHead class="w-10" />
           </TableRow>
         </TableHeader>
@@ -225,12 +226,12 @@ const open = computed({
             @click="bike.selectFeature(row.original.id)"
           >
             <TableCell @click.stop>
-              <Checkbox :model-value="row.getIsSelected()" aria-label="Sélectionner la ligne" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
+              <Checkbox :model-value="row.getIsSelected()" :aria-label="t('backlog.selectRow')" @update:model-value="(v: boolean) => row.toggleSelected(!!v)" />
             </TableCell>
             <TableCell>
               <div class="flex items-center gap-2 font-medium">
                 <span class="truncate">{{ row.original.title }}</span>
-                <Badge v-if="row.original.stale" variant="outline" class="shrink-0 text-destructive border-destructive/30">stale</Badge>
+                <Badge v-if="row.original.stale" variant="outline" class="shrink-0 text-destructive border-destructive/30">{{ t('backlog.stale') }}</Badge>
               </div>
               <div class="truncate text-xs text-muted-foreground">{{ row.original.problem }}</div>
             </TableCell>
@@ -256,17 +257,17 @@ const open = computed({
             <TableCell @click.stop>
               <DropdownMenu>
                 <DropdownMenuTrigger as-child>
-                  <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">Actions</span></Button>
+                  <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">{{ t('backlog.actions') }}</span></Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem v-if="row.original.status === 'deleted'" :disabled="restoring" @click="restore(row.original.id)"><RotateCcw /> Réactiver</DropdownMenuItem>
-                  <DropdownMenuItem v-else variant="destructive" @click="askDelete(row.original)"><Trash2 /> Supprimer</DropdownMenuItem>
+                  <DropdownMenuItem v-if="row.original.status === 'deleted'" :disabled="restoring" @click="restore(row.original.id)"><RotateCcw /> {{ t('backlog.restore') }}</DropdownMenuItem>
+                  <DropdownMenuItem v-else variant="destructive" @click="askDelete(row.original)"><Trash2 /> {{ t('backlog.delete') }}</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </TableCell>
           </TableRow>
           <TableRow v-if="!table.getRowModel().rows.length">
-            <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">Aucune feature.</TableCell>
+            <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">{{ t('backlog.empty') }}</TableCell>
           </TableRow>
         </TableBody>
       </Table>
@@ -275,11 +276,11 @@ const open = computed({
     <!-- Footer / pagination -->
     <div class="flex items-center justify-between gap-4 text-sm">
       <div class="text-muted-foreground">
-        {{ table.getFilteredSelectedRowModel().rows.length }} / {{ table.getFilteredRowModel().rows.length }} ligne(s) sélectionnée(s)
+        {{ t('backlog.rowsSelected', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length }) }}
       </div>
       <div class="flex items-center gap-6">
         <div class="flex items-center gap-2">
-          <span class="text-muted-foreground hidden sm:inline">Lignes / page</span>
+          <span class="text-muted-foreground hidden sm:inline">{{ t('backlog.rowsPerPage') }}</span>
           <Select :model-value="String(table.getState().pagination.pageSize)" @update:model-value="(v: any) => table.setPageSize(Number(v))">
             <SelectTrigger size="sm" class="w-16"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -287,7 +288,7 @@ const open = computed({
             </SelectContent>
           </Select>
         </div>
-        <div class="text-muted-foreground tabular-nums">Page {{ table.getState().pagination.pageIndex + 1 }} / {{ Math.max(1, table.getPageCount()) }}</div>
+        <div class="text-muted-foreground tabular-nums">{{ t('backlog.page', { current: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) }) }}</div>
         <div class="flex items-center gap-1">
           <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.setPageIndex(0)"><ChevronFirst class="size-4" /></Button>
           <Button variant="outline" size="icon" class="size-8" :disabled="!table.getCanPreviousPage()" @click="table.previousPage()"><ChevronLeft class="size-4" /></Button>
@@ -304,11 +305,11 @@ const open = computed({
           <SheetTitle class="sr-only">{{ detail.feature.title }}</SheetTitle>
           <NuxtLink
             :to="`/features/${detail.feature.id}`"
-            title="Ouvrir la page de la feature"
+            :title="t('backlog.openFeaturePage')"
             class="ring-offset-background focus:ring-ring absolute top-4 right-12 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
           >
             <ExternalLink class="size-4" />
-            <span class="sr-only">Ouvrir la page</span>
+            <span class="sr-only">{{ t('backlog.openPage') }}</span>
           </NuxtLink>
           <FeatureDetail :detail="detail" />
         </template>
@@ -319,14 +320,14 @@ const open = computed({
     <AlertDialog v-model:open="confirmOpen">
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Supprimer cette feature ?</AlertDialogTitle>
+          <AlertDialogTitle>{{ t('backlog.deleteTitle') }}</AlertDialogTitle>
           <AlertDialogDescription>
-            « {{ toDelete?.title }} » passera au statut « Supprimée ». Son historique est conservé et tu pourras la réactiver depuis l'onglet « Supprimées ».
+            {{ t('backlog.deleteDesc', { title: toDelete?.title }) }}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel :disabled="deleting">Annuler</AlertDialogCancel>
-          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? 'Suppression…' : 'Supprimer' }}</AlertDialogAction>
+          <AlertDialogCancel :disabled="deleting">{{ t('backlog.cancel') }}</AlertDialogCancel>
+          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? t('backlog.deleting') : t('backlog.delete') }}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

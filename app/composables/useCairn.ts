@@ -27,6 +27,7 @@ export function actorInitial(name: string | null | undefined): string {
 
 export function useCairn() {
   const route = useRoute()
+  const { t } = useUiLang()
 
   // Current user (collaborative attribution) — derived from the authenticated session.
   const { user, clear: clearSession } = useUserSession()
@@ -63,11 +64,11 @@ export function useCairn() {
   const pageMeta = computed(() => {
     const has = selectedHill.value !== null
     return {
-      intake: { title: 'Intake Conversationnel', sub: 'Seul point d\'entrée pour modifier le backlog' },
-      backlog: { title: 'Backlog Produit', sub: 'Read-only — modifiable uniquement via la gateway' },
-      betting: { title: 'Betting Table', sub: 'Menu généré — le pari reste humain' },
-      hills: { title: has ? 'Hill' : 'Hills', sub: has ? 'Détail · paris & avancement' : 'Cycles passés, en cours et planifiés' },
-      settings: { title: 'Réglages', sub: 'Clé Anthropic, modèle & membres' },
+      intake: { title: t('page.intake.title'), sub: t('page.intake.sub') },
+      backlog: { title: t('page.backlog.title'), sub: t('page.backlog.sub') },
+      betting: { title: t('page.betting.title'), sub: t('page.betting.sub') },
+      hills: { title: has ? t('page.hill.title') : t('page.hills.title'), sub: has ? t('page.hill.sub') : t('page.hills.sub') },
+      settings: { title: t('page.settings.title'), sub: t('page.settings.sub') },
     }[screen.value]
   })
 

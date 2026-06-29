@@ -39,7 +39,7 @@ const items = computed(() => [
               </div>
               <div class="grid flex-1 text-left text-sm leading-tight">
                 <span class="truncate font-semibold">{{ ov?.workspace_name || 'Cairn' }}</span>
-                <span class="truncate text-xs text-muted-foreground">Piloté par Cairn</span>
+                <span class="truncate text-xs text-muted-foreground">{{ t('nav.poweredBy') }}</span>
               </div>
             </NuxtLink>
           </SidebarMenuButton>
@@ -49,7 +49,7 @@ const items = computed(() => [
 
     <SidebarContent>
       <SidebarGroup>
-        <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+        <SidebarGroupLabel>{{ t('nav.workspace') }}</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
             <SidebarMenuItem v-for="it in items" :key="it.id">
@@ -66,7 +66,7 @@ const items = computed(() => [
       </SidebarGroup>
 
       <SidebarGroup>
-        <SidebarGroupLabel>Configuration</SidebarGroupLabel>
+        <SidebarGroupLabel>{{ t('nav.configuration') }}</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
             <SidebarMenuItem>
@@ -107,7 +107,7 @@ const items = computed(() => [
               <DropdownMenuSeparator />
               <DropdownMenuLabel class="text-xs text-muted-foreground flex items-center gap-2"><Languages class="size-3.5" /> {{ t('menu.language') }}</DropdownMenuLabel>
               <div class="flex gap-1 px-1 pb-1">
-                <Button v-for="l in (['fr','en'] as const)" :key="l" :variant="locale === l ? 'default' : 'outline'" size="sm" class="h-7 flex-1" @click="setLocale(l)">{{ l.toUpperCase() }}</Button>
+                <Button v-for="l in (['fr','en','es'] as const)" :key="l" :variant="locale === l ? 'default' : 'outline'" size="sm" class="h-7 flex-1" @click="setLocale(l)">{{ l.toUpperCase() }}</Button>
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem as-child>
