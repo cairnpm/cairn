@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { type ColumnDef } from '@tanstack/vue-table'
-import { ExternalLink } from 'lucide-vue-next'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { formatDate } from '~/utils/time'
 import type { HillDetailData } from '~/types/hill'
 
@@ -111,21 +109,13 @@ const { table, vis, hideableCols } = useDataTable({
     />
 
     <!-- Quick-view Sheet -->
-    <Sheet v-model:open="sheetOpen">
-      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
-        <template v-if="detail">
-          <SheetTitle class="sr-only">{{ detail.hill.name }}</SheetTitle>
-          <NuxtLink
-            :to="`/hills/${detail.hill.id}`" :title="t('hill.openHillPage')"
-            class="ring-offset-background focus:ring-ring absolute top-4 right-12 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
-          >
-            <ExternalLink class="size-4" />
-            <span class="sr-only">{{ t('hill.openPage') }}</span>
-          </NuxtLink>
-          <HillDetail :data="detail" @select-feature="featPeek = $event" />
-        </template>
-      </SheetContent>
-    </Sheet>
+    <DetailSheet
+      v-model:open="sheetOpen" :ready="!!detail"
+      :title="detail?.hill.name ?? ''" :open-page-to="`/hills/${detail?.hill.id}`"
+      :open-page-title="t('hill.openHillPage')" :open-page-label="t('hill.openPage')"
+    >
+      <HillDetail v-if="detail" :data="detail" @select-feature="featPeek = $event" />
+    </DetailSheet>
 
     <!-- Feature peek — from the Sheet, open the feature as a modal Dialog -->
     <FeatureDetailOverlay v-model:feature-id="featPeek" mode="dialog" />

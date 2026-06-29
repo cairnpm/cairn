@@ -3,7 +3,6 @@ import { computed, ref, watch } from 'vue'
 import { type ColumnDef } from '@tanstack/vue-table'
 import { ExternalLink } from 'lucide-vue-next'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '~/utils/time'
 
@@ -195,22 +194,13 @@ const open = computed({
     />
 
     <!-- Detail Sheet -->
-    <Sheet v-model:open="open">
-      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
-        <template v-if="detail">
-          <SheetTitle class="sr-only">{{ detail.feature.title }}</SheetTitle>
-          <NuxtLink
-            :to="`/features/${detail.feature.id}`"
-            :title="t('backlog.openFeaturePage')"
-            class="ring-offset-background focus:ring-ring absolute top-4 right-12 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
-          >
-            <ExternalLink class="size-4" />
-            <span class="sr-only">{{ t('backlog.openPage') }}</span>
-          </NuxtLink>
-          <FeatureDetail :detail="detail" />
-        </template>
-      </SheetContent>
-    </Sheet>
+    <DetailSheet
+      v-model:open="open" :ready="!!detail"
+      :title="detail?.feature.title ?? ''" :open-page-to="`/features/${detail?.feature.id}`"
+      :open-page-title="t('backlog.openFeaturePage')" :open-page-label="t('backlog.openPage')"
+    >
+      <FeatureDetail v-if="detail" :detail="detail" />
+    </DetailSheet>
 
     <!-- Delete confirmation -->
     <ConfirmDeleteDialog

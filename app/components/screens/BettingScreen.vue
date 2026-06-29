@@ -3,7 +3,6 @@ import { computed, ref, watch } from 'vue'
 import { type ColumnDef } from '@tanstack/vue-table'
 import { Check, ExternalLink, MoreHorizontal, Plus, Trash2 } from 'lucide-vue-next'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { formatDate } from '~/utils/time'
 import type { BettingTableDetailData } from '~/types/betting'
@@ -208,46 +207,41 @@ const { table, vis, hideableCols } = useDataTable({
     <p v-if="role !== 'owner'" class="text-xs text-muted-foreground">{{ t('betting.voterHint') }}</p>
 
     <!-- Quick-view Sheet -->
-    <Sheet v-model:open="sheetOpen">
-      <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
-        <template v-if="detail">
-          <SheetTitle class="sr-only">{{ detail.table.title }}</SheetTitle>
-          <DropdownMenu>
-            <DropdownMenuTrigger as-child>
-              <button
-                :title="t('betting.actions')"
-                class="ring-offset-background focus:ring-ring absolute top-4 right-[4.75rem] rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
-              >
-                <MoreHorizontal class="size-4" />
-                <span class="sr-only">{{ t('betting.actions') }}</span>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem variant="destructive" @click="askDelete({ id: detail.table.id, title: detail.table.title }); selectedId = null"><Trash2 /> {{ t('betting.delete') }}</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <NuxtLink
-            :to="`/betting/${detail.table.id}`"
-            :title="t('betting.openTablePage')"
-            class="ring-offset-background focus:ring-ring absolute top-4 right-12 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
-          >
-            <ExternalLink class="size-4" />
-            <span class="sr-only">{{ t('betting.openPage') }}</span>
-          </NuxtLink>
-          <BettingTableDetail :data="detail" compact @select-feature="featPeek = $event">
-            <template #candidate-action="{ candidate }">
-              <Button v-if="detail.table.status === 'open'" :variant="iVoted(candidate) ? 'default' : 'outline'" size="sm" :disabled="voting" @click="vote(candidate.id)">
-                <Check class="size-3.5" /> {{ iVoted(candidate) ? t('betting.voted') : t('betting.vote') }}
-              </Button>
-            </template>
-            <template v-if="detail.table.status === 'open' && role === 'owner'" #candidates-footer>
-              <Button @click="validateOpen = true">{{ t('betting.validate') }}</Button>
-            </template>
-          </BettingTableDetail>
-          <ValidateTableDialog v-model:open="validateOpen" :table-id="detail.table.id" :candidates="detail.candidates" @validated="onValidated" />
-        </template>
-      </SheetContent>
-    </Sheet>
+    <DetailSheet
+      v-model:open="sheetOpen" :ready="!!detail"
+      :title="detail?.table.title ?? ''" :open-page-to="`/betting/${detail?.table.id}`"
+      :open-page-title="t('betting.openTablePage')" :open-page-label="t('betting.openPage')"
+    >
+      <template #actions>
+        <DropdownMenu v-if="detail">
+          <DropdownMenuTrigger as-child>
+            <button
+              :title="t('betting.actions')"
+              class="ring-offset-background focus:ring-ring absolute top-4 right-[4.75rem] rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden"
+            >
+              <MoreHorizontal class="size-4" />
+              <span class="sr-only">{{ t('betting.actions') }}</span>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem variant="destructive" @click="askDelete({ id: detail.table.id, title: detail.table.title }); selectedId = null"><Trash2 /> {{ t('betting.delete') }}</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </template>
+      <template v-if="detail">
+        <BettingTableDetail :data="detail" compact @select-feature="featPeek = $event">
+          <template #candidate-action="{ candidate }">
+            <Button v-if="detail.table.status === 'open'" :variant="iVoted(candidate) ? 'default' : 'outline'" size="sm" :disabled="voting" @click="vote(candidate.id)">
+              <Check class="size-3.5" /> {{ iVoted(candidate) ? t('betting.voted') : t('betting.vote') }}
+            </Button>
+          </template>
+          <template v-if="detail.table.status === 'open' && role === 'owner'" #candidates-footer>
+            <Button @click="validateOpen = true">{{ t('betting.validate') }}</Button>
+          </template>
+        </BettingTableDetail>
+        <ValidateTableDialog v-model:open="validateOpen" :table-id="detail.table.id" :candidates="detail.candidates" @validated="onValidated" />
+      </template>
+    </DetailSheet>
 
     <!-- Feature peek — from the Sheet, open the feature as a modal Dialog -->
     <FeatureDetailOverlay v-model:feature-id="featPeek" mode="dialog" />
