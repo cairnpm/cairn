@@ -1,12 +1,7 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watchEffect } from 'vue'
-import { Check, MoreHorizontal, RotateCcw, Trash2 } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Check } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import type { BettingCandidate, BettingTableDetailData } from '~/types/betting'
 
 const { t } = useUiLang()
@@ -17,27 +12,15 @@ const { data, error } = await useApiData<BettingTableDetailData>(qk.bettingTable
 const { mutate } = useApiMutation()
 function onValidated() { return invalidate(qk.bettingTableDetail, qk.bettingTables, qk.hills, qk.features, qk.overview) }
 
-// Feed the breadcrumb (Workspace › Betting Table › <table title>).
-watchEffect(() => { if (data.value) bike.setCrumb(data.value.table.title) })
-onUnmounted(() => bike.setCrumb(''))
-
-const isDeleted = computed(() => data.value?.table.status === 'deleted')
-const confirmOpen = ref(false)
-const deleting = ref(false)
-async function confirmDelete() {
-  if (deleting.value) return
-  deleting.value = true
-  try {
-    await mutate(`/api/betting-tables/${id.value}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview], success: t('betting.toast.deleted') })
-    await navigateTo('/betting')
-  } finally { deleting.value = false }
-}
-const restoring = ref(false)
-async function restore() {
-  if (restoring.value) return
-  restoring.value = true
-  try { await mutate(`/api/betting-tables/${id.value}/restore`, { invalidates: [qk.bettingTableDetail, qk.bettingTables, qk.overview], success: t('betting.toast.restored') }) } finally { restoring.value = false }
-}
+const { isDeleted, confirmOpen, deleting, restoring, confirmDelete, restore } = useDetailCrud({
+  resource: 'betting-tables',
+  id: computed(() => id.value as string),
+  title: computed(() => data.value?.table.title),
+  status: computed(() => data.value?.table.status),
+  listRoute: '/betting',
+  invalidates: { delete: [qk.bettingTables, qk.overview], restore: [qk.bettingTableDetail, qk.bettingTables, qk.overview] },
+  toasts: { deleted: () => t('betting.toast.deleted'), restored: () => t('betting.toast.restored') },
+})
 
 const busy = ref(false)
 async function toggleVote(candidateId: string) {
@@ -61,15 +44,11 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
     <div v-if="data" class="h-full">
     <BettingTableDetail :data="data" @select-feature="featPeek = $event">
       <template #header-action>
-        <DropdownMenu>
-          <DropdownMenuTrigger as-child>
-            <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">{{ t('betting.actions') }}</span></Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem v-if="isDeleted" :disabled="restoring" @click="restore"><RotateCcw /> {{ t('betting.restore') }}</DropdownMenuItem>
-            <DropdownMenuItem v-else variant="destructive" @click="confirmOpen = true"><Trash2 /> {{ t('betting.delete') }}</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <ResourceActionsMenu
+          :is-deleted="isDeleted" :restoring="restoring"
+          :actions-label="t('betting.actions')" :restore-label="t('betting.restore')" :delete-label="t('betting.delete')"
+          @restore="restore" @delete="confirmOpen = true"
+        />
       </template>
       <template #candidate-action="{ candidate }">
         <Button v-if="isOpen" :variant="iVoted(candidate) ? 'default' : 'outline'" size="sm" :disabled="busy" @click="toggleVote(candidate.id)">
@@ -88,20 +67,13 @@ const iVoted = (c: BettingCandidate) => c.voters.includes(author.value)
     <ValidateTableDialog v-model:open="showValidate" :table-id="id" :candidates="data.candidates" @validated="onValidated" />
 
     <!-- Delete confirmation -->
-    <AlertDialog v-model:open="confirmOpen">
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ t('betting.deleteDialog.title') }}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {{ t('betting.deleteDialog.description', { title: data.table.title }) }}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel :disabled="deleting">{{ t('betting.cancel') }}</AlertDialogCancel>
-          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? t('betting.deleting') : t('betting.delete') }}</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDeleteDialog
+      v-model:open="confirmOpen" :deleting="deleting"
+      :title="t('betting.deleteDialog.title')"
+      :description="t('betting.deleteDialog.description', { title: data.table.title })"
+      :cancel-label="t('betting.cancel')" :confirm-label="deleting ? t('betting.deleting') : t('betting.delete')"
+      @confirm="confirmDelete"
+    />
     </div>
   </DetailState>
 </template>

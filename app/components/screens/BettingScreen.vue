@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { type ColumnDef } from '@tanstack/vue-table'
-import { Check, ExternalLink, MoreHorizontal, Plus, RotateCcw, Trash2 } from 'lucide-vue-next'
+import { Check, ExternalLink, MoreHorizontal, Plus, Trash2 } from 'lucide-vue-next'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
@@ -10,10 +10,6 @@ import type { BettingTableDetailData } from '~/types/betting'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
-  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 
 interface TableRowT {
   id: string; title: string; status: string; owner_name: string | null; owner_avatar: string | null
@@ -191,15 +187,11 @@ const { table, vis, hideableCols } = useDataTable({
             </TableCell>
             <TableCell v-if="vis('generated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.generated_at, locale) }}</TableCell>
             <TableCell @click.stop>
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                  <Button variant="ghost" size="icon" class="size-8 text-muted-foreground"><MoreHorizontal class="size-4" /><span class="sr-only">{{ t('betting.actions') }}</span></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem v-if="row.original.status === 'deleted'" :disabled="restoring" @click="restore(row.original.id)"><RotateCcw /> {{ t('betting.restore') }}</DropdownMenuItem>
-                  <DropdownMenuItem v-else variant="destructive" @click="askDelete({ id: row.original.id, title: row.original.title })"><Trash2 /> {{ t('betting.delete') }}</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <ResourceActionsMenu
+                :is-deleted="row.original.status === 'deleted'" :restoring="restoring"
+                :actions-label="t('betting.actions')" :restore-label="t('betting.restore')" :delete-label="t('betting.delete')"
+                @restore="restore(row.original.id)" @delete="askDelete({ id: row.original.id, title: row.original.title })"
+              />
             </TableCell>
           </TableRow>
           <TableRow v-if="!table.getRowModel().rows.length">
@@ -265,19 +257,12 @@ const { table, vis, hideableCols } = useDataTable({
     <FeatureDetailOverlay v-model:feature-id="featPeek" mode="dialog" />
 
     <!-- Delete confirmation -->
-    <AlertDialog v-model:open="confirmOpen">
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{{ t('betting.deleteDialog.title') }}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {{ t('betting.deleteDialog.description', { title: toDelete?.title }) }}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel :disabled="deleting">{{ t('betting.cancel') }}</AlertDialogCancel>
-          <AlertDialogAction class="bg-destructive text-white hover:bg-destructive/90" :disabled="deleting" @click="confirmDelete">{{ deleting ? t('betting.deleting') : t('betting.delete') }}</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDeleteDialog
+      v-model:open="confirmOpen" :deleting="deleting"
+      :title="t('betting.deleteDialog.title')"
+      :description="t('betting.deleteDialog.description', { title: toDelete?.title })"
+      :cancel-label="t('betting.cancel')" :confirm-label="deleting ? t('betting.deleting') : t('betting.delete')"
+      @confirm="confirmDelete"
+    />
   </div>
 </template>
