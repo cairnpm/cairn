@@ -43,7 +43,9 @@ async function toggleVote(candidateId: string) {
   if (busy.value || data.value?.table.status !== 'open') return
   busy.value = true
   try {
-    await mutate(`/api/betting-tables/${id.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTableDetail, qk.bettingTables] })
+    const cand = data.value?.candidates.find(c => c.id === candidateId)
+    const success = cand && iVoted(cand) ? 'Vote retiré' : 'Vote ajouté'
+    await mutate(`/api/betting-tables/${id.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTableDetail, qk.bettingTables], success })
   } finally { busy.value = false }
 }
 

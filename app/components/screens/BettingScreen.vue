@@ -84,7 +84,9 @@ async function vote(candidateId: string) {
   if (voting.value || detail.value?.table.status !== 'open') return
   voting.value = true
   try {
-    await mutate(`/api/betting-tables/${selectedId.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTables] })
+    const cand = detail.value?.candidates.find(c => c.id === candidateId)
+    const success = cand && iVoted(cand) ? 'Vote retiré' : 'Vote ajouté'
+    await mutate(`/api/betting-tables/${selectedId.value}/votes`, { body: { candidate_id: candidateId }, invalidates: [qk.bettingTables], success })
     await loadDetail()
   } finally { voting.value = false }
 }
