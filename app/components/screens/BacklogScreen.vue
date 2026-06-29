@@ -50,7 +50,7 @@ async function confirmDelete() {
   deleting.value = true
   const id = toDelete.value.id
   try {
-    await mutate(`/api/features/${id}`, { method: 'DELETE', invalidates: [qk.features, qk.overview] })
+    await mutate(`/api/features/${id}`, { method: 'DELETE', invalidates: [qk.features, qk.overview], success: 'Feature supprimée' })
     if (selectedFeatureId.value === id) bike.clearFeature()
   } finally { deleting.value = false; confirmOpen.value = false; toDelete.value = null }
 }
@@ -76,7 +76,7 @@ const restoring = ref(false)
 async function restore(id: string) {
   if (restoring.value) return
   restoring.value = true
-  try { await mutate(`/api/features/${id}/restore`, { invalidates: [qk.features, qk.overview] }) } finally { restoring.value = false }
+  try { await mutate(`/api/features/${id}/restore`, { invalidates: [qk.features, qk.overview], success: 'Feature réactivée' }) } finally { restoring.value = false }
 }
 
 // ── @tanstack/vue-table ───────────────────────────────────────────────────

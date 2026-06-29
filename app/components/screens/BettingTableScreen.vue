@@ -27,7 +27,7 @@ async function confirmDelete() {
   if (deleting.value) return
   deleting.value = true
   try {
-    await mutate(`/api/betting-tables/${id.value}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview] })
+    await mutate(`/api/betting-tables/${id.value}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview], success: 'Table supprimée' })
     await navigateTo('/betting')
   } finally { deleting.value = false }
 }
@@ -35,7 +35,7 @@ const restoring = ref(false)
 async function restore() {
   if (restoring.value) return
   restoring.value = true
-  try { await mutate(`/api/betting-tables/${id.value}/restore`, { invalidates: [qk.bettingTableDetail, qk.bettingTables, qk.overview] }) } finally { restoring.value = false }
+  try { await mutate(`/api/betting-tables/${id.value}/restore`, { invalidates: [qk.bettingTableDetail, qk.bettingTables, qk.overview], success: 'Table réactivée' }) } finally { restoring.value = false }
 }
 
 const busy = ref(false)

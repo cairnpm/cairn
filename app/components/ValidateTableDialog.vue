@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { toast } from 'vue-sonner'
 import type { BettingCandidate } from '~/types/betting'
 
 const props = defineProps<{ tableId: string; candidates: BettingCandidate[] }>()
@@ -39,9 +40,10 @@ async function validate() {
       method: 'POST',
       body: { hill_name: hillName.value, starts_at: startsAt.value || null, ends_at: endsAt.value || null, rationale: why.value, selected_ids: picked.value },
     })
+    toast.success('Table validée — cycle ouvert')
     emit('validated')
     open.value = false
-  } finally { validating.value = false }
+  } catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || 'Validation impossible') } finally { validating.value = false }
 }
 </script>
 

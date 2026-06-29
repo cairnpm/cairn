@@ -50,7 +50,7 @@ async function confirmDelete() {
   deleting.value = true
   const id = toDelete.value.id
   try {
-    await mutate(`/api/betting-tables/${id}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview] })
+    await mutate(`/api/betting-tables/${id}`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview], success: 'Table supprimée' })
     if (selectedId.value === id) selectedId.value = null
   } finally { deleting.value = false; confirmOpen.value = false; toDelete.value = null }
 }
@@ -59,7 +59,7 @@ async function createTable() {
   if (creating.value) return
   creating.value = true
   try {
-    const r = await mutate<{ id: string }>('/api/betting-tables', { body: { title: '' }, invalidates: [qk.bettingTables, qk.overview] })
+    const r = await mutate<{ id: string }>('/api/betting-tables', { body: { title: '' }, invalidates: [qk.bettingTables, qk.overview], success: 'Table créée' })
     await bike.selectBettingTable(r.id)
   } finally { creating.value = false }
 }
@@ -112,7 +112,7 @@ const restoring = ref(false)
 async function restore(id: string) {
   if (restoring.value) return
   restoring.value = true
-  try { await mutate(`/api/betting-tables/${id}/restore`, { invalidates: [qk.bettingTables, qk.overview] }) } finally { restoring.value = false }
+  try { await mutate(`/api/betting-tables/${id}/restore`, { invalidates: [qk.bettingTables, qk.overview], success: 'Table réactivée' }) } finally { restoring.value = false }
 }
 
 

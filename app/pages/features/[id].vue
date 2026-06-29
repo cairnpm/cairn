@@ -31,7 +31,7 @@ async function confirmDelete() {
   if (deleting.value) return
   deleting.value = true
   try {
-    await mutate(`/api/features/${route.params.id}`, { method: 'DELETE', invalidates: [qk.features, qk.overview] })
+    await mutate(`/api/features/${route.params.id}`, { method: 'DELETE', invalidates: [qk.features, qk.overview], success: 'Feature supprimée' })
     if (bike.selectedFeatureId.value === route.params.id) bike.clearFeature()
     await navigateTo('/backlog')
   } finally { deleting.value = false }
@@ -40,7 +40,7 @@ const restoring = ref(false)
 async function restore() {
   if (restoring.value) return
   restoring.value = true
-  try { await mutate(`/api/features/${route.params.id}/restore`, { invalidates: [qk.featureDetail, qk.features, qk.overview] }) } finally { restoring.value = false }
+  try { await mutate(`/api/features/${route.params.id}/restore`, { invalidates: [qk.featureDetail, qk.features, qk.overview], success: 'Feature réactivée' }) } finally { restoring.value = false }
 }
 </script>
 
