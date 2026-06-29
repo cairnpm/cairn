@@ -1,11 +1,8 @@
 import { all, get } from '~~/server/db/client'
-import { ensureSchema } from '~~/server/db/schema'
 import { getSetting } from '~~/server/db/settings'
 
 // Sidebar overview: nav counts, recent activity feed, and the live model — one cheap call.
 export default defineEventHandler(() => {
-  ensureSchema()
-
   const counts = get<{ total: number, shaped: number, bet: number, building: number, done: number }>(
     `SELECT COUNT(*) AS total,
             SUM(status='shaped') AS shaped, SUM(status='bet') AS bet,

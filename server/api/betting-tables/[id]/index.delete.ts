@@ -1,11 +1,7 @@
-import { ensureSchema } from '~~/server/db/schema'
 import { BETTING_SOFT_DELETE, softDelete } from '~~/server/db/softDelete'
 
 // Soft delete: keep the table, flip status to 'deleted', remember the prior status for restore.
-export default defineEventHandler(async (event) => {
-  ensureSchema()
-  const { user } = await requireUserSession(event)
-  const actor = (user?.name as string) || 'inconnu'
+export default defineAuthedHandler(async (event, { actor }) => {
   const id = getRouterParam(event, 'id')!
   const res = softDelete(BETTING_SOFT_DELETE, id, actor)
   if (!res) throw createError({ statusCode: 404, statusMessage: 'Betting table not found' })

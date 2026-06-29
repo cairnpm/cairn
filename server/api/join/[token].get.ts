@@ -1,10 +1,8 @@
-import { ensureSchema } from '~~/server/db/schema'
 import { getValidInvitation } from '~~/server/db/invitations'
 import { getSetting } from '~~/server/db/settings'
 
 // Public: validate an invitation token and return what the join page needs to render.
 export default defineEventHandler(async (event) => {
-  ensureSchema()
   const token = getRouterParam(event, 'token') ?? ''
   const inv = getValidInvitation(token)
   if (!inv) throw createError({ statusCode: 404, statusMessage: 'Invitation invalide ou expirée' })

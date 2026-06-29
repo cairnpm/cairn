@@ -1,10 +1,8 @@
 import { all, get } from '~~/server/db/client'
-import { ensureSchema } from '~~/server/db/schema'
 import { listAssignees } from '~~/server/db/assignees'
 
 // Hill detail: the cycle + its bet features, each with PR links and the decision that bet it.
 export default defineEventHandler((event) => {
-  ensureSchema()
   const id = getRouterParam(event, 'id')!
 
   const hill = get<{ id: string }>('SELECT id, name, starts_at, ends_at, status, created_at FROM hills WHERE id = ?', id)

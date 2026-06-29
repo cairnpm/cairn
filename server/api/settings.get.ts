@@ -1,10 +1,8 @@
-import { ensureSchema } from '~~/server/db/schema'
 import { getSetting } from '~~/server/db/settings'
 
 // Read-only settings view. NEVER returns the API key in clear — only whether one is set, and
 // where it comes from (DB setting vs env fallback).
 export default defineEventHandler(() => {
-  ensureSchema()
   const dbKey = getSetting('anthropic_api_key')
   const model = getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
   return {

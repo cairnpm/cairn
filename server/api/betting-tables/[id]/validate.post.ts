@@ -1,14 +1,11 @@
 import { all, get, run, tx } from '~~/server/db/client'
-import { ensureSchema } from '~~/server/db/schema'
 import { getBettingTable, logBettingEvent } from '~~/server/db/betting'
 import { recordDecision } from '~~/server/domain/bet'
 import { newId } from '~~/server/utils/id'
 
 // Owner validates a table → creates a hill (cycle) and bets the selected, still-shaped features.
 // A feature that changed status since the snapshot (done/bet/archived/merged) is skipped, not reopened.
-export default defineEventHandler(async (event) => {
-  ensureSchema()
-  const { user } = await requireUserSession(event)
+export default defineAuthedHandler(async (event, { user, actor }) => {
   if (user.role !== 'owner') throw createError({ statusCode: 403, statusMessage: 'Seul l\'owner peut valider une betting table' })
 
   const id = getRouterParam(event, 'id')!
@@ -42,7 +39,7 @@ export default defineEventHandler(async (event) => {
       run('UPDATE betting_candidates SET selected = 1 WHERE id = ?', c.id)
       const f = get<{ status: string }>('SELECT status FROM features WHERE id = ?', c.feature_id)
       if (f?.status === 'shaped') {
-        recordDecision({ featureId: c.feature_id, verdict: 'bet', hillId, rationale: rationale || `Parié via la betting table « ${table.title} »`, decidedBy: user.name })
+        recordDecision({ featureId: c.feature_id, verdict: 'bet', hillId, rationale: rationale || `Parié via la betting table « ${table.title} »`, decidedBy: actor })
         bet.push(c.title_snap)
       } else {
         skipped.push({ title: c.title_snap, status: f?.status ?? 'introuvable' })
@@ -50,9 +47,9 @@ export default defineEventHandler(async (event) => {
     }
     run(
       `UPDATE betting_tables SET status = 'validated', hill_id = ?, validated_at = datetime('now'), validated_by = ? WHERE id = ?`,
-      hillId, user.name, id,
+      hillId, actor, id,
     )
-    logBettingEvent(id, user.name, 'validated', `Validée par ${user.name} → hill « ${hillName} » · ${bet.length} pari(s)`, { hill_id: hillId, bet, skipped })
+    logBettingEvent(id, actor, 'validated', `Validée par ${actor} → hill « ${hillName} » · ${bet.length} pari(s)`, { hill_id: hillId, bet, skipped })
   })
 
   return { ok: true, hill_id: hillId, bet, skipped }

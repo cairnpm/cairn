@@ -1,10 +1,7 @@
-import { ensureSchema } from '~~/server/db/schema'
 import { updateUserProfile } from '~~/server/db/users'
 
 // Update the current user's profile and refresh the session so the UI reflects it.
-export default defineEventHandler(async (event) => {
-  ensureSchema()
-  const { user } = await requireUserSession(event)
+export default defineAuthedHandler(async (event, { user }) => {
   const body = await readBody(event)
   const updated = updateUserProfile(user.id, {
     name: typeof body?.name === 'string' ? body.name : undefined,

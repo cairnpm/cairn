@@ -1,10 +1,8 @@
 import { all, get } from '~~/server/db/client'
-import { ensureSchema } from '~~/server/db/schema'
 
 // Agent quality metric (brief agent §6): rate of routing decisions the human corrected.
 // Built from routing_log — the free eval dataset.
 export default defineEventHandler(() => {
-  ensureSchema()
   const totals = get<{ total: number, corrected: number }>(
     'SELECT COUNT(*) AS total, COALESCE(SUM(corrected), 0) AS corrected FROM routing_log',
   )

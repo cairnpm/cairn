@@ -1,9 +1,7 @@
-import { ensureSchema } from '~~/server/db/schema'
 import { seedUsersIfEmpty, findUserByEmail } from '~~/server/db/users'
 import { verifyPassword } from '~~/server/utils/password'
 
 export default defineEventHandler(async (event) => {
-  ensureSchema()
   seedUsersIfEmpty()
   const body = await readBody(event)
   const email = typeof body?.email === 'string' ? body.email.trim() : ''

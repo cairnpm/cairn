@@ -1,5 +1,4 @@
 import { all } from '~~/server/db/client'
-import { ensureSchema } from '~~/server/db/schema'
 
 interface HillRow {
   id: string; name: string; starts_at: string | null; ends_at: string | null
@@ -7,7 +6,6 @@ interface HillRow {
 }
 
 export default defineEventHandler(() => {
-  ensureSchema()
   return all<HillRow>(
     `SELECT h.id, h.name, h.starts_at, h.ends_at, h.status,
             COUNT(f.id) AS total,

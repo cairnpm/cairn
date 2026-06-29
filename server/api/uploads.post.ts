@@ -1,14 +1,11 @@
 import { writeFileSync } from 'node:fs'
 import { extname, join } from 'node:path'
-import { ensureSchema } from '~~/server/db/schema'
 import { insertAttachment, kindFor, uploadsDir } from '~~/server/db/attachments'
 import { newId } from '~~/server/utils/id'
 
 // Multipart upload (h3 built-in — no extra dep). Files land on the same volume as the DB.
 // They're created unlinked; the intake commit (or a future ticket action) links them.
-export default defineEventHandler(async (event) => {
-  ensureSchema()
-  const { user } = await requireUserSession(event)
+export default defineAuthedHandler(async (event, { actor }) => {
   const parts = await readMultipartFormData(event)
   if (!parts?.length) throw createError({ statusCode: 400, statusMessage: 'no file' })
 
@@ -24,7 +21,7 @@ export default defineEventHandler(async (event) => {
     const kind = kindFor(mime)
     insertAttachment({
       id, feature_id: null, feedback_id: null, filename: part.filename, mime,
-      bytes: part.data.length, kind, storage_path: storagePath, uploaded_by: user.name as string,
+      bytes: part.data.length, kind, storage_path: storagePath, uploaded_by: actor,
     })
     saved.push({ id, filename: part.filename, mime, kind, bytes: part.data.length })
   }

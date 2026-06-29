@@ -1,8 +1,7 @@
 import { changePassword } from '~~/server/db/users'
 
 // Change the current user's password (requires the current one). scrypt verify + rehash.
-export default defineEventHandler(async (event) => {
-  const { user } = await requireUserSession(event)
+export default defineAuthedHandler(async (event, { user }) => {
   const body = await readBody(event)
   const current = typeof body?.current === 'string' ? body.current : ''
   const next = typeof body?.next === 'string' ? body.next : ''

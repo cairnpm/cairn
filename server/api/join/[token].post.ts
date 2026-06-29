@@ -1,9 +1,7 @@
-import { ensureSchema } from '~~/server/db/schema'
 import { acceptInvitation } from '~~/server/db/invitations'
 
 // Public: accept an invitation — create the member (scrypt) and open their session.
 export default defineEventHandler(async (event) => {
-  ensureSchema()
   const token = getRouterParam(event, 'token') ?? ''
   const body = await readBody(event)
   const name = typeof body?.name === 'string' ? body.name : ''

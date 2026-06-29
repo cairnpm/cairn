@@ -1,15 +1,12 @@
 import { run, tx } from '~~/server/db/client'
-import { ensureSchema } from '~~/server/db/schema'
 import { markStaleFeatures } from '~~/server/db/stale'
 import { logBettingEvent } from '~~/server/db/betting'
 import { computeMenu } from '~~/server/domain/betting'
 import { newId } from '~~/server/utils/id'
 
 // Snapshot the current ranked menu into a persistent, votable betting table.
-export default defineEventHandler(async (event) => {
-  ensureSchema()
+export default defineAuthedHandler(async (event, { user, actor }) => {
   markStaleFeatures()
-  const { user } = await requireUserSession(event)
   const body = await readBody(event)
   const title = (typeof body?.title === 'string' && body.title.trim()) || `Betting table — ${new Date().toISOString().slice(0, 10)}`
 
@@ -20,7 +17,7 @@ export default defineEventHandler(async (event) => {
     run(
       `INSERT INTO betting_tables (id, title, status, owner_id, owner_name, generated_at, created_at)
        VALUES (?, ?, 'open', ?, ?, datetime('now'), datetime('now'))`,
-      tableId, title, user.id, user.name,
+      tableId, title, user.id, actor,
     )
     for (const c of menu) {
       run(
@@ -29,7 +26,7 @@ export default defineEventHandler(async (event) => {
         newId(), tableId, c.feature_id, c.theme, c.score, c.title, c.problem, c.appetite, c.signal_count,
       )
     }
-    logBettingEvent(tableId, user.name, 'generated', `Table générée par ${user.name} — ${menu.length} candidat(s)`, { candidates: menu.length })
+    logBettingEvent(tableId, actor, 'generated', `Table générée par ${actor} — ${menu.length} candidat(s)`, { candidates: menu.length })
   })
 
   return { id: tableId, title, candidate_count: menu.length }

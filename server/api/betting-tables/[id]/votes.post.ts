@@ -1,12 +1,9 @@
 import { get, run, tx } from '~~/server/db/client'
-import { ensureSchema } from '~~/server/db/schema'
 import { getBettingTable, logBettingEvent } from '~~/server/db/betting'
 import { newId } from '~~/server/utils/id'
 
 // Toggle the session user's vote for a candidate.
-export default defineEventHandler(async (event) => {
-  ensureSchema()
-  const { user } = await requireUserSession(event)
+export default defineAuthedHandler(async (event, { user, actor }) => {
   const id = getRouterParam(event, 'id')!
   const body = await readBody(event)
   const candidateId = typeof body?.candidate_id === 'string' ? body.candidate_id : ''
@@ -25,11 +22,11 @@ export default defineEventHandler(async (event) => {
     if (existing) {
       run('DELETE FROM betting_votes WHERE id = ?', existing.id)
       voted = false
-      logBettingEvent(id, user.name, 'vote_cleared', `${user.name} a retiré son vote sur « ${cand.title_snap} »`, { candidate_id: candidateId })
+      logBettingEvent(id, actor, 'vote_cleared', `${actor} a retiré son vote sur « ${cand.title_snap} »`, { candidate_id: candidateId })
     } else {
-      run('INSERT INTO betting_votes (id, table_id, candidate_id, voter_id, voter_name, created_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))', newId(), id, candidateId, user.id, user.name)
+      run('INSERT INTO betting_votes (id, table_id, candidate_id, voter_id, voter_name, created_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))', newId(), id, candidateId, user.id, actor)
       voted = true
-      logBettingEvent(id, user.name, 'vote_cast', `${user.name} a voté pour « ${cand.title_snap} »`, { candidate_id: candidateId })
+      logBettingEvent(id, actor, 'vote_cast', `${actor} a voté pour « ${cand.title_snap} »`, { candidate_id: candidateId })
     }
   })
   return { ok: true, voted: voted! }

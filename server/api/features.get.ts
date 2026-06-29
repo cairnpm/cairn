@@ -1,5 +1,4 @@
 import { all } from '~~/server/db/client'
-import { ensureSchema } from '~~/server/db/schema'
 import { markStaleFeatures } from '~~/server/db/stale'
 import { assigneesByRole } from '~~/server/db/assignees'
 
@@ -11,7 +10,6 @@ interface FeatureRow {
 
 // Read-only backlog. Mutations happen only through the gateway (intake/decisions).
 export default defineEventHandler((event) => {
-  ensureSchema()
   markStaleFeatures() // lazy anti-backlog: flag shaped features not bet on within N days
   const status = getQuery(event).status
   const where = typeof status === 'string' && status !== 'all' ? 'WHERE f.status = ?' : ''

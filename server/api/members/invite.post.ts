@@ -1,9 +1,7 @@
-import { ensureSchema } from '~~/server/db/schema'
 import { createInvitation } from '~~/server/db/invitations'
 
 // Owner creates an invite for an email → returns a shareable join link (copy it into Slack/email).
 export default defineEventHandler(async (event) => {
-  ensureSchema()
   const owner = await requireOwner(event)
   const body = await readBody(event)
   const email = typeof body?.email === 'string' ? body.email : ''

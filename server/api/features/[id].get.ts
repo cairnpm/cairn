@@ -1,11 +1,9 @@
 import { all, get } from '~~/server/db/client'
-import { ensureSchema } from '~~/server/db/schema'
 import { listAssignees } from '~~/server/db/assignees'
 import { listFeatureEvents } from '~~/server/db/events'
 
 // Read-only feature detail: shape + signals (feedback) + decisions + PR links + routing audit.
 export default defineEventHandler((event) => {
-  ensureSchema()
   const id = getRouterParam(event, 'id')!
 
   const feature = get(

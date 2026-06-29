@@ -1,8 +1,7 @@
 import { setUserRole } from '~~/server/db/users'
 
 // Owner: promote/demote a member (can't demote the last owner).
-export default defineEventHandler(async (event) => {
-  await requireOwner(event)
+export default defineOwnerHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id requis' })
   const body = await readBody(event)

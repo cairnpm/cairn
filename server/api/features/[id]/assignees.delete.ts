@@ -1,12 +1,9 @@
-import { ensureSchema } from '~~/server/db/schema'
 import { removeAssignee, listAssignees, type AssigneeRole } from '~~/server/db/assignees'
 import { getUserById } from '~~/server/db/users'
 import { logEvent, listFeatureEvents } from '~~/server/db/events'
 
 // Unassign a member from a feature.
-export default defineEventHandler(async (event) => {
-  ensureSchema()
-  const { user } = await requireUserSession(event)
+export default defineAuthedHandler(async (event, { actor }) => {
   const id = getRouterParam(event, 'id')!
   const body = await readBody(event)
   const userId = typeof body?.user_id === 'string' ? body.user_id : ''
@@ -14,6 +11,6 @@ export default defineEventHandler(async (event) => {
 
   removeAssignee(id, userId, role)
   const member = userId ? getUserById(userId) : undefined
-  if (member) logEvent(id, user.name as string, 'unassigned', `${user.name} a retiré ${member.name} (${role})`, { user_id: userId, role })
+  if (member) logEvent(id, actor, 'unassigned', `${actor} a retiré ${member.name} (${role})`, { user_id: userId, role })
   return { assignees: listAssignees(id), events: listFeatureEvents(id) }
 })

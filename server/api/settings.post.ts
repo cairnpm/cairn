@@ -1,14 +1,11 @@
-import { ensureSchema } from '~~/server/db/schema'
 import { setSetting } from '~~/server/db/settings'
 import { resetLlm } from '~~/server/llm/provider'
 
 // Update runtime settings. The API key is write-only (sent here, never read back). Changing
 // either field drops the cached LLM provider so the next request rebuilds from the new config.
-export default defineEventHandler(async (event) => {
-  ensureSchema()
+export default defineAuthedHandler(async (event, { actor }) => {
   // Attribution comes from the authenticated session, never the request body.
-  const { user } = await requireUserSession(event)
-  const by = user.name as string
+  const by = actor
   const body = await readBody(event)
 
   if (typeof body?.anthropic_api_key === 'string') {
