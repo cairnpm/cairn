@@ -242,8 +242,11 @@ const open = computed({
               </div>
               <span v-else class="text-muted-foreground">—</span>
             </TableCell>
-            <TableCell v-if="vis('hill')" class="truncate" @click.stop>
-              <NuxtLink v-if="row.original.hill_id" :to="`/hills/${row.original.hill_id}`" class="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground hover:underline">{{ row.original.hill_name }}<ExternalLink class="size-3.5 opacity-60" /></NuxtLink>
+            <TableCell v-if="vis('hill')" @click.stop>
+              <NuxtLink v-if="row.original.hill_id" :to="`/hills/${row.original.hill_id}`" class="flex items-center gap-1 text-muted-foreground hover:text-foreground">
+                <span class="truncate hover:underline">{{ row.original.hill_name }}</span>
+                <ExternalLink class="size-3.5 shrink-0 opacity-60" />
+              </NuxtLink>
               <span v-else class="text-muted-foreground">—</span>
             </TableCell>
             <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.updated_at) }}</TableCell>
