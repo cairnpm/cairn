@@ -50,6 +50,38 @@ export async function githubInstallationToken(): Promise<string | null> {
   catch { return null }
 }
 
+/** All installations of this App (so we can discover the installation even when the user installed
+ *  straight from GitHub, bypassing our callback). */
+export async function listAppInstallations(): Promise<{ id: number; account: string }[]> {
+  const { appId, privateKey } = githubAppConfig()
+  if (!appId || !privateKey) return []
+  try {
+    const res = await fetch('https://api.github.com/app/installations', {
+      headers: { Authorization: `Bearer ${mintJwt(appId, privateKey)}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    })
+    if (!res.ok) return []
+    const json = await res.json() as { id: number; account: { login: string } }[]
+    return json.map(i => ({ id: i.id, account: i.account?.login || '' }))
+  }
+  catch { return [] }
+}
+
+/** Mint an installation token for a specific installation id (used during discovery, before the id
+ *  is persisted). */
+export async function installationTokenFor(id: string | number): Promise<string | null> {
+  const { appId, privateKey } = githubAppConfig()
+  if (!appId || !privateKey) return null
+  try {
+    const res = await fetch(`https://api.github.com/app/installations/${id}/access_tokens`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${mintJwt(appId, privateKey)}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    })
+    if (!res.ok) return null
+    return (await res.json() as { token: string }).token
+  }
+  catch { return null }
+}
+
 /** The repos this installation can read (so the user never types owner/repo — we auto-detect after
  *  the grant). Returns full_names ("owner/repo"). */
 export async function listInstallationRepos(token: string): Promise<string[]> {
