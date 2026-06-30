@@ -1,0 +1,51 @@
+{
+  "_doc": "Shape for POST /api/import-roadmap (owner-only). History only: finished hills + delivered features + their signals. Backlog/shaping features go through the intake instead. Re-runnable (idempotent by id). Use stable ids like 'notion-<pageId>'.",
+
+  "hills": [
+    {
+      "id": "notion-cycle-q1-perf",
+      "name": "Q1 — Performance",
+      "starts": "2026-01-06",
+      "ends": "2026-01-31",
+      "status": "closed"
+    },
+    {
+      "id": "notion-cycle-q2-team",
+      "name": "Q2 — Collaboration",
+      "starts": "2026-04-01",
+      "ends": "2026-04-30",
+      "status": "active"
+    }
+  ],
+
+  "features": [
+    {
+      "id": "notion-feat-pdf-perf",
+      "title": "Export PDF asynchrone",
+      "problem": "L'export PDF prenait ~30s en synchrone — top plainte utilisateurs.",
+      "appetite": "small",
+      "solution": "Génération en queue + cache des templates rendus.",
+      "rabbit_holes": "Cohérence du rendu sync/async, invalidation du cache.",
+      "out_of_bounds": "Pas de refonte du format PDF — perf uniquement.",
+      "status": "done",
+      "hill": "notion-cycle-q1-perf",
+      "feedback": [
+        { "content": "L'export PDF est beaucoup trop lent, ~30s", "source": "email", "classification": "directive", "captured_by": "Alex" }
+      ],
+      "decision": { "verdict": "bet", "rationale": "Top plainte depuis 3 semaines, impact NPS direct.", "by": "CEO" },
+      "pr": { "repo": "monorg/monrepo", "number": 335, "status": "merged" }
+    },
+    {
+      "id": "notion-feat-slack",
+      "title": "Notifications Slack",
+      "problem": "L'équipe perd ~45min/jour en check-ins de statut.",
+      "appetite": "small",
+      "status": "building",
+      "hill": "notion-cycle-q2-team",
+      "feedback": [
+        { "content": "On perd un temps fou en réunions de statut", "source": "slack", "classification": "explore" }
+      ],
+      "decision": { "verdict": "bet", "rationale": "ROI immédiat sur le daily.", "by": "CEO" }
+    }
+  ]
+}
