@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { getSetting } from '../db/settings'
+import { getSecret, getSetting } from '../db/settings'
 import { githubInstallationToken } from './githubApp'
 
 const exec = promisify(execFile)
@@ -59,7 +59,7 @@ export async function refreshIfStale(): Promise<void> {
   if (p.mode !== 'github' || !p.slug) return
   const dir = join(REPOS_DIR, p.slug)
   if (!existsSync(join(dir, '.git')) || Date.now() - lastFetchedMs(dir) < REFRESH_TTL_MS) return
-  const token = getSetting('code_repo_token') || await githubInstallationToken()
+  const token = getSecret('code_repo_token') || await githubInstallationToken()
   await syncRepo(spec, token).catch(() => {}) // fetch --depth 1 + reset; keep old clone on failure
 }
 

@@ -1,4 +1,4 @@
-import { getSetting, setSetting } from '~~/server/db/settings'
+import { getSecret, setSecret, setSetting } from '~~/server/db/settings'
 import { syncRepo } from '~~/server/utils/codeRepo'
 import { githubInstallationToken } from '~~/server/utils/githubApp'
 
@@ -12,9 +12,9 @@ export default defineOwnerHandler(async (event, { actor }) => {
 
   // Persist the link (empty repo clears it). A provided token is stored; omit to keep the current one.
   setSetting('code_repo', repo || null, actor)
-  if (typeof body?.token === 'string') setSetting('code_repo_token', body.token.trim() || null, actor)
+  if (typeof body?.token === 'string') setSecret('code_repo_token', body.token.trim() || null, actor)
   if (!repo) return { ok: false as const, error: 'empty' as const }
 
-  const token = getSetting('code_repo_token') || await githubInstallationToken()
+  const token = getSecret('code_repo_token') || await githubInstallationToken()
   return syncRepo(repo, token)
 })

@@ -1,5 +1,5 @@
 import { createSign } from 'node:crypto'
-import { getSetting } from '../db/settings'
+import { getSecret, getSetting } from '../db/settings'
 
 // GitHub App auth: instead of a pasted PAT, the workspace installs the Cairn App on its repo and we
 // mint short-lived (1h) installation tokens on demand — read-only, per-repo, revocable from GitHub.
@@ -7,7 +7,7 @@ import { getSetting } from '../db/settings'
 export function githubAppConfig() {
   return {
     appId: getSetting('github_app_id') || process.env.GITHUB_APP_ID || '',
-    privateKey: getSetting('github_app_private_key') || process.env.GITHUB_APP_PRIVATE_KEY || '',
+    privateKey: getSecret('github_app_private_key') || process.env.GITHUB_APP_PRIVATE_KEY || '',
     slug: getSetting('github_app_slug') || process.env.GITHUB_APP_SLUG || 'cairn-pm',
     installationId: getSetting('github_installation_id') || process.env.GITHUB_INSTALLATION_ID || '',
   }

@@ -1,4 +1,4 @@
-import { setSetting } from '~~/server/db/settings'
+import { setSecret, setSetting } from '~~/server/db/settings'
 import { resetLlm } from '~~/server/llm/provider'
 
 // Update runtime settings. The API key is write-only (sent here, never read back). Changing
@@ -11,7 +11,7 @@ export default defineAuthedHandler(async (event, { actor }) => {
   if (typeof body?.anthropic_api_key === 'string') {
     const key = body.anthropic_api_key.trim()
     // Empty string clears the override (falls back to env); a real key is stored.
-    setSetting('anthropic_api_key', key || null, by)
+    setSecret('anthropic_api_key', key || null, by)
   }
   if (typeof body?.anthropic_model === 'string' && body.anthropic_model.trim()) {
     setSetting('anthropic_model', body.anthropic_model.trim(), by)
@@ -35,7 +35,7 @@ export default defineAuthedHandler(async (event, { actor }) => {
   if (typeof body?.github_app_id === 'string') setSetting('github_app_id', body.github_app_id.trim() || null, by)
   if (typeof body?.github_app_slug === 'string') setSetting('github_app_slug', body.github_app_slug.trim() || null, by)
   if (typeof body?.github_app_private_key === 'string' && body.github_app_private_key.trim()) {
-    setSetting('github_app_private_key', body.github_app_private_key.trim(), by)
+    setSecret('github_app_private_key', body.github_app_private_key.trim(), by)
   }
 
   resetLlm()

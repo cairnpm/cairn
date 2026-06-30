@@ -63,8 +63,8 @@ export function resetLlm(): void {
  * auto-invalidates the cache without a restart — single process, single writer.
  */
 export async function getLlm(): Promise<LlmProvider> {
-  const { getSetting } = await import('../db/settings')
-  const apiKey = getSetting('anthropic_api_key') ?? process.env.ANTHROPIC_API_KEY ?? ''
+  const { getSetting, getSecret } = await import('../db/settings')
+  const apiKey = getSecret('anthropic_api_key') ?? process.env.ANTHROPIC_API_KEY ?? ''
   const model = getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
   const fingerprint = `${apiKey ? 'anthropic' : 'stub'}|${model}|${apiKey}`
 
