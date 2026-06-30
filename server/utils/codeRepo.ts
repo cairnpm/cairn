@@ -78,18 +78,21 @@ export async function syncRepo(spec: string, token?: string | null): Promise<Rep
   }
 
   if (!p.owner || !p.repo) return { ok: false, mode: 'github', error: 'bad-ref' }
-  const auth = token ? `${encodeURIComponent('x-access-token')}:${encodeURIComponent(token)}@` : ''
-  const url = `https://${auth}github.com/${p.owner}/${p.repo}.git`
+  const cleanUrl = `https://github.com/${p.owner}/${p.repo}.git`
+  // Tokenised URL passed INLINE to fetch/clone only — never stored, so the token is never written to
+  // .git/config on disk (after clone we reset the remote to the clean URL).
+  const authedUrl = token ? `https://x-access-token:${encodeURIComponent(token)}@github.com/${p.owner}/${p.repo}.git` : cleanUrl
   const dir = join(REPOS_DIR, p.slug!)
   try {
     mkdirSync(REPOS_DIR, { recursive: true })
     if (existsSync(join(dir, '.git'))) {
-      await git(['-C', dir, 'remote', 'set-url', 'origin', url])
-      await git(['-C', dir, 'fetch', '--depth', '1', 'origin', 'HEAD'])
+      await git(['-C', dir, 'fetch', '--depth', '1', authedUrl, 'HEAD'])
       await git(['-C', dir, 'reset', '--hard', 'FETCH_HEAD'])
+      await git(['-C', dir, 'remote', 'set-url', 'origin', cleanUrl]) // scrub any legacy tokenised remote
     }
     else {
-      await git(['clone', '--depth', '1', url, dir])
+      await git(['clone', '--depth', '1', authedUrl, dir])
+      await git(['-C', dir, 'remote', 'set-url', 'origin', cleanUrl]) // strip the token from the stored remote
     }
     const files = await fileCount(dir)
     return files ? { ok: true, mode: 'github', files } : { ok: false, mode: 'github', error: 'empty' }

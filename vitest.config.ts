@@ -1,9 +1,11 @@
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
+    // Never scan the server-side repo clone (.data/repos) — those are the LINKED product's own tests.
+    exclude: [...configDefaults.exclude, '**/.data/**'],
     // Real LLM calls are slow; a full conversation is several round-trips.
     testTimeout: 120_000,
     hookTimeout: 60_000,

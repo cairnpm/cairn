@@ -56,6 +56,7 @@ export async function searchCode(query: string, opts: { repo?: string; maxFiles?
     const m = line.match(/^(.+?):(\d+):(.*)$/)
     if (!m) continue
     const [, file, ln, text] = m
+    if (file === undefined || ln === undefined || text === undefined) continue
     const matched = terms.filter(t => text.toLowerCase().includes(t))
     if (!matched.length) continue
     const cur = byFile.get(file)

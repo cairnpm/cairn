@@ -5,10 +5,12 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:
 // tagged "enc:v1:" so legacy plaintext keeps working and only new writes are encrypted.
 const PREFIX = 'enc:v1:'
 
+let _key: Buffer | null | undefined // cached: scrypt is deliberately slow, derive the key only once
 function key(): Buffer | null {
+  if (_key !== undefined) return _key
   const secret = process.env.NUXT_SESSION_PASSWORD || process.env.CAIRN_SECRET
-  if (!secret || secret.length < 16) return null // no usable secret → caller stores/reads plaintext
-  return scryptSync(secret, 'cairn-secret-at-rest', 32)
+  _key = (!secret || secret.length < 16) ? null : scryptSync(secret, 'cairn-secret-at-rest', 32)
+  return _key
 }
 
 export function encryptSecret(plain: string): string {
