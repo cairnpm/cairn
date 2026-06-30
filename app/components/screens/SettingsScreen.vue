@@ -120,7 +120,14 @@ const modelInput = ref('claude-sonnet-4-6')
 watchEffect(() => { if (cfg.value) { workspaceName.value = cfg.value.workspace_name; workspaceLogo.value = cfg.value.workspace_logo; modelInput.value = cfg.value.model } })
 // Product repo — the intake greps it (ground truth of what's built) to dedupe + ground specs. One
 // button: grant read access via the Cairn GitHub App; the granted repo is auto-detected server-side.
-function connectGithub() { navigateTo('/api/github/install', { external: true }) }
+async function connectGithub() {
+  // Already installed? discover + clone server-side. Otherwise send to GitHub's grant screen.
+  if (cfg.value?.github_app_ready) {
+    const r = await $fetch<{ ok: boolean; repo?: string }>('/api/github/sync', { method: 'POST' }).catch(() => null)
+    if (r?.ok) { await invalidate(qk.settings); toast.success(`Repo connecté · ${r.repo}`); return }
+  }
+  navigateTo('/api/github/install', { external: true })
+}
 onMounted(() => {
   const g = new URLSearchParams(window.location.search).get('github')
   if (g === 'connected') toast.success('Accès accordé — repo connecté.')
