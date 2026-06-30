@@ -26,6 +26,13 @@ export default defineAuthedHandler(async (event, { actor }) => {
     // Local path or clone of the product repo the intake greps. Empty clears it (falls back to env).
     setSetting('code_repo', body.code_repo.trim() || null, by)
   }
+  // GitHub App config (so the "Connect GitHub" flow works without a pasted PAT). The private key is
+  // write-only — sent here, never read back, like the Anthropic key.
+  if (typeof body?.github_app_id === 'string') setSetting('github_app_id', body.github_app_id.trim() || null, by)
+  if (typeof body?.github_app_slug === 'string') setSetting('github_app_slug', body.github_app_slug.trim() || null, by)
+  if (typeof body?.github_app_private_key === 'string' && body.github_app_private_key.trim()) {
+    setSetting('github_app_private_key', body.github_app_private_key.trim(), by)
+  }
 
   resetLlm()
   return { ok: true }

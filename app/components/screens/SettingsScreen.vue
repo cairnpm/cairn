@@ -12,7 +12,7 @@ import { toast } from 'vue-sonner'
 
 const { t } = useUiLang()
 
-interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean }
+interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean; github_app_ready: boolean; github_app_slug: string; github_connected: boolean }
 interface Profile { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 interface Member { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 
@@ -135,6 +135,30 @@ async function connectRepo() {
   catch { repoCheck.value = { ok: false, error: 'clone-failed' } }
   finally { connectingRepo.value = false }
 }
+// GitHub App — token-free connect. Config (App id/slug + private key) then a "Connect" button that
+// sends the owner to GitHub's install screen.
+const ghAppId = ref('')
+const ghSlug = ref('')
+const ghKey = ref('')
+const savingApp = ref(false)
+const showAppConfig = ref(false)
+watchEffect(() => { if (cfg.value) ghSlug.value = cfg.value.github_app_slug })
+async function saveGithubApp() {
+  if (savingApp.value || !ghAppId.value.trim() || !ghKey.value.trim()) return
+  savingApp.value = true
+  try {
+    await mutate('/api/settings', { body: { github_app_id: ghAppId.value.trim(), github_app_slug: ghSlug.value.trim() || undefined, github_app_private_key: ghKey.value.trim() }, invalidates: [qk.settings], success: 'GitHub App enregistrée' })
+    ghKey.value = ''; showAppConfig.value = false
+  } finally { savingApp.value = false }
+}
+function connectGithub() { navigateTo('/api/github/install', { external: true }) }
+// Toast on return from the GitHub install redirect.
+onMounted(() => {
+  const g = new URLSearchParams(window.location.search).get('github')
+  if (g === 'connected') toast.success('GitHub connecté — installe/choisis le repo puis « Connecter ».')
+  else if (g === 'error') toast.error('Connexion GitHub échouée (state invalide).')
+})
+
 const repoError = computed(() => ({
   'not-found': 'Chemin introuvable ou pas un repo git.',
   'empty-or-not-git': 'Repo vide ou non suivi par git.',
@@ -301,8 +325,34 @@ async function save() {
           <div class="grid gap-2">
             <Label for="coderepo">Repo produit · intake code-aware</Label>
             <Input id="coderepo" v-model="codeRepo" placeholder="owner/repo (GitHub) ou /chemin/local" class="font-mono" @keydown.enter="connectRepo" />
+
+            <!-- GitHub App: token-free read access (recommended for private / hosted) -->
+            <div class="rounded-lg border p-3">
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-medium">GitHub App · accès lecture sans token</span>
+                <Badge :variant="cfg?.github_connected ? 'default' : 'outline'">{{ cfg?.github_connected ? 'Connecté' : cfg?.github_app_ready ? 'Prête' : 'À configurer' }}</Badge>
+              </div>
+              <div v-if="cfg?.github_app_ready && !showAppConfig" class="mt-3 flex flex-wrap items-center gap-2">
+                <Button variant="outline" size="sm" @click="connectGithub">{{ cfg?.github_connected ? 'Reconnecter le repo' : 'Connecter GitHub' }}</Button>
+                <span class="text-xs text-muted-foreground">→ écran GitHub « grant access », aucun token à coller.</span>
+                <button type="button" class="text-xs text-muted-foreground underline" @click="showAppConfig = true">Modifier l'App</button>
+              </div>
+              <div v-else class="mt-3 grid gap-2">
+                <div class="flex gap-2">
+                  <Input v-model="ghAppId" placeholder="App ID (ex. 1234567)" class="font-mono" />
+                  <Input v-model="ghSlug" placeholder="slug (cairn-pm)" class="font-mono" />
+                </div>
+                <textarea v-model="ghKey" rows="3" placeholder="-----BEGIN RSA PRIVATE KEY-----  (clé privée .pem)" class="w-full rounded-md border bg-transparent p-2 font-mono text-xs" />
+                <div class="flex gap-2">
+                  <Button variant="outline" size="sm" :disabled="savingApp || !ghAppId.trim() || !ghKey.trim()" @click="saveGithubApp">{{ savingApp ? '…' : 'Enregistrer l\'App' }}</Button>
+                  <Button v-if="cfg?.github_app_ready" variant="ghost" size="sm" @click="showAppConfig = false">Annuler</Button>
+                </div>
+                <p class="text-xs text-muted-foreground">App ID + clé privée <code>.pem</code> de la GitHub App (Contents: read). La clé est write-only, jamais relue.</p>
+              </div>
+            </div>
+
             <div class="flex gap-2">
-              <Input id="codetoken" v-model="codeToken" type="password" autocomplete="off" class="font-mono" :placeholder="cfg?.has_code_token ? 'Token enregistré — laisser vide pour garder' : 'Token GitHub (read) — repos privés'" @keydown.enter="connectRepo" />
+              <Input id="codetoken" v-model="codeToken" type="password" autocomplete="off" class="font-mono" :placeholder="cfg?.has_code_token ? 'Token enregistré — laisser vide pour garder' : 'Ou token GitHub (read) — alternative à l\'App'" @keydown.enter="connectRepo" />
               <Button variant="outline" :disabled="connectingRepo || !codeRepo.trim()" @click="connectRepo">{{ connectingRepo ? '…' : 'Connecter' }}</Button>
             </div>
             <p class="text-xs" :class="repoCheck ? (repoCheck.ok ? 'text-emerald-500' : 'text-destructive') : 'text-muted-foreground'">

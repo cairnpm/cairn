@@ -1,4 +1,5 @@
 import { getSetting } from '~~/server/db/settings'
+import { githubAppReady } from '~~/server/utils/githubApp'
 
 // Read-only settings view. NEVER returns the API key in clear — only whether one is set, and
 // where it comes from (DB setting vs env fallback).
@@ -16,5 +17,9 @@ export default defineEventHandler(() => {
     code_repo: getSetting('code_repo') ?? process.env.CAIRN_CODE_REPO ?? '',
     code_repo_source: getSetting('code_repo') ? 'settings' : process.env.CAIRN_CODE_REPO ? 'env' : 'none',
     has_code_token: !!getSetting('code_repo_token'),
+    // GitHub App (token-free connect): ready = id+key configured; connected = installed on a repo.
+    github_app_ready: githubAppReady(),
+    github_app_slug: getSetting('github_app_slug') ?? process.env.GITHUB_APP_SLUG ?? 'cairn-pm',
+    github_connected: !!getSetting('github_installation_id'),
   }
 })
