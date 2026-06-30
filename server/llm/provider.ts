@@ -40,7 +40,7 @@ export interface LlmProvider {
   answerQuery: (question: string, context: string) => Promise<string>
   classify: (content: string) => Promise<Classification>
   /** A single targeted question, or null when the spec is complete enough. */
-  clarify: (input: { raw: string; transcript: TranscriptEntry[] }) => Promise<string | null>
+  clarify: (input: { raw: string; transcript: TranscriptEntry[]; code?: string }) => Promise<string | null>
   propose: (input: ProposeInput) => Promise<Proposal>
   /** Triage a raw input: one shapeable problem (single) or several (multi → offer decomposition). */
   triage: (input: { raw: string }) => Promise<Triage>

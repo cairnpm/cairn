@@ -366,6 +366,11 @@ async function advance(
   const candidates = topCandidates(llmEmbed)
   data.candidates = candidates
   const roadmap = roadmapContext()
+  // Ground truth of what's already built — fetched once on the signal and fed to BOTH clarify and
+  // propose: the agent reads the code before asking (so it skips questions the code answers) and
+  // dedupes against reality, not just tickets. Empty when no repo is linked.
+  const repo = codeRepo()
+  const code = repo ? await codeContextFor(data.raw, { repo }) : ''
 
   // A merge is an explicit human directive (the survivor/absorbed are already resolved) — skip the
   // adaptive shaping loop and go straight to the consolidated-pitch proposal for confirmation.
@@ -373,7 +378,7 @@ async function advance(
 
   // Ask at most until the cap; once capped, force a proposal.
   if (!skipClarify && turns < MAX_TURNS) {
-    const question = await llm.clarify({ raw: data.raw, transcript: data.transcript })
+    const question = await llm.clarify({ raw: data.raw, transcript: data.transcript, code })
     if (question) {
       data.transcript.push({ role: 'agent', text: question })
       saveSession(id, 'clarify', turns, data)
@@ -383,10 +388,6 @@ async function advance(
 
   // Propose (reflect + route).
   const classification = await llm.classify(data.raw)
-  // Ground truth of what's already built — searched once on the signal, fed to every propose path so
-  // the agent dedupes against the real code, not just tickets. Empty when no repo is linked.
-  const repo = codeRepo()
-  const code = repo ? await codeContextFor(data.raw, { repo }) : ''
   let proposal: Proposal
   let reflect: string
 

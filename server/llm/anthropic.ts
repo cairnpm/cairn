@@ -229,10 +229,11 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       return stub.classify(content)
     },
 
-    clarify: async ({ raw, transcript }) => {
+    clarify: async ({ raw, transcript, code }) => {
       const agentQuestions = transcript.filter(t => t.role === 'agent' && t.text.includes('?')).length
       if (agentQuestions >= MAX_CLARIFY) return null
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
+      const codeBlock = code ? `\n\n${code}` : ''
       const text = await callClaude(
         'You are a SENIOR product manager doing Shape Up intake — NOT an order-taker. Do not accept the '
         + 'request at face value and do not flatter; your job is to protect a finite roadmap. '
@@ -252,8 +253,13 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'the subject genuinely needs — a clear signal may need one, a vague or far-reaching one several. Do NOT '
         + 'pad with filler. As soon as you could write a confident, bounded pitch — OR conclude there is no real '
         + 'problem to shape (pure noise) — reply with ONLY "OK" and nothing else (do NOT write the pitch, that is a '
-        + 'later step). Note: a low-priority but real problem is still worth shaping — timing is decided later at betting.',
-        `Signal: ${raw}\n\nConversation so far:\n${convo}`, 160, { temperature: 0 },
+        + 'later step). Note: a low-priority but real problem is still worth shaping — timing is decided later at betting. '
+        + 'CRITICAL — when a "Code existant" block is present, it is the GROUND TRUTH of what is already built: READ '
+        + 'it before asking anything. NEVER ask a question whose answer is in that code (how a mechanism works, where '
+        + 'some context comes from, whether something exists) — you can already see it. If the signal is ALREADY '
+        + 'implemented there, do not interrogate it: reply ONLY "OK" immediately so routing can dedup it (it will flag '
+        + 'the duplicate, citing the file). Use the code to skip the obvious and ask only about a genuinely OPEN gap.',
+        `Signal: ${raw}\n\nConversation so far:\n${convo}${codeBlock}`, 160, { temperature: 0 },
       )
       if (text === null) return stub.clarify({ raw, transcript })
       const t = text.trim()
