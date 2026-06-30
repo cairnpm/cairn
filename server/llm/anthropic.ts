@@ -211,7 +211,11 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'Use the relevant part of the snapshot for the question (a roadmap/backlog question vs a single feature). '
         + 'When asked about changes or history, be SPECIFIC: name the actual signal that was added (quote it briefly), '
         + 'say WHICH fields were refined and HOW they changed, and WHO did it — never just "a mis à jour un signal". '
-        + 'If the snapshot doesn\'t answer it, say so. Do not invent.',
+        + 'If a "Code existant" block is present, it is the GROUND TRUTH of what is actually SHIPPED: use it to answer '
+        + '"où en est X / est-ce livré ?" — a feature the roadmap still marks shaped/bet/building may already be merged '
+        + 'in the code, so SAY SO and cite the file:line; conversely flag when the code shows no trace. The snapshot is '
+        + 'intent/status, the code is reality — reconcile them. '
+        + 'If neither answers it, say so. Do not invent.',
         `Question: ${question}\n\nÉtat du produit (snapshot) :\n${context}`, 500,
       )
       return text ?? stub.answerQuery(question, context)

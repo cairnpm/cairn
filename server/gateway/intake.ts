@@ -21,6 +21,15 @@ export function codeRepo(): string | undefined {
   return grepPath()
 }
 
+/** Context for a read-only product question: the roadmap/backlog snapshot + any related code, so
+ *  "où en est X ?" can verify what's actually SHIPPED in the repo — not just the roadmap status. */
+async function queryContext(focus: string): Promise<string> {
+  const repo = codeRepo()
+  const code = repo ? await codeContextFor(focus, { repo }) : ''
+  const snapshot = workspaceContext(focus)
+  return code ? `${snapshot}\n\n${code}` : snapshot
+}
+
 const MAX_TURNS = 18         // bounded loop — the agent decides how many shaping turns it needs;
                             // this is only a safety ceiling that forces a proposal so it always converges
 // Below this confidence (signal mode), the agent asks the human to arbitrate instead of proposing.
@@ -252,7 +261,7 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
     if (intent.intent === 'query') {
       const hit = searchFeatures(intent.target || text, 1)[0]
       data.target_feature_id = hit?.id ?? null
-      const answer = await llm.answerQuery(text, workspaceContext(intent.target || text))
+      const answer = await llm.answerQuery(text, await queryContext(intent.target || text))
       data.transcript.push({ role: 'agent', text: answer })
       run(
         'INSERT INTO intake_session (id, state, turns, data, committed, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
@@ -332,7 +341,7 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
         if (hit) fid = hit.id
       }
       if (fid) data.target_feature_id = fid
-      const answer = await llm.answerQuery(text, workspaceContext(intent.target || text))
+      const answer = await llm.answerQuery(text, await queryContext(intent.target || text))
       data.transcript.push({ role: 'agent', text: answer })
       saveSession(sessionId, 'answered', turns, data)
       return { session_id: sessionId, state: 'answered', agent_message: answer, proposal: null }
