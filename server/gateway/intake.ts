@@ -381,7 +381,13 @@ async function advance(
   // dedupes against reality, not just tickets. Empty when no repo is linked.
   await refreshIfStale() // keep the clone current (lazy, ≤ every 10 min) before grepping
   const repo = codeRepo()
-  const code = repo ? await codeContextFor(data.raw, { repo }) : ''
+  let code = ''
+  if (repo) {
+    // Expand the signal into likely code identifiers (zero-egress query expansion) so the lexical
+    // search catches paraphrased concepts, then grep the signal + those terms.
+    const terms = llm.codeTerms ? await llm.codeTerms(data.raw).catch(() => []) : []
+    code = await codeContextFor([data.raw, ...terms].join(' '), { repo })
+  }
 
   // A merge is an explicit human directive (the survivor/absorbed are already resolved) — skip the
   // adaptive shaping loop and go straight to the consolidated-pitch proposal for confirmation.

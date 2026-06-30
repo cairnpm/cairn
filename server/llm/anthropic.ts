@@ -283,6 +283,19 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       return t
     },
 
+    codeTerms: async (signal: string) => {
+      const text = await callClaude(
+        'Given a product signal, output ONLY a JSON array of 5-12 lowercase keywords/identifiers that would '
+        + 'likely appear in THIS product\'s codebase if the thing were already built — function/variable names, '
+        + 'domain nouns, provider/integration names, API path fragments. Translate vague phrasing into concrete '
+        + 'code terms (e.g. "send candidates to their hiring system" → ["ats","flatchr","applications","push",'
+        + '"provider"]). No prose, just the JSON array.',
+        `Signal: ${signal}`, 120, { temperature: 0 },
+      )
+      const arr = parseJson<string[]>(text)
+      return Array.isArray(arr) ? arr.filter(t => typeof t === 'string').slice(0, 12) : []
+    },
+
     propose: async (input: ProposeInput) => {
       const { raw, candidates, classification, transcript, existing, roadmap, code } = input
       const candList = candidates.map(c => `- ${c.feature_id} | ${c.title} | sim=${c.similarity.toFixed(2)}`).join('\n') || '(none)'

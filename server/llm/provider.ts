@@ -32,6 +32,10 @@ export interface AttachmentForLlm {
 export interface LlmProvider {
   name: string
   embed: (text: string) => Promise<number[]>
+  /** Expand a raw signal into likely CODE identifiers/keywords (function names, domain terms, API
+   *  paths) so the lexical code search catches paraphrased concepts — "send to hiring system" → flatchr,
+   *  ats, applications. Zero extra egress (reuses the LLM). Optional; empty when unavailable. */
+  codeTerms?: (signal: string) => Promise<string[]>
   /** Turn attached files into French context text (vision for images, inline for text). Optional. */
   extractAttachments?: (items: AttachmentForLlm[]) => Promise<string>
   /** Route the input: a read-only question, a refine of a named feature, or a raw signal. */
