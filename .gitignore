@@ -26,3 +26,6 @@ node_modules
 
 # Local working notes (not published)
 docs/monetisation-distribution.md
+
+# Private: real imported roadmap data (never publish)
+roadmap.json
