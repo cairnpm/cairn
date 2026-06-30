@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { getSetting } from '../db/settings'
+import { githubInstallationToken } from './githubApp'
 
 const exec = promisify(execFile)
 
@@ -39,6 +40,27 @@ export function grepPath(): string | undefined {
   if (p.mode === 'local') return existsSync(spec) ? spec : undefined
   const dir = p.slug ? join(REPOS_DIR, p.slug) : undefined
   return dir && existsSync(dir) ? dir : undefined
+}
+
+const REFRESH_TTL_MS = 10 * 60_000 // re-fetch a GitHub clone at most every 10 min, lazily on use
+
+function lastFetchedMs(dir: string): number {
+  try { return statSync(join(dir, '.git', 'FETCH_HEAD')).mtimeMs }
+  catch { try { return statSync(join(dir, '.git')).mtimeMs } catch { return 0 } }
+}
+
+/** Keep the grep current without a webhook: if the linked GitHub clone is older than the TTL, do a
+ *  shallow fetch+reset before the intake reads it. No-op for local paths (always live) and within the
+ *  TTL. Best-effort — on failure the previous clone is kept. Call before grepping. */
+export async function refreshIfStale(): Promise<void> {
+  const spec = getSetting('code_repo') || process.env.CAIRN_CODE_REPO
+  if (!spec) return
+  const p = parseSpec(spec.trim())
+  if (p.mode !== 'github' || !p.slug) return
+  const dir = join(REPOS_DIR, p.slug)
+  if (!existsSync(join(dir, '.git')) || Date.now() - lastFetchedMs(dir) < REFRESH_TTL_MS) return
+  const token = getSetting('code_repo_token') || await githubInstallationToken()
+  await syncRepo(spec, token).catch(() => {}) // fetch --depth 1 + reset; keep old clone on failure
 }
 
 /** Validate/refresh the linked repo. Local path → just count files. GitHub → shallow clone (or refresh)

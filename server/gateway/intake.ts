@@ -10,7 +10,7 @@ import type {
 } from '../domain/types'
 import { getLlm } from '../llm/provider'
 import type { AttachmentForLlm, LlmProvider } from '../llm/provider'
-import { grepPath } from '../utils/codeRepo'
+import { grepPath, refreshIfStale } from '../utils/codeRepo'
 import { codeContextFor } from '../utils/codeSearch'
 import { cosine, decodeEmbedding, encodeEmbedding, localEmbed } from '../utils/embedding'
 import { newId } from '../utils/id'
@@ -24,6 +24,7 @@ export function codeRepo(): string | undefined {
 /** Context for a read-only product question: the roadmap/backlog snapshot + any related code, so
  *  "où en est X ?" can verify what's actually SHIPPED in the repo — not just the roadmap status. */
 async function queryContext(focus: string): Promise<string> {
+  await refreshIfStale()
   const repo = codeRepo()
   const code = repo ? await codeContextFor(focus, { repo }) : ''
   const snapshot = workspaceContext(focus)
@@ -378,6 +379,7 @@ async function advance(
   // Ground truth of what's already built — fetched once on the signal and fed to BOTH clarify and
   // propose: the agent reads the code before asking (so it skips questions the code answers) and
   // dedupes against reality, not just tickets. Empty when no repo is linked.
+  await refreshIfStale() // keep the clone current (lazy, ≤ every 10 min) before grepping
   const repo = codeRepo()
   const code = repo ? await codeContextFor(data.raw, { repo }) : ''
 
