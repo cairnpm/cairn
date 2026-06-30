@@ -24,5 +24,7 @@ export default defineEventHandler(() => {
     github_app_ready: githubAppReady(),
     github_app_slug: getSetting('github_app_slug') ?? process.env.GITHUB_APP_SLUG ?? 'cairn-pm',
     github_connected: !!getSetting('github_installation_id'),
+    // Workspace product framing (injected into shaping/answer prompts); empty → generic default.
+    product_context: getSetting('product_context') ?? '',
   }
 })

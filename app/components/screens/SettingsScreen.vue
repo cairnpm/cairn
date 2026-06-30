@@ -12,7 +12,7 @@ import { toast } from 'vue-sonner'
 
 const { t } = useUiLang()
 
-interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean; github_app_ready: boolean; github_app_slug: string; github_connected: boolean }
+interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean; github_app_ready: boolean; github_app_slug: string; github_connected: boolean; product_context: string }
 interface Profile { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 interface Member { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 
@@ -120,6 +120,22 @@ const modelInput = ref('claude-sonnet-4-6')
 watchEffect(() => { if (cfg.value) { workspaceName.value = cfg.value.workspace_name; workspaceLogo.value = cfg.value.workspace_logo; modelInput.value = cfg.value.model } })
 // Product repo — the intake greps it (ground truth of what's built) to dedupe + ground specs. One
 // button: grant read access via the Cairn GitHub App; the granted repo is auto-detected server-side.
+// Product context — workspace framing injected into every shaping/answer prompt.
+const productCtx = ref('')
+const suggesting = ref(false)
+watchEffect(() => { if (cfg.value) productCtx.value = cfg.value.product_context })
+async function suggestProductContext() {
+  if (suggesting.value) return
+  suggesting.value = true
+  try {
+    const r = await $fetch<{ ok: boolean; text?: string }>('/api/product-context/suggest')
+    if (r.ok && r.text) { productCtx.value = r.text; toast.success('Pré-rempli depuis le repo — relis et ajuste.') }
+    else toast.error('Aucun doc trouvé dans le repo (README/CLAUDE/AGENTS/DESIGN).')
+  }
+  catch { toast.error('Connecte d\'abord un repo.') }
+  finally { suggesting.value = false }
+}
+
 const ghOrg = ref('')
 async function connectGithub() {
   // Already installed? discover + clone server-side. Otherwise send to GitHub's grant screen.
@@ -165,6 +181,7 @@ async function save() {
       workspace_logo_id: workspaceLogo.value ?? '',
       anthropic_api_key: keyInput.value.trim() || undefined,
       anthropic_model: modelInput.value,
+      product_context: productCtx.value,
     }, invalidates: [qk.settings, qk.overview], success: t('settings.toast.settingsSaved') })
     keyInput.value = ''
     saved.value = true
@@ -321,6 +338,16 @@ async function save() {
               </template>
             </div>
           </div>
+
+          <div class="grid gap-2">
+            <div class="flex items-center justify-between">
+              <Label for="productctx">Contexte produit</Label>
+              <Button variant="ghost" size="sm" :disabled="suggesting" @click="suggestProductContext">{{ suggesting ? '…' : 'Pré-remplir depuis le repo' }}</Button>
+            </div>
+            <textarea id="productctx" v-model="productCtx" rows="5" placeholder="En 5-10 lignes : ce que fait le produit, pour qui, le glossaire, les no-gos. (Vide = défaut générique.)" class="w-full rounded-md border bg-transparent p-2 text-sm" />
+            <p class="text-xs text-muted-foreground">Injecté dans chaque tour de l'agent (clarify, propose, réponses) pour le cadrer sur TON produit — pas sur Cairn.</p>
+          </div>
+
           <div class="flex items-center justify-end gap-3">
             <span v-if="saved" class="text-sm text-muted-foreground">✓ {{ t('settings.saved') }}</span>
             <Button :disabled="saving" @click="save">{{ saving ? t('settings.saving') : t('settings.save') }}</Button>

@@ -1,6 +1,14 @@
 import type { Classification, DecomposedSignal, Proposal, Triage } from '../domain/types'
 import { localEmbed } from '../utils/embedding'
+import { getSetting } from '../db/settings'
 import { ARCHITECTURE_CONTEXT } from './architecture'
+
+// Product framing injected into every shaping/answer prompt — the workspace's OWN description (set in
+// Settings), falling back to the generic default. So the agent reasons about THIS product, not a
+// hardcoded one. Read per-call (cheap) so edits take effect without a restart.
+function productContext(): string {
+  return getSetting('product_context')?.trim() || ARCHITECTURE_CONTEXT
+}
 import type { LlmProvider, ProposeInput } from './provider'
 import { createStubProvider, DEDUP_STRONG } from './stub'
 
@@ -205,7 +213,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
 
     answerQuery: async (question: string, context: string) => {
       const text = await callClaude(
-        'You answer a question about the PRODUCT — its backlog, cycles (Hills), in-flight and shipped work, '
+        `Contexte produit :\n${productContext()}\n\n`
+        + 'You answer a question about the PRODUCT — its backlog, cycles (Hills), in-flight and shipped work, '
         + 'or a specific feature — using ONLY the provided state snapshot. '
         + 'Be concise and concrete (French), PLAIN TEXT only — no markdown (no **, no #, no markdown bullets). '
         + 'Use the relevant part of the snapshot for the question (a roadmap/backlog question vs a single feature). '
@@ -239,7 +248,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
       const codeBlock = code ? `\n\n${code}` : ''
       const text = await callClaude(
-        'You are a SENIOR product manager doing Shape Up intake — NOT an order-taker. Do not accept the '
+        `Contexte produit :\n${productContext()}\n\n`
+        + 'You are a SENIOR product manager doing Shape Up intake — NOT an order-taker. Do not accept the '
         + 'request at face value and do not flatter; your job is to protect a finite roadmap. '
         + 'Bugs and incidents — even a critical/production one — ARE valid product signals to capture here: this '
         + 'intake is the team\'s entry point for them. Challenge to understand the real problem, but NEVER tell the '
@@ -284,7 +294,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
       const codeBlock = code ? `\n\n${code}` : ''
       const text = await callClaude(
-        `Contexte produit :\n${ARCHITECTURE_CONTEXT}\n\n`
+        `Contexte produit :\n${productContext()}\n\n`
         + 'You route a raw product signal in a Shape Up pipeline, acting as a critical PM and the DEDUP JUDGE — '
         + 'NOT a yes-man. Prioritise the CORRECT routing decision over agreeing with the user. '
         + 'The candidate features below were surfaced by a similarity search — the score is a HINT, not a hard rule '
@@ -360,7 +370,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
     decompose: async ({ raw, roadmap }) => {
       const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
       const text = await callClaude(
-        `Contexte produit :\n${ARCHITECTURE_CONTEXT}\n\n`
+        `Contexte produit :\n${productContext()}\n\n`
         + 'You are a senior PM doing Shape Up intake. The input is often a meeting/demo transcript where most of the '
         + 'text is narration, sales pitch and small talk — but participants raise SEVERAL distinct product signals: '
         + 'a feature request, a limitation/gap someone points out, a "could we also…", a bug, an improvement. '
