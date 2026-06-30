@@ -7,6 +7,16 @@ export default defineNuxtConfig({
 
   modules: ['shadcn-nuxt', 'nuxt-auth-utils'],
 
+  // Session cookie: Secure only in production. On http://localhost, Safari refuses a Secure cookie
+  // (Chrome tolerates it), so dev logins on Safari would silently fail without this.
+  runtimeConfig: {
+    session: {
+      cookie: {
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
+  },
+
   // Flat component names regardless of subfolders (<IntakeScreen />, not <ScreensIntakeScreen />)
   components: [{ path: '~/components', pathPrefix: false }],
 
