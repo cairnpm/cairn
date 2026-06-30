@@ -25,3 +25,16 @@ export function getSecret(key: string): string | null {
 export function setSecret(key: string, plain: string | null, by: string | null = null): void {
   setSetting(key, plain ? encryptSecret(plain) : null, by)
 }
+
+const SECRET_KEYS = ['anthropic_api_key', 'github_app_private_key', 'code_repo_token']
+
+/** One-shot boot migration: encrypt any secret still stored as plaintext (installs predating
+ *  encryption-at-rest). Idempotent — skips already-encrypted values; no-op when no session secret. */
+export function migrateSecretsAtRest(): void {
+  for (const key of SECRET_KEYS) {
+    const v = getSetting(key)
+    if (!v || v.startsWith('enc:v1:')) continue
+    const enc = encryptSecret(v)
+    if (enc !== v) setSetting(key, enc) // only when encryption actually ran (session secret present)
+  }
+}
