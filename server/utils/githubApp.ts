@@ -49,3 +49,17 @@ export async function githubInstallationToken(): Promise<string | null> {
   }
   catch { return null }
 }
+
+/** The repos this installation can read (so the user never types owner/repo — we auto-detect after
+ *  the grant). Returns full_names ("owner/repo"). */
+export async function listInstallationRepos(token: string): Promise<string[]> {
+  try {
+    const res = await fetch('https://api.github.com/installation/repositories?per_page=100', {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    })
+    if (!res.ok) return []
+    const json = await res.json() as { repositories?: { full_name: string }[] }
+    return (json.repositories || []).map(r => r.full_name)
+  }
+  catch { return [] }
+}

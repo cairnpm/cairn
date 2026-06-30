@@ -117,55 +117,15 @@ const workspaceLogo = ref<string | null>(null)
 const uploadingLogo = ref(false)
 const keyInput = ref('')
 const modelInput = ref('claude-sonnet-4-6')
-// Linked product repo (workspace-wide) — the ground truth the intake greps when shaping a pitch.
-// Spec is a local path OR a GitHub ref (owner/repo); a read token is needed for private GitHub repos.
-const codeRepo = ref('')
-const codeToken = ref('')
-const connectingRepo = ref(false)
-const repoCheck = ref<{ ok: boolean; files?: number; mode?: string; error?: string } | null>(null)
-watchEffect(() => { if (cfg.value) { workspaceName.value = cfg.value.workspace_name; workspaceLogo.value = cfg.value.workspace_logo; modelInput.value = cfg.value.model; codeRepo.value = cfg.value.code_repo } })
-async function connectRepo() {
-  if (connectingRepo.value || !codeRepo.value.trim()) return
-  connectingRepo.value = true; repoCheck.value = null
-  try {
-    repoCheck.value = await $fetch('/api/code-repo-connect', { method: 'POST', body: { repo: codeRepo.value.trim(), token: codeToken.value.trim() || undefined } })
-    codeToken.value = ''
-    await invalidate(qk.settings)
-  }
-  catch { repoCheck.value = { ok: false, error: 'clone-failed' } }
-  finally { connectingRepo.value = false }
-}
-// GitHub App — token-free connect. Config (App id/slug + private key) then a "Connect" button that
-// sends the owner to GitHub's install screen.
-const ghAppId = ref('')
-const ghSlug = ref('')
-const ghKey = ref('')
-const savingApp = ref(false)
-const showAppConfig = ref(false)
-watchEffect(() => { if (cfg.value) ghSlug.value = cfg.value.github_app_slug })
-async function saveGithubApp() {
-  if (savingApp.value || !ghAppId.value.trim() || !ghKey.value.trim()) return
-  savingApp.value = true
-  try {
-    await mutate('/api/settings', { body: { github_app_id: ghAppId.value.trim(), github_app_slug: ghSlug.value.trim() || undefined, github_app_private_key: ghKey.value.trim() }, invalidates: [qk.settings], success: 'GitHub App enregistrée' })
-    ghKey.value = ''; showAppConfig.value = false
-  } finally { savingApp.value = false }
-}
+watchEffect(() => { if (cfg.value) { workspaceName.value = cfg.value.workspace_name; workspaceLogo.value = cfg.value.workspace_logo; modelInput.value = cfg.value.model } })
+// Product repo — the intake greps it (ground truth of what's built) to dedupe + ground specs. One
+// button: grant read access via the Cairn GitHub App; the granted repo is auto-detected server-side.
 function connectGithub() { navigateTo('/api/github/install', { external: true }) }
-// Toast on return from the GitHub install redirect.
 onMounted(() => {
   const g = new URLSearchParams(window.location.search).get('github')
-  if (g === 'connected') toast.success('GitHub connecté — installe/choisis le repo puis « Connecter ».')
-  else if (g === 'error') toast.error('Connexion GitHub échouée (state invalide).')
+  if (g === 'connected') toast.success('Accès accordé — repo connecté.')
+  else if (g === 'error') toast.error('Connexion GitHub échouée.')
 })
-
-const repoError = computed(() => ({
-  'not-found': 'Chemin introuvable ou pas un repo git.',
-  'empty-or-not-git': 'Repo vide ou non suivi par git.',
-  'bad-ref': 'Référence GitHub invalide (attendu : owner/repo).',
-  'clone-failed': 'Clone impossible — token invalide, accès refusé, ou réseau.',
-  empty: 'Renseigne un chemin ou owner/repo.',
-}[repoCheck.value?.error || ''] || 'Échec de la connexion.'))
 async function onLogoFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
@@ -190,7 +150,6 @@ async function save() {
       workspace_logo_id: workspaceLogo.value ?? '',
       anthropic_api_key: keyInput.value.trim() || undefined,
       anthropic_model: modelInput.value,
-      code_repo: codeRepo.value.trim(),
     }, invalidates: [qk.settings, qk.overview], success: t('settings.toast.settingsSaved') })
     keyInput.value = ''
     saved.value = true
@@ -323,43 +282,23 @@ async function save() {
             </div>
           </div>
           <div class="grid gap-2">
-            <Label for="coderepo">Repo produit · intake code-aware</Label>
-            <Input id="coderepo" v-model="codeRepo" placeholder="owner/repo (GitHub) ou /chemin/local" class="font-mono" @keydown.enter="connectRepo" />
-
-            <!-- GitHub App: token-free read access (recommended for private / hosted) -->
-            <div class="rounded-lg border p-3">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium">GitHub App · accès lecture sans token</span>
-                <Badge :variant="cfg?.github_connected ? 'default' : 'outline'">{{ cfg?.github_connected ? 'Connecté' : cfg?.github_app_ready ? 'Prête' : 'À configurer' }}</Badge>
-              </div>
-              <div v-if="cfg?.github_app_ready && !showAppConfig" class="mt-3 flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" @click="connectGithub">{{ cfg?.github_connected ? 'Reconnecter le repo' : 'Connecter GitHub' }}</Button>
-                <span class="text-xs text-muted-foreground">→ écran GitHub « grant access », aucun token à coller.</span>
-                <button type="button" class="text-xs text-muted-foreground underline" @click="showAppConfig = true">Modifier l'App</button>
-              </div>
-              <div v-else class="mt-3 grid gap-2">
-                <div class="flex gap-2">
-                  <Input v-model="ghAppId" placeholder="App ID (ex. 1234567)" class="font-mono" />
-                  <Input v-model="ghSlug" placeholder="slug (cairn-pm)" class="font-mono" />
+            <Label>Repo produit · intake code-aware</Label>
+            <div class="rounded-lg border p-4">
+              <template v-if="cfg?.github_connected && cfg?.code_repo">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5 text-sm font-medium"><Check class="size-4 text-emerald-500" /> Connecté</div>
+                    <div class="truncate font-mono text-xs text-muted-foreground">{{ cfg.code_repo }}</div>
+                  </div>
+                  <Button variant="outline" size="sm" @click="connectGithub">Changer de repo</Button>
                 </div>
-                <textarea v-model="ghKey" rows="3" placeholder="-----BEGIN RSA PRIVATE KEY-----  (clé privée .pem)" class="w-full rounded-md border bg-transparent p-2 font-mono text-xs" />
-                <div class="flex gap-2">
-                  <Button variant="outline" size="sm" :disabled="savingApp || !ghAppId.trim() || !ghKey.trim()" @click="saveGithubApp">{{ savingApp ? '…' : 'Enregistrer l\'App' }}</Button>
-                  <Button v-if="cfg?.github_app_ready" variant="ghost" size="sm" @click="showAppConfig = false">Annuler</Button>
-                </div>
-                <p class="text-xs text-muted-foreground">App ID + clé privée <code>.pem</code> de la GitHub App (Contents: read). La clé est write-only, jamais relue.</p>
-              </div>
+              </template>
+              <template v-else>
+                <p class="mb-3 text-sm text-muted-foreground">Donne à Cairn un accès <strong>lecture seule</strong> à ton repo GitHub — il s'en sert pour dédupliquer et ancrer les specs (jamais d'écriture).</p>
+                <Button :disabled="!cfg?.github_app_ready" @click="connectGithub">Grant access</Button>
+                <p v-if="!cfg?.github_app_ready" class="mt-2 text-xs text-muted-foreground">GitHub App non configurée sur cette instance.</p>
+              </template>
             </div>
-
-            <div class="flex gap-2">
-              <Input id="codetoken" v-model="codeToken" type="password" autocomplete="off" class="font-mono" :placeholder="cfg?.has_code_token ? 'Token enregistré — laisser vide pour garder' : 'Ou token GitHub (read) — alternative à l\'App'" @keydown.enter="connectRepo" />
-              <Button variant="outline" :disabled="connectingRepo || !codeRepo.trim()" @click="connectRepo">{{ connectingRepo ? '…' : 'Connecter' }}</Button>
-            </div>
-            <p class="text-xs" :class="repoCheck ? (repoCheck.ok ? 'text-emerald-500' : 'text-destructive') : 'text-muted-foreground'">
-              <template v-if="repoCheck?.ok">✓ Connecté ({{ repoCheck.mode === 'github' ? 'GitHub, cloné côté serveur' : 'local' }}) — {{ repoCheck.files }} fichiers. L'intake interrogera ce code en shapant un pitch.</template>
-              <template v-else-if="repoCheck">✗ {{ repoError }}</template>
-              <template v-else>Repo de ton produit, partagé par tout le workspace : GitHub <code>owner/repo</code> (cloné côté serveur, token read pour le privé) ou chemin local (zéro egress).{{ cfg?.code_repo_source === 'env' ? ' (défini par variable d\'environnement)' : '' }}</template>
-            </p>
           </div>
           <div class="flex items-center justify-end gap-3">
             <span v-if="saved" class="text-sm text-muted-foreground">✓ {{ t('settings.saved') }}</span>
