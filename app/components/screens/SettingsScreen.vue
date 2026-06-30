@@ -120,6 +120,7 @@ const modelInput = ref('claude-sonnet-4-6')
 watchEffect(() => { if (cfg.value) { workspaceName.value = cfg.value.workspace_name; workspaceLogo.value = cfg.value.workspace_logo; modelInput.value = cfg.value.model } })
 // Product repo — the intake greps it (ground truth of what's built) to dedupe + ground specs. One
 // button: grant read access via the Cairn GitHub App; the granted repo is auto-detected server-side.
+const ghOrg = ref('')
 async function connectGithub() {
   // Already installed? discover + clone server-side. Otherwise send to GitHub's grant screen.
   if (cfg.value?.github_app_ready) {
@@ -128,10 +129,17 @@ async function connectGithub() {
   }
   navigateTo('/api/github/install', { external: true })
 }
+// Self-host bootstrap: create a pre-configured GitHub App for THIS instance (no creds to paste).
+function createGithubApp() {
+  const q = ghOrg.value.trim() ? `?org=${encodeURIComponent(ghOrg.value.trim())}` : ''
+  navigateTo(`/api/github/manifest${q}`, { external: true })
+}
 onMounted(() => {
   const g = new URLSearchParams(window.location.search).get('github')
   if (g === 'connected') toast.success('Accès accordé — repo connecté.')
   else if (g === 'error') toast.error('Connexion GitHub échouée.')
+  else if (g === 'app-created') toast.success('GitHub App créée — clique « Grant access » pour autoriser ton repo.')
+  else if (g === 'manifest-error') toast.error('Création de la GitHub App échouée.')
 })
 async function onLogoFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -302,8 +310,14 @@ async function save() {
               </template>
               <template v-else>
                 <p class="mb-3 text-sm text-muted-foreground">Donne à Cairn un accès <strong>lecture seule</strong> à ton repo GitHub — il s'en sert pour dédupliquer et ancrer les specs (jamais d'écriture).</p>
-                <Button :disabled="!cfg?.github_app_ready" @click="connectGithub">Grant access</Button>
-                <p v-if="!cfg?.github_app_ready" class="mt-2 text-xs text-muted-foreground">GitHub App non configurée sur cette instance.</p>
+                <Button v-if="cfg?.github_app_ready" @click="connectGithub">Grant access</Button>
+                <template v-else>
+                  <div class="flex gap-2">
+                    <Input v-model="ghOrg" placeholder="org GitHub (optionnel)" class="font-mono" />
+                    <Button @click="createGithubApp">Créer la GitHub App</Button>
+                  </div>
+                  <p class="mt-2 text-xs text-muted-foreground">Crée une App GitHub pré-configurée pour cette instance — 1 clic, rien à coller. Renseigne l'org si ton repo est dans une organisation.</p>
+                </template>
               </template>
             </div>
           </div>
