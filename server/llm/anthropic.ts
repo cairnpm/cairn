@@ -264,7 +264,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
     },
 
     propose: async (input: ProposeInput) => {
-      const { raw, candidates, classification, transcript, existing, roadmap } = input
+      const { raw, candidates, classification, transcript, existing, roadmap, code } = input
       const candList = candidates.map(c => `- ${c.feature_id} | ${c.title} | sim=${c.similarity.toFixed(2)}`).join('\n') || '(none)'
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
       const existingBlock = existing
@@ -272,6 +272,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
           + `title: ${existing.title}\nproblem: ${existing.problem}\nsolution: ${existing.solution}\nrabbit_holes: ${existing.rabbit_holes}\nout_of_bounds: ${existing.out_of_bounds}\nappetite: ${existing.appetite}`
         : ''
       const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
+      const codeBlock = code ? `\n\n${code}` : ''
       const text = await callClaude(
         `Contexte produit :\n${ARCHITECTURE_CONTEXT}\n\n`
         + 'You route a raw product signal in a Shape Up pipeline, acting as a critical PM and the DEDUP JUDGE — '
@@ -295,8 +296,12 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'and separate fact from interpretation. '
         + 'The proposed_spec is a Shape Up pitch grounded in the product context above: real problem (what breaks today), '
         + 'appetite, sketched solution, rabbit_holes (risks), out_of_bounds (no-gos). '
+        + 'When a "Code existant" block is present, treat it as the GROUND TRUTH of what is already built (more reliable than '
+        + 'any ticket): if the signal is already implemented there, prefer append/refine or discard-as-duplicate over creating '
+        + 'a new feature, and ground the solution / rabbit_holes / out_of_bounds in the real modules cited (file:line). The code '
+        + 'shows what EXISTS, not what is prioritised — never infer priority from it, and stay skeptical (dead code, half-built). '
         + 'Write every text field in FRENCH.',
-        `Signal: ${raw}\n\nConversation:\n${convo}\n\nCandidate features:\n${candList}${existingBlock}${roadmapBlock}`,
+        `Signal: ${raw}\n\nConversation:\n${convo}\n\nCandidate features:\n${candList}${existingBlock}${roadmapBlock}${codeBlock}`,
         900, { temperature: 0, schema: PROPOSE_SCHEMA },
       )
       const parsed = parseJson<Partial<Proposal>>(text)

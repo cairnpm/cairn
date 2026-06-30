@@ -22,6 +22,10 @@ export default defineAuthedHandler(async (event, { actor }) => {
   if (typeof body?.workspace_logo_id === 'string') {
     setSetting('workspace_logo', body.workspace_logo_id.trim() || null, by)
   }
+  if (typeof body?.code_repo === 'string') {
+    // Local path or clone of the product repo the intake greps. Empty clears it (falls back to env).
+    setSetting('code_repo', body.code_repo.trim() || null, by)
+  }
 
   resetLlm()
   return { ok: true }

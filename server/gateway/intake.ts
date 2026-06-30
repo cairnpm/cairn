@@ -10,8 +10,16 @@ import type {
 } from '../domain/types'
 import { getLlm } from '../llm/provider'
 import type { AttachmentForLlm, LlmProvider } from '../llm/provider'
+import { grepPath } from '../utils/codeRepo'
+import { codeContextFor } from '../utils/codeSearch'
 import { cosine, decodeEmbedding, encodeEmbedding, localEmbed } from '../utils/embedding'
 import { newId } from '../utils/id'
+
+/** The local dir to grep for this workspace — a local path, or the server-side clone of the linked
+ *  GitHub repo (see server/utils/codeRepo). Empty → no code grounding. */
+export function codeRepo(): string | undefined {
+  return grepPath()
+}
 
 const MAX_TURNS = 18         // bounded loop — the agent decides how many shaping turns it needs;
                             // this is only a safety ceiling that forces a proposal so it always converges
@@ -375,6 +383,10 @@ async function advance(
 
   // Propose (reflect + route).
   const classification = await llm.classify(data.raw)
+  // Ground truth of what's already built — searched once on the signal, fed to every propose path so
+  // the agent dedupes against the real code, not just tickets. Empty when no repo is linked.
+  const repo = codeRepo()
+  const code = repo ? await codeContextFor(data.raw, { repo }) : ''
   let proposal: Proposal
   let reflect: string
 
@@ -384,7 +396,7 @@ async function advance(
     const absorbed = get<Feature>('SELECT * FROM features WHERE id = ?', data.merge_from_id)
     const mergeRaw = `Fusion de deux features. À ABSORBER : « ${absorbed?.title} » — problème: ${absorbed?.problem} ; solution: ${absorbed?.solution} ; rabbit holes: ${absorbed?.rabbit_holes} ; no-gos: ${absorbed?.out_of_bounds}. Produis un pitch CONSOLIDÉ qui couvre les deux features.`
     proposal = await llm.propose({
-      raw: mergeRaw, transcript: data.transcript, classification, roadmap,
+      raw: mergeRaw, transcript: data.transcript, classification, roadmap, code,
       candidates: survivor ? [{ feature_id: survivor.id, title: survivor.title, similarity: 1 }] : candidates,
       existing: survivor
         ? { title: survivor.title, problem: survivor.problem, solution: survivor.solution || '', rabbit_holes: survivor.rabbit_holes || '', out_of_bounds: survivor.out_of_bounds || '', appetite: survivor.appetite || 'small' }
@@ -399,7 +411,7 @@ async function advance(
     // Explicit target: force append to it, and feed Claude the current pitch to merge into.
     const target = get<Feature>('SELECT * FROM features WHERE id = ?', data.target_feature_id)
     proposal = await llm.propose({
-      raw: data.raw, transcript: data.transcript, classification, roadmap,
+      raw: data.raw, transcript: data.transcript, classification, roadmap, code,
       candidates: target ? [{ feature_id: target.id, title: target.title, similarity: 1 }] : candidates,
       existing: target
         ? { title: target.title, problem: target.problem, solution: target.solution || '', rabbit_holes: target.rabbit_holes || '', out_of_bounds: target.out_of_bounds || '', appetite: target.appetite || 'small' }
@@ -422,7 +434,7 @@ async function advance(
       reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose d'affiner la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
     }
   } else {
-    proposal = await llm.propose({ raw: data.raw, transcript: data.transcript, candidates, classification, roadmap })
+    proposal = await llm.propose({ raw: data.raw, transcript: data.transcript, candidates, classification, roadmap, code })
     if (proposal.action === 'append') {
       reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose de le rattacher à la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
     } else if (proposal.action === 'discard') {

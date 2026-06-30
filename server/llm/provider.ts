@@ -10,6 +10,9 @@ export interface ProposeInput {
   /** Read-only roadmap context (active cycles + in-flight features) so the agent routes with the
    *  right picture — and never amends a feature whose scope is frozen in a validated cycle. */
   roadmap?: string
+  /** Related code from the linked product repo — the ground truth of what's ALREADY built. Lets the
+   *  agent dedupe against reality and ground the pitch. Empty when no repo is linked or nothing matched. */
+  code?: string
 }
 
 /**

@@ -12,5 +12,9 @@ export default defineEventHandler(() => {
     key_source: dbKey ? 'settings' : process.env.ANTHROPIC_API_KEY ? 'env' : 'none',
     model,
     models: ['claude-sonnet-4-6', 'claude-opus-4-8'],
+    // Linked product repo (ground truth the intake searches when shaping). Env-set is read-only here.
+    code_repo: getSetting('code_repo') ?? process.env.CAIRN_CODE_REPO ?? '',
+    code_repo_source: getSetting('code_repo') ? 'settings' : process.env.CAIRN_CODE_REPO ? 'env' : 'none',
+    has_code_token: !!getSetting('code_repo_token'),
   }
 })

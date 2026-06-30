@@ -12,7 +12,7 @@ import { toast } from 'vue-sonner'
 
 const { t } = useUiLang()
 
-interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; model: string; models: string[] }
+interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean }
 interface Profile { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 interface Member { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 
@@ -117,7 +117,31 @@ const workspaceLogo = ref<string | null>(null)
 const uploadingLogo = ref(false)
 const keyInput = ref('')
 const modelInput = ref('claude-sonnet-4-6')
-watchEffect(() => { if (cfg.value) { workspaceName.value = cfg.value.workspace_name; workspaceLogo.value = cfg.value.workspace_logo; modelInput.value = cfg.value.model } })
+// Linked product repo (workspace-wide) — the ground truth the intake greps when shaping a pitch.
+// Spec is a local path OR a GitHub ref (owner/repo); a read token is needed for private GitHub repos.
+const codeRepo = ref('')
+const codeToken = ref('')
+const connectingRepo = ref(false)
+const repoCheck = ref<{ ok: boolean; files?: number; mode?: string; error?: string } | null>(null)
+watchEffect(() => { if (cfg.value) { workspaceName.value = cfg.value.workspace_name; workspaceLogo.value = cfg.value.workspace_logo; modelInput.value = cfg.value.model; codeRepo.value = cfg.value.code_repo } })
+async function connectRepo() {
+  if (connectingRepo.value || !codeRepo.value.trim()) return
+  connectingRepo.value = true; repoCheck.value = null
+  try {
+    repoCheck.value = await $fetch('/api/code-repo-connect', { method: 'POST', body: { repo: codeRepo.value.trim(), token: codeToken.value.trim() || undefined } })
+    codeToken.value = ''
+    await invalidate(qk.settings)
+  }
+  catch { repoCheck.value = { ok: false, error: 'clone-failed' } }
+  finally { connectingRepo.value = false }
+}
+const repoError = computed(() => ({
+  'not-found': 'Chemin introuvable ou pas un repo git.',
+  'empty-or-not-git': 'Repo vide ou non suivi par git.',
+  'bad-ref': 'Référence GitHub invalide (attendu : owner/repo).',
+  'clone-failed': 'Clone impossible — token invalide, accès refusé, ou réseau.',
+  empty: 'Renseigne un chemin ou owner/repo.',
+}[repoCheck.value?.error || ''] || 'Échec de la connexion.'))
 async function onLogoFile(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
@@ -142,6 +166,7 @@ async function save() {
       workspace_logo_id: workspaceLogo.value ?? '',
       anthropic_api_key: keyInput.value.trim() || undefined,
       anthropic_model: modelInput.value,
+      code_repo: codeRepo.value.trim(),
     }, invalidates: [qk.settings, qk.overview], success: t('settings.toast.settingsSaved') })
     keyInput.value = ''
     saved.value = true
@@ -272,6 +297,19 @@ async function save() {
                 <span class="text-xs text-muted-foreground">{{ MODEL_META[m]?.desc || '' }}</span>
               </button>
             </div>
+          </div>
+          <div class="grid gap-2">
+            <Label for="coderepo">Repo produit · intake code-aware</Label>
+            <Input id="coderepo" v-model="codeRepo" placeholder="owner/repo (GitHub) ou /chemin/local" class="font-mono" @keydown.enter="connectRepo" />
+            <div class="flex gap-2">
+              <Input id="codetoken" v-model="codeToken" type="password" autocomplete="off" class="font-mono" :placeholder="cfg?.has_code_token ? 'Token enregistré — laisser vide pour garder' : 'Token GitHub (read) — repos privés'" @keydown.enter="connectRepo" />
+              <Button variant="outline" :disabled="connectingRepo || !codeRepo.trim()" @click="connectRepo">{{ connectingRepo ? '…' : 'Connecter' }}</Button>
+            </div>
+            <p class="text-xs" :class="repoCheck ? (repoCheck.ok ? 'text-emerald-500' : 'text-destructive') : 'text-muted-foreground'">
+              <template v-if="repoCheck?.ok">✓ Connecté ({{ repoCheck.mode === 'github' ? 'GitHub, cloné côté serveur' : 'local' }}) — {{ repoCheck.files }} fichiers. L'intake interrogera ce code en shapant un pitch.</template>
+              <template v-else-if="repoCheck">✗ {{ repoError }}</template>
+              <template v-else>Repo de ton produit, partagé par tout le workspace : GitHub <code>owner/repo</code> (cloné côté serveur, token read pour le privé) ou chemin local (zéro egress).{{ cfg?.code_repo_source === 'env' ? ' (défini par variable d\'environnement)' : '' }}</template>
+            </p>
           </div>
           <div class="flex items-center justify-end gap-3">
             <span v-if="saved" class="text-sm text-muted-foreground">✓ {{ t('settings.saved') }}</span>
