@@ -109,6 +109,7 @@ export function createStubProvider(): LlmProvider {
             confidence: Number(top.similarity.toFixed(2)),
             rationale: `Forte similarité (${(top.similarity * 100).toFixed(0)}%) avec « ${top.title} ». Rattachement proposé par défaut — créer une nouvelle feature reste une action délibérée.`,
             proposed_spec: { title: top.title, problem: raw.trim(), appetite, solution: '', rabbit_holes: '', out_of_bounds: '' },
+            signal_summary: raw.trim().slice(0, 200),
             candidates,
           }
         : {
@@ -120,6 +121,7 @@ export function createStubProvider(): LlmProvider {
               ? `Meilleur candidat « ${top.title} » à ${(top.similarity * 100).toFixed(0)}% (< seuil ${DEDUP_STRONG * 100}%). Nouvelle feature proposée.`
               : 'Aucun doublon proche trouvé. Nouvelle feature proposée.',
             proposed_spec: { title: makeTitle(raw), problem: raw.trim(), appetite, solution: '', rabbit_holes: '', out_of_bounds: '' },
+            signal_summary: raw.trim().slice(0, 200),
             candidates,
           }
       return proposal

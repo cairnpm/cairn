@@ -68,10 +68,11 @@ const PROPOSE_SCHEMA = {
       },
       required: ['title', 'problem', 'appetite', 'solution', 'rabbit_holes', 'out_of_bounds'],
     },
+    signal_summary: { type: 'string' },
     confidence: { type: 'number' },
     rationale: { type: 'string' },
   },
-  required: ['action', 'target_feature_id', 'proposed_spec', 'confidence', 'rationale'],
+  required: ['action', 'target_feature_id', 'proposed_spec', 'signal_summary', 'confidence', 'rationale'],
 }
 
 const TRIAGE_SCHEMA = {
@@ -339,6 +340,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'structure, so never repeat or restate the section name inside the value. Shape Up "just enough": a pitch reads in a '
         + 'minute — a fat-marker sketch, not a spec. A solution may name a few concrete steps, but inline as plain prose, not a '
         + 'formatted list. Be precise, cut the filler. '
+        + 'signal_summary: a 1-2 sentence PLAIN reformulation of what THIS incoming signal actually asks or '
+        + 'reports — its essence, as a PM would log it. NOT a restatement of the shaped pitch, NO markdown, terse. '
         + 'When a "Existing code" block is present, treat it as the GROUND TRUTH of what is already built (more reliable than '
         + 'any ticket): if the signal is already implemented there, prefer append/refine or discard-as-duplicate over creating '
         + 'a new feature, and ground the solution / rabbit_holes / out_of_bounds in the real modules cited (file:line). The code '
@@ -358,6 +361,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         classification,
         confidence: typeof parsed.confidence === 'number' ? parsed.confidence : (candidates[0]?.similarity ?? 0.5),
         rationale: parsed.rationale || 'Routing proposé par le modèle.',
+        signal_summary: parsed.signal_summary || raw.trim().slice(0, 200),
         proposed_spec: {
           title: parsed.proposed_spec?.title || raw.trim().slice(0, 60),
           problem: parsed.proposed_spec?.problem || raw.trim(),

@@ -109,6 +109,9 @@ export interface Proposal {
   confidence: number
   rationale: string
   proposed_spec: ProposedSpec
+  // Concise 1-2 sentence reformulation of the RAW signal — stored as the logged feedback (the raw paste
+  // is not kept; the detail lives in proposed_spec). The essence of what this signal asks/reports.
+  signal_summary: string
   candidates: Candidate[]
 }
 

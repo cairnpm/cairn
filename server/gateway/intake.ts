@@ -641,7 +641,7 @@ export async function commitProposal(proposal: Proposal, ctx: CommitContext): Pr
     run(
       `INSERT INTO feedback (id, content, source, captured_by, classification, status, feature_id, content_hash, embedding, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      feedbackId, data.raw, data.source, data.captured_by, proposal.classification, feedbackStatus, featureId, contentHash,
+      feedbackId, proposal.signal_summary || data.raw, data.source, data.captured_by, proposal.classification, feedbackStatus, featureId, contentHash,
       encodeEmbedding(fbEmbedding), now,
     )
 
