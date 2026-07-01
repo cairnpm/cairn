@@ -1,301 +1,301 @@
-# Intake & gateway — règles et fonctionnement
+# Intake & gateway — rules and behavior
 
-> Source de vérité : `server/gateway/intake.ts` (machine à états + commit),
-> `server/llm/anthropic.ts` (prompts de l'agent), `server/domain/betting.ts` +
-> `server/domain/bet.ts` (menu de pari + bets), `server/db/stale.ts` (anti-backlog).
-> Ce document décrit le comportement réel du code, pas une intention.
+> Source of truth: `server/gateway/intake.ts` (state machine + commit),
+> `server/llm/anthropic.ts` (agent prompts), `server/domain/betting.ts` +
+> `server/domain/bet.ts` (betting menu + bets), `server/db/stale.ts` (anti-backlog).
+> This document describes the actual behavior of the code, not an intention.
 
-## 1. Philosophie — Shape Up, bottom-up
+## 1. Philosophy — Shape Up, bottom-up
 
-Cairn est un **Product OS bottom-up** : on ne remplit pas un backlog à la main, on
-laisse **les signaux remonter** et se condenser en features _shapées_, puis _bettables_,
-puis regroupées dans des **Hills** (cycles). Inspiration directe de **Shape Up** :
+Cairn is a **bottom-up Product OS**: you don't fill a backlog by hand, you
+let **signals bubble up** and condense into _shaped_ features, then _bettable_ ones,
+then grouped into **Hills** (cycles). Direct inspiration from **Shape Up**:
 
-- On **shape** avant de parier : un signal brut devient un _pitch_ (problème réel,
-  appétit, solution esquissée, rabbit holes, no-gos) — pas une demande reformulée.
-- On **parie** explicitement (humain), jamais automatiquement : un pari crée/peuple un Hill.
-- **Anti-backlog** : ce qui n'est pas parié se périme (`stale`) et doit être re-défendu.
-- **Pas de réouverture** d'une solution livrée : on shape une nouvelle itération liée.
+- You **shape** before betting: a raw signal becomes a _pitch_ (real problem,
+  appetite, sketched solution, rabbit holes, no-gos) — not a reworded request.
+- You **bet** explicitly (human), never automatically: a bet creates/populates a Hill.
+- **Anti-backlog**: whatever isn't bet on goes stale (`stale`) and must be re-defended.
+- **No reopening** of a delivered solution: you shape a new linked iteration.
 
-Le flux complet, de bas en haut :
+The full flow, bottom to top:
 
 ```
-signal brut ──intake──▶ feature (shaped) ──menu scoré──▶ betting table ──vote──▶
-   owner valide ──▶ Hill (cycle actif) + features pariées (bet → building → done)
+raw signal ──intake──▶ feature (shaped) ──scored menu──▶ betting table ──vote──▶
+   owner validates ──▶ Hill (active cycle) + bet features (bet → building → done)
 ```
 
-L'**intake est l'unique porte d'écriture** vers le domaine. `intakeCommit()` est le seul
-chemin qui INSERT/UPDATE `features` / `feedback`. Les vues (Backlog, Betting, Hills) sont
-en lecture seule ; les seules autres écritures sont les **décisions** (bet/pass/defer) et
-la **validation** d'une betting table — toutes deux passant par `recordDecision()`.
+**Intake is the only write door** into the domain. `intakeCommit()` is the sole
+path that INSERTs/UPDATEs `features` / `feedback`. The views (Backlog, Betting, Hills) are
+read-only; the only other writes are **decisions** (bet/pass/defer) and
+the **validation** of a betting table — both going through `recordDecision()`.
 
-## 2. Le cycle de vie (statuts)
+## 2. The lifecycle (statuses)
 
-`feedback` (signal brut) — statut : `new | routed | pending_review | archived`.
+`feedback` (raw signal) — status: `new | routed | pending_review | archived`.
 
-`features` — statut : `raw → shaped → bet → building → done`, plus `archived` (fusionnée)
-et `deleted` (soft-delete réversible). Transitions :
+`features` — status: `raw → shaped → bet → building → done`, plus `archived` (merged)
+and `deleted` (reversible soft-delete). Transitions:
 
-| De → vers | Déclencheur |
+| From → to | Trigger |
 |---|---|
-| ∅ → `shaped` | intake `create_feature` (toute nouvelle feature naît shaped, `signal_count=1`) |
-| `shaped` → `shaped` (enrichie) | intake `append` (rattache un signal + affine le pitch, `signal_count+1`, `stale=0`) |
-| `shaped` → `bet` | `recordDecision('bet')` (validation d'une betting table ou décision manuelle) → `hill_id` posé |
-| `shaped` → `shaped` (stale) | non parié depuis `NUXT_STALE_DAYS` (14j) → `stale=1`, à re-défendre |
-| `*` → `archived` | feature absorbée par un `merge` |
-| `done`/`archived` → **nouvelle itération** | intake `refine` sur une feature livrée → `create_feature` avec `supersedes_id` |
-| `*` → `deleted` | suppression (soft) ; réactivable → `prev_status` |
+| ∅ → `shaped` | intake `create_feature` (every new feature is born shaped, `signal_count=1`) |
+| `shaped` → `shaped` (enriched) | intake `append` (attaches a signal + refines the pitch, `signal_count+1`, `stale=0`) |
+| `shaped` → `bet` | `recordDecision('bet')` (validation of a betting table or manual decision) → `hill_id` set |
+| `shaped` → `shaped` (stale) | not bet on for `NUXT_STALE_DAYS` (14d) → `stale=1`, to be re-defended |
+| `*` → `archived` | feature absorbed by a `merge` |
+| `done`/`archived` → **new iteration** | intake `refine` on a delivered feature → `create_feature` with `supersedes_id` |
+| `*` → `deleted` | deletion (soft); reactivatable → `prev_status` |
 
-`pass` / `defer` ne changent **pas** le statut (la feature reste `shaped`, sans auto-carry ;
-`pass` et `defer` pénalisent juste son score au prochain menu).
+`pass` / `defer` do **not** change the status (the feature stays `shaped`, with no auto-carry;
+`pass` and `defer` merely penalize its score in the next menu).
 
-## 3. La machine à états de l'intake
+## 3. The intake state machine
 
-Un tour = `POST /api/intake/turn`. La conversation est bornée puis converge toujours
-vers une **proposition** que l'humain confirme (`POST /api/intake/commit`).
+One turn = `POST /api/intake/turn`. The conversation is bounded and always converges
+toward a **proposal** that the human confirms (`POST /api/intake/commit`).
 
 ```
                  detectIntent(message)
                         │
         ┌───────────────┼────────────────┬──────────────┐
       query           signal           refine          merge
-   (lecture seule)      │            (feature nommée) (2 features)
+   (read-only)          │           (named feature)  (2 features)
         │               ▼                 │              │
    answerQuery     ┌─ gather ◀────────────┴──────────────┘
-   (pas d'écrit)   │     │ clarify (boucle bornée : 1 question ciblée à la fois)
+   (no write)      │     │ clarify (bounded loop: one targeted question at a time)
                    │     ▼
-                   └▶ propose ──(confiance faible, mode signal)──▶ pending_review
-                         │                                       (humain arbitre)
+                   └▶ propose ──(low confidence, signal mode)──▶ pending_review
+                         │                                     (human arbitrates)
                          ▼
-                  commit  ←── SEULE écriture domaine
+                  commit  ←── ONLY domain write
 ```
 
-- **`gather` → `clarify`** : tant que l'agent ne pourrait pas écrire un pitch confiant, il
-  pose **une** question de shaping. Boucle bornée par `MAX_CLARIFY` (8 questions agent) et
-  `MAX_TURNS` (18, plafond de sécurité qui force la proposition).
-- **`propose`** : l'agent produit une **action** + un **pitch** (`proposed_spec`) + une
-  confiance + un rationale. Rien n'est écrit.
-- **`pending_review`** : en mode `signal`, si `confidence < NUXT_CONFIDENCE_THRESHOLD`
-  (0.45), l'agent **n'écrit pas** et demande à l'humain de trancher (créer vs rattacher à
-  un candidat). `refine` / `merge` sont des directives explicites → pas d'arbitrage.
-- **`commit`** : applique la proposition dans une transaction. Idempotent par `content_hash`.
+- **`gather` → `clarify`**: as long as the agent could not write a confident pitch, it
+  asks **one** shaping question. Loop bounded by `MAX_CLARIFY` (8 agent questions) and
+  `MAX_TURNS` (18, safety cap that forces the proposal).
+- **`propose`**: the agent produces an **action** + a **pitch** (`proposed_spec`) + a
+  confidence + a rationale. Nothing is written.
+- **`pending_review`**: in `signal` mode, if `confidence < NUXT_CONFIDENCE_THRESHOLD`
+  (0.45), the agent **does not write** and asks the human to decide (create vs attach to
+  a candidate). `refine` / `merge` are explicit directives → no arbitration.
+- **`commit`**: applies the proposal in a transaction. Idempotent by `content_hash`.
 
-> **Mode `query` (recherche transverse, lecture seule)** : l'agent répond depuis un **snapshot
-> de tout le produit** (`workspaceContext`) — compteurs du backlog, features `shaped`, travaux
-> en cours par cycle, livrés récents, **Hills** avec avancement (%), betting tables, activité
-> récente — plus le détail de la feature en focus si la question en nomme une. Il peut donc
-> répondre à « quels Hills sont actifs et à quel avancement ? », « qu'a-t-on livré ? », « où en
-> est la feature Y ? ». À chaque tour l'intent est **re-détecté** : on peut poser une question
-> puis basculer en écriture (« ok crée un ticket pour X » / « affine la feature Y ») sans
-> repartir d'une nouvelle session. La réponse est **ancrée** sur le snapshot (« si l'état ne
-> répond pas, le dire ; ne rien inventer »).
+> **`query` mode (cross-cutting search, read-only)**: the agent answers from a **snapshot
+> of the whole product** (`workspaceContext`) — backlog counters, `shaped` features, work
+> in progress per cycle, recently delivered, **Hills** with progress (%), betting tables, recent
+> activity — plus the detail of the focused feature if the question names one. It can therefore
+> answer "which Hills are active and at what progress?", "what have we delivered?", "where does
+> feature Y stand?". Every turn the intent is **re-detected**: you can ask a question
+> then switch to writing ("ok create a ticket for X" / "refine feature Y") without
+> starting a new session. The answer is **grounded** on the snapshot ("if the state doesn't
+> answer, say so; don't make anything up").
 
-## 4. Les 4 intents / actions de routage
+## 4. The 4 routing intents / actions
 
-`detectIntent` classe le message en `query | signal | refine | merge` (schéma strict,
-`temperature: 0`). Le `propose` produit une `action` parmi `create_feature | append | discard`
-(le `merge` est résolu en amont, hors LLM). Effets au commit :
+`detectIntent` classifies the message into `query | signal | refine | merge` (strict schema,
+`temperature: 0`). The `propose` produces an `action` among `create_feature | append | discard`
+(the `merge` is resolved upstream, outside the LLM). Effects at commit:
 
-| Action | Quand | Effet sur le domaine |
+| Action | When | Effect on the domain |
 |---|---|---|
-| `create_feature` | aucun candidat n'est la même feature ; ou `refine` d'une feature **livrée** | INSERT feature `shaped` (`supersedes_id` si nouvelle itération) ; event `created` |
-| `append` | un candidat **`shaped`** traite le **même problème** ; ou `refine` d'une feature **`shaped`** | UPDATE feature (champs affinés before→after), `signal_count+1`, `stale=0`, re-embed ; event `signal_added` (digest des champs modifiés) |
-| `merge` | directive explicite « fusionne X et Y » / « X est un doublon de Y » | rapatrie feedback/decisions/PR/events de l'absorbée → survivante, pitch consolidé, absorbée `archived` ; events `merged` des deux côtés |
-| `discard` | **vrai bruit** (spam/test/hors-produit) ou doublon **exact** qui n'apporte rien — **jamais** un bug | feedback `archived`, aucune mutation de feature ; event `discarded` (si cible) |
+| `create_feature` | no candidate is the same feature; or `refine` of a **delivered** feature | INSERT `shaped` feature (`supersedes_id` if new iteration); event `created` |
+| `append` | a **`shaped`** candidate addresses the **same problem**; or `refine` of a **`shaped`** feature | UPDATE feature (refined fields before→after), `signal_count+1`, `stale=0`, re-embed; event `signal_added` (digest of the modified fields) |
+| `merge` | explicit directive "merge X and Y" / "X is a duplicate of Y" | repatriates feedback/decisions/PR/events of the absorbed → survivor, consolidated pitch, absorbed `archived`; `merged` events on both sides |
+| `discard` | **true noise** (spam/test/off-product) or an **exact** duplicate that adds nothing — **never** a bug | feedback `archived`, no feature mutation; event `discarded` (if target) |
 
-Le `feedback` brut est **toujours** stocké (même un `discard` → `archived`), avec son
-`content_hash`, son `embedding` et son `classification` (`musing | explore | directive`).
+The raw `feedback` is **always** stored (even a `discard` → `archived`), with its
+`content_hash`, its `embedding` and its `classification` (`musing | explore | directive`).
 
-## 5. Déduplication — toujours, à deux niveaux
+## 5. Deduplication — always, at two levels
 
-La dédup n'est pas optionnelle : **chaque tour** passe par une recherche de candidats, et
-le commit re-vérifie l'idempotence.
+Dedup is not optional: **every turn** goes through a candidate search, and
+the commit re-checks idempotence.
 
-### 5.1 Sémantique (à chaque tour) — `topCandidates()`
+### 5.1 Semantic (every turn) — `topCandidates()`
 
-- Embedding local du signal, **similarité cosinus** contre les features `status = 'shaped'`
-  **uniquement** → top‑5, seuil plancher `CANDIDATE_FLOOR` (0.15).
-- **Important** : les seules cibles d'`append` sont les features **`shaped`**. Tout le reste
-  (`done`, `archived`, `deleted`, **et les `bet`/`building` déjà engagées dans un cycle**) est
-  exclu des candidats — un signal ne se rattache **jamais** à du livré ni à un pari en cours
-  (voir §6). Les features en cycle sont injectées séparément en **contexte roadmap** (read-only).
-- L'agent agit en **juge de dédup** (prompt `propose`) : le score est un _indice_, pas une
-  règle. S'il existe un candidat qui traite **le même problème de fond** — même formulé très
-  différemment — il choisit `append`. Il ne choisit `create_feature` que si **aucun**
-  candidat n'est réellement la même feature (« créer est un acte délibéré ; les doublons
-  polluent le backlog »). Il choisit `discard` si l'apport est nul.
+- Local embedding of the signal, **cosine similarity** against features with `status = 'shaped'`
+  **only** → top‑5, floor threshold `CANDIDATE_FLOOR` (0.15).
+- **Important**: the only `append` targets are **`shaped`** features. Everything else
+  (`done`, `archived`, `deleted`, **and the `bet`/`building` ones already committed to a cycle**) is
+  excluded from candidates — a signal **never** attaches to delivered work nor to a bet in progress
+  (see §6). Features in a cycle are injected separately as **roadmap context** (read-only).
+- The agent acts as a **dedup judge** (prompt `propose`): the score is a _hint_, not a
+  rule. If there is a candidate that addresses **the same underlying problem** — even phrased very
+  differently — it chooses `append`. It chooses `create_feature` only if **no**
+  candidate is really the same feature ("creating is a deliberate act; duplicates
+  pollute the backlog"). It chooses `discard` if the contribution is null.
 
-### 5.2 Exacte (au commit) — idempotence
+### 5.2 Exact (at commit) — idempotence
 
-- `content_hash = sha256(raw normalisé)`. Si un feedback avec ce hash a déjà été routé vers
-  une feature → **no-op idempotent** (réponse `idempotent: true`, aucune double écriture).
+- `content_hash = sha256(normalized raw)`. If a feedback with this hash has already been routed to
+  a feature → **idempotent no-op** (response `idempotent: true`, no double write).
 
-### 5.3 Garde anti-écho
+### 5.3 Anti-echo guard
 
-À l'`append`, un champ du pitch n'est **jamais** écrasé par l'instruction brute de
-l'utilisateur (détection d'écho) : le stub hors-ligne ne peut pas dégrader un pitch shapé.
+On `append`, a pitch field is **never** overwritten by the user's raw
+instruction (echo detection): the offline stub cannot degrade a shaped pitch.
 
-## 6. On n'amende que les features `shaped` (ni livrées, ni déjà en cycle)
+## 6. We only amend `shaped` features (neither delivered, nor already in a cycle)
 
-Règle Shape Up « fixed scope » : on ne fait pas grossir le périmètre d'un pari en cours, et on
-ne rouvre pas du livré. **Seules les features `shaped` sont amendables** (`append`/`refine`).
-Quatre mécanismes le garantissent :
+Shape Up "fixed scope" rule: you don't grow the scope of a bet in progress, and you don't
+reopen delivered work. **Only `shaped` features are amendable** (`append`/`refine`).
+Four mechanisms guarantee this:
 
-1. **Périmètre de dédup** : `topCandidates` ne cherche que dans `status = 'shaped'` → pas de
-   rattachement à une feature livrée **ni à une feature `bet`/`building` déjà en cycle**.
-2. **Refine sur livré → nouvelle itération** : un `refine` ciblant une feature `done`/`archived`
-   ne fait **pas** d'`append` — bascule en `create_feature` avec `supersedes_id` vers la version
-   livrée (« pas de réouverture »). Event `created` avec `{ supersedes }`.
-3. **Refine sur feature en cycle → nouvelle feature** : un `refine` ciblant une feature
-   `bet`/`building` ne modifie **pas** le périmètre du pari en cours — l'agent propose une
-   **nouvelle feature** « pour un prochain cycle ».
-4. **Contexte roadmap + garde-fou décisions** : les features en cycle sont injectées en contexte
-   read-only (« périmètre figé — ne pas amender ») ; et un verdict `bet`/`pass`/`defer` sur une
-   feature `done`/`archived` est rejeté (409) côté `decisions.post.ts`.
+1. **Dedup scope**: `topCandidates` only searches within `status = 'shaped'` → no
+   attachment to a delivered feature **nor to a `bet`/`building` feature already in a cycle**.
+2. **Refine on delivered → new iteration**: a `refine` targeting a `done`/`archived` feature
+   does **not** `append` — it switches to `create_feature` with `supersedes_id` toward the
+   delivered version ("no reopening"). Event `created` with `{ supersedes }`.
+3. **Refine on a feature in a cycle → new feature**: a `refine` targeting a
+   `bet`/`building` feature does **not** modify the scope of the bet in progress — the agent proposes a
+   **new feature** "for a next cycle".
+4. **Roadmap context + decisions guardrail**: features in a cycle are injected as read-only context
+   ("frozen scope — do not amend"); and a `bet`/`pass`/`defer` verdict on a
+   `done`/`archived` feature is rejected (409) on the `decisions.post.ts` side.
 
-## 7. Comment l'agent challenge la prise de contexte (router correctement)
+## 7. How the agent challenges the context-gathering (to route correctly)
 
-Posture explicite : l'agent est un **PM senior qui protège une roadmap finie, pas un order-taker
-ni un yes-man**. Il privilégie la **bonne décision** sur l'accord avec l'utilisateur. Cadrage
-inspiré des best practices anti-sycophantie (« ask, don't tell » ; faire remonter les hypothèses ;
-prioriser l'exactitude sur l'accord) et des questions critiques de Shape Up. Quatre leviers :
+Explicit stance: the agent is a **senior PM who protects a finite roadmap, not an order-taker
+nor a yes-man**. It favors the **right decision** over agreeing with the user. Framing
+inspired by anti-sycophancy best practices ("ask, don't tell"; surfacing assumptions;
+prioritizing accuracy over agreement) and by the critical questions of Shape Up. Four levers:
 
-### 7.1 Shaping sceptique (prompt `clarify`)
+### 7.1 Skeptical shaping (prompt `clarify`)
 
-L'agent **n'accepte pas la demande telle quelle** et ne flatte pas. Il :
+The agent **does not accept the request as-is** and does not flatter. It:
 
-- **reformule la demande en problème** (ce qui casse concrètement aujourd'hui, pour qui, à
-  quelle fréquence) avant toute solution ;
-- **challenge** comme un PM : le problème compte-t-il vraiment ? pourquoi maintenant plutôt
-  qu'autre chose ? quel est le coût de faire ça plutôt qu'autre chose ? c'est quoi le succès ?
-- **interroge l'appétit** (small = jours / big = semaines) et sa justification ;
-- **flague le non-borné** (rabbit holes ouverts, succès flou, scope qui peut exploser) — il ne
-  fait pas semblant que c'est bettable. Un pitch bettable est **rough + solved + bounded** ;
-- pose **une seule** question tranchante à la fois, autant de tours que nécessaire (pas de
-  rembourrage) ; répond **`OK`** dès qu'il pourrait écrire un pitch confiant **ou** conclure qu'il
-  n'y a pas de vrai problème à shaper (pur bruit). Un problème peu prioritaire mais réel **reste**
-  à shaper — le timing se décide au pari, pas à l'intake.
+- **reframes the request as a problem** (what concretely breaks today, for whom, at
+  what frequency) before any solution;
+- **challenges** like a PM: does the problem really matter? why now rather
+  than something else? what is the cost of doing this rather than something else? what does success look like?
+- **probes the appetite** (small = days / big = weeks) and its justification;
+- **flags the unbounded** (open rabbit holes, fuzzy success, scope that can explode) — it does not
+  pretend it's bettable. A bettable pitch is **rough + solved + bounded**;
+- asks **only one** sharp question at a time, as many turns as needed (no
+  padding); replies **`OK`** as soon as it could write a confident pitch **or** conclude that there
+  is no real problem to shape (pure noise). A low-priority but real problem **remains**
+  to be shaped — the timing is decided at the bet, not at intake.
 
-Détection de fin : un `OK` explicite, ou une réponse sans `?` → on passe à `propose`.
+End detection: an explicit `OK`, or an answer without a `?` → move to `propose`.
 
-### 7.2 Juge de dédup + PM critique (prompt `propose`)
+### 7.2 Dedup judge + critical PM (prompt `propose`)
 
-Le prompt injecte le **contexte produit** (`ARCHITECTURE_CONTEXT`), les candidats similaires **et
-le contexte roadmap** (cycles actifs + features en cours). Il demande de :
+The prompt injects the **product context** (`ARCHITECTURE_CONTEXT`), the similar candidates **and
+the roadmap context** (active cycles + features in progress). It asks to:
 
-- **juger le sens, pas les nombres** — `append` si un candidat est la même feature ;
-  `create_feature` seulement pour une vraie nouveauté ;
-- **`discard` étroit** : uniquement le **vrai bruit** (spam, test, hors-produit) ou un doublon
-  **exact** qui n'apporte rien. Un **bug est in-scope** (l'intake est la porte d'entrée des bugs) →
-  on le shape en pitch de correction, **jamais** « ça va dans Jira ». « Pas maintenant » / faible
-  priorité **n'est pas** un motif de discard (c'est une décision de pari) — défaut = **capturer** ;
-- respecter le **périmètre figé** des features en cycle (jamais d'`append` → nouvelle feature) ;
-- **faire remonter ses hypothèses** et le **contexte manquant** dans le `rationale`, en séparant
-  fait et interprétation.
+- **judge the meaning, not the numbers** — `append` if a candidate is the same feature;
+  `create_feature` only for a genuine novelty;
+- **narrow `discard`**: only **true noise** (spam, test, off-product) or an **exact**
+  duplicate that adds nothing. A **bug is in-scope** (intake is the entry door for bugs) →
+  shape it into a fix pitch, **never** "that goes in Jira". "Not now" / low
+  priority **is not** a reason to discard (that's a betting decision) — default = **capture**;
+- respect the **frozen scope** of features in a cycle (never `append` → new feature);
+- **surface its assumptions** and the **missing context** in the `rationale`, separating
+  fact from interpretation.
 
-### 7.3 Arbitrage humain sous incertitude
+### 7.3 Human arbitration under uncertainty
 
-- En mode `signal`, `confidence < 0.45` → `pending_review` : l'agent expose les candidats
-  (avec %) et **demande à l'humain de trancher** plutôt que de deviner.
-- L'humain confirme/corrige **toujours** la proposition avant écriture (« Tu confirmes, ou
-  tu corriges ? »). On mesure la qualité du modèle via `routing_log.corrected` (l'humain
-  a-t-il changé la **première** proposition de l'agent : action ou cible différente).
+- In `signal` mode, `confidence < 0.45` → `pending_review`: the agent exposes the candidates
+  (with %) and **asks the human to decide** rather than guessing.
+- The human **always** confirms/corrects the proposal before writing ("Do you confirm, or
+  do you correct?"). We measure the model's quality via `routing_log.corrected` (did the human
+  change the agent's **first** proposal: different action or target).
 
-## 8. Merge & regroupement (group)
+## 8. Merge & grouping (group)
 
-Deux notions distinctes :
+Two distinct notions:
 
-- **Merge (intake)** — directive humaine « fusionne X et Y ». L'agent résout **survivante**
-  (target2, conservée) et **absorbée** (target). Au commit : feedback/decisions/PR/events de
-  l'absorbée re-parentés sur la survivante, pitch **consolidé** (Claude réécrit en couvrant
-  les deux), `signal_count` additionnés, absorbée passée `archived`. Si une seule des deux est
-  résolue → traité comme un `refine` ; si aucune → `signal`.
-- **Group (betting menu)** — regroupement **thématique** automatique du menu de pari par
-  clustering glouton sur les embeddings (`CLUSTER_THRESHOLD = 0.4`). Chaque candidat reçoit un
-  `theme`. C'est de la présentation/priorisation, ça ne mute aucune feature.
+- **Merge (intake)** — human directive "merge X and Y". The agent resolves the **survivor**
+  (target2, kept) and the **absorbed** (target). At commit: feedback/decisions/PR/events of
+  the absorbed re-parented onto the survivor, **consolidated** pitch (Claude rewrites it covering
+  both), `signal_count` summed, absorbed moved to `archived`. If only one of the two is
+  resolved → treated as a `refine`; if neither → `signal`.
+- **Group (betting menu)** — automatic **thematic** grouping of the betting menu by
+  greedy clustering on the embeddings (`CLUSTER_THRESHOLD = 0.4`). Each candidate receives a
+  `theme`. This is presentation/prioritization, it mutates no feature.
 
-## 9. Du shaped au bettable, puis au Hill
+## 9. From shaped to bettable, then to Hill
 
-### 9.1 Menu scoré (`computeMenu`)
+### 9.1 Scored menu (`computeMenu`)
 
-Seules les features `shaped` entrent au menu. Score :
+Only `shaped` features enter the menu. Score:
 
 ```
 score = (1 + signal_count) × recency × appetite × deferPenalty × stalePenalty
 ```
 
-| Facteur | Valeur |
+| Factor | Value |
 |---|---|
-| `recency` | `exp(-ageDays / 21)` (demi-vie ~3 semaines, sur `updated_at`) |
-| `appetite` | `big = 1.3`, sinon `1` |
-| `deferPenalty` | dernière décision `defer = 0.8`, `pass = 0.5`, sinon `1` |
-| `stalePenalty` | `stale = 0.6`, sinon `1` |
+| `recency` | `exp(-ageDays / 21)` (half-life ~3 weeks, on `updated_at`) |
+| `appetite` | `big = 1.3`, otherwise `1` |
+| `deferPenalty` | last decision `defer = 0.8`, `pass = 0.5`, otherwise `1` |
+| `stalePenalty` | `stale = 0.6`, otherwise `1` |
 
-Puis clustering thématique (§8) → menu rangé par score, groupé par thème. Partagé par
-l'aperçu live et le **snapshot** figé d'une betting table (mêmes rangs).
+Then thematic clustering (§8) → menu ordered by score, grouped by theme. Shared by
+the live preview and the frozen **snapshot** of a betting table (same ranks).
 
 ### 9.2 Betting table → vote → Hill
 
-1. **Snapshot** : créer une betting table fige le menu courant (les features bougent ensuite,
-   la table reste stable). Candidats dénormalisés (`title_snap`, `problem_snap`, …).
-2. **Vote** : chaque membre vote (toggle) ; tally + avatars des votants ; timeline d'events.
-3. **Validation (owner uniquement)** : crée un **Hill** `active` `{name, starts_at, ends_at}`.
-   Pour chaque candidat sélectionné **encore `shaped`** → `recordDecision('bet')` (feature
-   `bet`, `hill_id` posé, event `bet`). Un candidat qui a changé de statut depuis le snapshot
-   (déjà `bet`/`done`/`archived`/fusionné) est **skippé**, jamais réouvert. La table passe
-   `validated`, event `validated` avec `{ hill_id, bet, skipped }`.
+1. **Snapshot**: creating a betting table freezes the current menu (features move afterward,
+   the table stays stable). Denormalized candidates (`title_snap`, `problem_snap`, …).
+2. **Vote**: each member votes (toggle); tally + voter avatars; timeline of events.
+3. **Validation (owner only)**: creates an `active` **Hill** `{name, starts_at, ends_at}`.
+   For each selected candidate **still `shaped`** → `recordDecision('bet')` (feature
+   `bet`, `hill_id` set, event `bet`). A candidate that changed status since the snapshot
+   (already `bet`/`done`/`archived`/merged) is **skipped**, never reopened. The table moves to
+   `validated`, event `validated` with `{ hill_id, bet, skipped }`.
 
-Le **« pourquoi »** d'un Hill = la rationale de validation (partagée par ses décisions de
-pari), affichée au-dessus des features pariées.
+The **"why"** of a Hill = the validation rationale (shared by its betting
+decisions), displayed above the bet features.
 
-## 10. Tracking de tout l'historique (audit)
+## 10. Tracking the whole history (audit)
 
-Tout est tracé, append-only :
+Everything is tracked, append-only:
 
-| Table | Contenu |
+| Table | Content |
 |---|---|
-| `feature_events` | timeline par feature : `created`, `signal_added` (contenu du signal + champs affinés before→after), `merged`, `discarded`, `bet`/`pass`/`defer`, `stale`, `pr_linked`/`pr_merged`, `deleted`/`restored`. `actor_type` = `user | agent | system`. |
-| `routing_log` | chaque décision de routage : `action`, `target_feature_id`, `confidence`, `rationale`, `model`, **`corrected`** (humain a changé la 1re proposition). |
-| `feedback` | chaque signal brut conservé (même `discard` → `archived`), avec `classification`, `content_hash`, `embedding`. |
-| `decisions` | chaque `bet`/`pass`/`defer` avec `rationale` (le « pourquoi » obligatoire) + `hill_id`. |
-| `betting_events` | timeline d'une table : `generated`, `vote_cast`/`vote_cleared`, `validated`, `cancelled`, `deleted`/`restored`. |
+| `feature_events` | timeline per feature: `created`, `signal_added` (signal content + refined fields before→after), `merged`, `discarded`, `bet`/`pass`/`defer`, `stale`, `pr_linked`/`pr_merged`, `deleted`/`restored`. `actor_type` = `user | agent | system`. |
+| `routing_log` | each routing decision: `action`, `target_feature_id`, `confidence`, `rationale`, `model`, **`corrected`** (human changed the 1st proposal). |
+| `feedback` | each raw signal kept (even `discard` → `archived`), with `classification`, `content_hash`, `embedding`. |
+| `decisions` | each `bet`/`pass`/`defer` with `rationale` (the mandatory "why") + `hill_id`. |
+| `betting_events` | timeline of a table: `generated`, `vote_cast`/`vote_cleared`, `validated`, `cancelled`, `deleted`/`restored`. |
 
-**Attribution** : l'acteur est dérivé de la **session authentifiée** au moment du commit
-(qui commit, pas qui ouvre la session) — jamais lu depuis le body.
+**Attribution**: the actor is derived from the **authenticated session** at commit time
+(who commits, not who opens the session) — never read from the body.
 
-## 11. Constantes (réglables)
+## 11. Constants (tunable)
 
-| Constante | Défaut | Env | Rôle |
+| Constant | Default | Env | Role |
 |---|---|---|---|
-| `CONFIDENCE_THRESHOLD` | 0.45 | `NUXT_CONFIDENCE_THRESHOLD` | sous ce seuil (mode signal), l'humain arbitre |
-| `CANDIDATE_FLOOR` | 0.15 | — | similarité minimale pour entrer dans la liste de candidats |
-| `TOP_K` | 5 | — | nombre de candidats de dédup |
-| `MAX_TURNS` | 18 | — | plafond de tours (force la proposition) |
-| `MAX_CLARIFY` | 8 | — | plafond de questions de l'agent |
-| `CLUSTER_THRESHOLD` | 0.4 | — | seuil de clustering thématique du menu |
-| `STALE_DAYS` | 14 | `NUXT_STALE_DAYS` | jours sans pari → `stale` |
+| `CONFIDENCE_THRESHOLD` | 0.45 | `NUXT_CONFIDENCE_THRESHOLD` | below this threshold (signal mode), the human arbitrates |
+| `CANDIDATE_FLOOR` | 0.15 | — | minimum similarity to enter the candidate list |
+| `TOP_K` | 5 | — | number of dedup candidates |
+| `MAX_TURNS` | 18 | — | turn cap (forces the proposal) |
+| `MAX_CLARIFY` | 8 | — | cap on agent questions |
+| `CLUSTER_THRESHOLD` | 0.4 | — | thematic clustering threshold of the menu |
+| `STALE_DAYS` | 14 | `NUXT_STALE_DAYS` | days without a bet → `stale` |
 
-> Le LLM est derrière une seule interface (`LlmProvider`) : Anthropic quand une clé est
-> présente, sinon un **stub déterministe** (le gateway ne se bloque jamais). Les embeddings
-> restent **locaux**. Toute réponse du modèle qui échoue dégrade vers le stub.
+> The LLM is behind a single interface (`LlmProvider`): Anthropic when a key is
+> present, otherwise a **deterministic stub** (the gateway never blocks). Embeddings
+> stay **local**. Any model response that fails degrades to the stub.
 
-## 12. Tests bout-en-bout (rejouables)
+## 12. End-to-end tests (replayable)
 
-Suite `tests/intake.test.ts` (vitest) qui exerce tout le flux directement via la gateway
-(`intakeTurn` → `intakeCommit`), sur une **DB SQLite temporaire** (jamais `.data/app.db`).
+Suite `tests/intake.test.ts` (vitest) that exercises the whole flow directly via the gateway
+(`intakeTurn` → `intakeCommit`), on a **temporary SQLite DB** (never `.data/app.db`).
 
 ```bash
-pnpm test:intake                      # RÉALISTE — vrai LLM (clé lue dans .env), modèle Sonnet
-INTAKE_TEST_STUB=1 pnpm test:intake   # HEURISTIQUE — stub déterministe, offline
-ANTHROPIC_MODEL=claude-opus-4-8 pnpm test:intake     # forcer un modèle
+pnpm test:intake                      # REAL — real LLM (key read from .env), Sonnet model
+INTAKE_TEST_STUB=1 pnpm test:intake   # HEURISTIC — deterministic stub, offline
+ANTHROPIC_MODEL=claude-opus-4-8 pnpm test:intake     # force a model
 ```
 
-Scénarios : **création** (signal nouveau → feature shapée), **déduplication / amend** (un
-complément enrichit la feature existante → `append`, pas de doublon — *réel uniquement*, le
-stub à seuil ne réplique pas ce jugement), **merge** (fusion de deux features nommées → une
-archivée, l'autre survit), **query** (question → réponse, aucune écriture), **fixed scope**
-(un signal proche d'une feature déjà en cycle ne l'amende pas).
+Scenarios: **creation** (new signal → shaped feature), **deduplication / amend** (a
+complement enriches the existing feature → `append`, no duplicate — *real only*, the
+threshold stub does not replicate this judgment), **merge** (merging two named features → one
+archived, the other survives), **query** (question → answer, no write), **fixed scope**
+(a signal close to a feature already in a cycle does not amend it).
 
-> Les tests réels sont **non déterministes** par nature (le modèle décide) : on utilise Sonnet
-> (routage plus consistant que Haiku) et des assertions comportementales. Un vrai problème doit
-> toujours être **capturé** (create/append), jamais écarté — c'est précisément ce qu'on vérifie.
+> Real tests are **non-deterministic** by nature (the model decides): we use Sonnet
+> (more consistent routing than Haiku) and behavioral assertions. A real problem must
+> always be **captured** (create/append), never discarded — which is precisely what we verify.
