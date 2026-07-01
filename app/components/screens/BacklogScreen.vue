@@ -60,6 +60,21 @@ async function restore(id: string) {
   try { await mutate(`/api/features/${id}/restore`, { invalidates: [qk.features, qk.overview], success: t('backlog.toastRestored') }) } finally { restoring.value = false }
 }
 
+// Permanent delete (irreversible) — only offered on already-deleted rows, confirmed via a dialog.
+const toPurge = ref<Feature | null>(null)
+const purgeOpen = ref(false)
+const purging = ref(false)
+function askPurge(f: Feature) { toPurge.value = f; purgeOpen.value = true }
+async function confirmPurge() {
+  if (!toPurge.value || purging.value) return
+  purging.value = true
+  const id = toPurge.value.id
+  try {
+    await mutate(`/api/features/${id}/purge`, { method: 'DELETE', invalidates: [qk.features, qk.overview], success: t('backlog.toastPurged') })
+    if (selectedFeatureId.value === id) bike.clearFeature()
+  } finally { purging.value = false; purgeOpen.value = false; toPurge.value = null }
+}
+
 // ── Table ─────────────────────────────────────────────────────────────────
 // Backlog's status filter lives in the store (so it survives navigation); expose a writable model.
 const statusModel = computed({ get: () => statusFilter.value, set: (v: string) => bike.setStatusFilter(v) })
@@ -164,8 +179,8 @@ const open = computed({
             <TableCell @click.stop>
               <ResourceActionsMenu
                 :is-deleted="row.original.status === 'deleted'" :restoring="restoring"
-                :actions-label="t('backlog.actions')" :restore-label="t('backlog.restore')" :delete-label="t('backlog.delete')"
-                @restore="restore(row.original.id)" @delete="askDelete(row.original)"
+                :actions-label="t('backlog.actions')" :restore-label="t('backlog.restore')" :delete-label="t('backlog.delete')" :purge-label="t('backlog.purge')"
+                @restore="restore(row.original.id)" @delete="askDelete(row.original)" @purge="askPurge(row.original)"
               />
             </TableCell>
           </TableRow>
@@ -200,6 +215,15 @@ const open = computed({
       :description="t('backlog.deleteDesc', { title: toDelete?.title ?? '' })"
       :cancel-label="t('backlog.cancel')" :confirm-label="deleting ? t('backlog.deleting') : t('backlog.delete')"
       @confirm="confirmDelete"
+    />
+
+    <!-- Permanent delete confirmation (irreversible) -->
+    <ConfirmDeleteDialog
+      v-model:open="purgeOpen" :deleting="purging"
+      :title="t('backlog.purgeTitle')"
+      :description="t('backlog.purgeDesc', { title: toPurge?.title ?? '' })"
+      :cancel-label="t('backlog.cancel')" :confirm-label="purging ? t('backlog.deleting') : t('backlog.purge')"
+      @confirm="confirmPurge"
     />
   </div>
 </template>

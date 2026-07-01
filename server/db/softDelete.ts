@@ -1,4 +1,4 @@
-import { get, run } from './client'
+import { db, get, run } from './client'
 import { logEvent } from './events'
 import { logBettingEvent } from './betting'
 
@@ -69,4 +69,26 @@ export function softRestore(cfg: SoftDeleteConfig, id: string, actor = 'inconnu'
   }
   cfg.log(id, actor, 'restored', cfg.restoredSummary(actor))
   return { status: restored }
+}
+
+/**
+ * Permanent, irreversible delete of a feature and every row that references it. Used only from the
+ * backlog trash (a feature that is already soft-deleted). FK off so we don't have to order the deletes
+ * perfectly. Uploaded files are unlinked (feature_id → NULL), not deleted. Returns false if unknown.
+ */
+export function hardDeleteFeature(id: string): boolean {
+  if (!get(`SELECT id FROM features WHERE id = ?`, id)) return false
+  const d = db()
+  d.exec('PRAGMA foreign_keys = OFF')
+  try {
+    run('DELETE FROM betting_votes WHERE candidate_id IN (SELECT id FROM betting_candidates WHERE feature_id = ?)', id)
+    for (const t of ['betting_candidates', 'feature_events', 'feature_assignees', 'decisions', 'pr_links', 'feedback']) {
+      run(`DELETE FROM ${t} WHERE feature_id = ?`, id)
+    }
+    run('DELETE FROM routing_log WHERE target_feature_id = ?', id)
+    run('UPDATE attachments SET feature_id = NULL WHERE feature_id = ?', id)
+    run('DELETE FROM features WHERE id = ?', id)
+  }
+  finally { d.exec('PRAGMA foreign_keys = ON') }
+  return true
 }
