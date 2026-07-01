@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 
 // `src` is an uploaded attachment id; when omitted, resolve it from the member's name. Falls back
 // to the name's initial. A name tooltip is shown for every avatar app-wide (provider is global).
-const props = defineProps<{ name?: string | null; src?: string | null; class?: string }>()
+const props = defineProps<{ name?: string | null; src?: string | null; class?: string | string[] }>()
 const { avatarFor } = useMembers()
 const initial = computed(() => actorInitial(props.name))
 const resolvedSrc = computed(() => props.src ?? avatarFor(props.name))

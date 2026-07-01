@@ -12,10 +12,14 @@ let _db: DatabaseSync | null = null
  *
  * SQLite is single-writer: pin the app to ONE machine (no horizontal autoscale).
  */
+function dbPath(): string {
+  const raw = process.env.NUXT_DB_URL || 'file:.data/app.db'
+  return raw.startsWith('file:') ? (raw.slice('file:'.length).split('?')[0] ?? raw) : raw
+}
+
 export function db(): DatabaseSync {
   if (_db) return _db
-  const raw = process.env.NUXT_DB_URL || 'file:.data/app.db'
-  const path = raw.startsWith('file:') ? raw.slice('file:'.length).split('?')[0] : raw
+  const path = dbPath()
   try { mkdirSync(dirname(path), { recursive: true }) } catch { /* exists */ }
   _db = new DatabaseSync(path)
   _db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;')
@@ -24,9 +28,7 @@ export function db(): DatabaseSync {
 
 /** Directory holding the DB — uploads live alongside it so they share the Fly volume. */
 export function dataDir(): string {
-  const raw = process.env.NUXT_DB_URL || 'file:.data/app.db'
-  const path = raw.startsWith('file:') ? raw.slice('file:'.length).split('?')[0] : raw
-  return dirname(path)
+  return dirname(dbPath())
 }
 
 type Arg = string | number | bigint | null | Uint8Array

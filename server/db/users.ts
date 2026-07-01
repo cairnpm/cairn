@@ -100,7 +100,7 @@ const AVATAR_PALETTE = ['#2563eb', '#16a34a', '#db2777', '#d97706', '#7c3aed', '
 function colorFor(name: string): string {
   let h = 0
   for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return AVATAR_PALETTE[h % AVATAR_PALETTE.length]
+  return AVATAR_PALETTE[h % AVATAR_PALETTE.length]! // modulo of a non-empty const → always defined
 }
 
 /** Create a member (used when accepting an invitation). Email is unique (enforced at the DB). */

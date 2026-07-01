@@ -6,7 +6,7 @@ import { getAttachment, linkAttachments, uploadsDir } from '../db/attachments'
 import { logEvent } from '../db/events'
 import { ensureSchema } from '../db/schema'
 import type {
-  BatchSegment, Candidate, Feature, IntakeSessionData, IntakeState, Proposal, TurnResponse,
+  BatchSegment, BatchSession, Candidate, Feature, IntakeSessionData, IntakeState, Proposal, TurnResponse,
 } from '../domain/types'
 import { getLlm } from '../llm/provider'
 import type { AttachmentForLlm, LlmProvider } from '../llm/provider'
@@ -549,7 +549,7 @@ export async function commitProposal(proposal: Proposal, ctx: CommitContext): Pr
         for (const k of Object.keys(FIELD_LABEL) as (keyof typeof next)[]) {
           const after = (spec[k as keyof typeof spec] as string | undefined)?.trim()
           const before = (next[k] || '') as string
-          if (after && after !== before.trim()) { next[k] = after as never; changes.push({ field: k, label: FIELD_LABEL[k], before, after }) }
+          if (after && after !== before.trim()) { next[k] = after as never; changes.push({ field: k, label: FIELD_LABEL[k] ?? String(k), before, after }) }
         }
       }
       run('UPDATE feedback SET feature_id = ? WHERE feature_id = ?', survivorId, absorbedId)
@@ -601,7 +601,7 @@ export async function commitProposal(proposal: Proposal, ctx: CommitContext): Pr
           const before = (next[k] || '') as string
           if (after && after !== before.trim() && !isEcho(after)) {
             next[k] = after as never
-            changes.push({ field: k, label: FIELD_LABEL[k], before, after })
+            changes.push({ field: k, label: FIELD_LABEL[k] ?? String(k), before, after })
           }
         }
       }
@@ -692,15 +692,18 @@ const DEDUP_SEGMENT = 0.8 // two create-segments above this cosine are flagged a
 function flagDuplicates(segments: BatchSegment[], embeddings: number[][]): void {
   const seenTarget = new Map<string, string>()
   for (let i = 0; i < segments.length; i++) {
-    const p = segments[i].proposal
+    const seg = segments[i]
+    if (!seg) continue
+    const p = seg.proposal
     if (p.action === 'append' && p.target_feature_id) {
       const first = seenTarget.get(p.target_feature_id)
-      if (first) segments[i].duplicate_of = first
-      else seenTarget.set(p.target_feature_id, segments[i].id)
+      if (first) seg.duplicate_of = first
+      else seenTarget.set(p.target_feature_id, seg.id)
     } else if (p.action === 'create_feature') {
       for (let j = 0; j < i; j++) {
-        if (segments[j].proposal.action === 'create_feature' && cosine(embeddings[i], embeddings[j]) >= DEDUP_SEGMENT) {
-          segments[i].duplicate_of = segments[j].id
+        const other = segments[j]
+        if (other?.proposal.action === 'create_feature' && cosine(embeddings[i] ?? [], embeddings[j] ?? []) >= DEDUP_SEGMENT) {
+          seg.duplicate_of = other.id
           break
         }
       }

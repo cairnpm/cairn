@@ -62,7 +62,7 @@ function confirm() {
       <div class="mx-auto flex max-w-3xl flex-col gap-3 p-6">
         <Card v-for="r in rows" :key="r.id" class="py-0 transition-opacity" :class="r.include ? '' : 'opacity-55'">
           <CardContent class="flex items-start gap-3 p-4">
-            <Checkbox :model-value="r.include" class="mt-1 shrink-0" @update:model-value="(v: boolean) => r.include = !!v" />
+            <Checkbox :model-value="r.include" class="mt-1 shrink-0" @update:model-value="(v: boolean | 'indeterminate') => r.include = !!v" />
             <div class="min-w-0 flex-1 space-y-2.5">
               <!-- Title + classification -->
               <div class="flex items-start justify-between gap-3">

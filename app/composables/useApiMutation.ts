@@ -28,7 +28,7 @@ export function useApiMutation() {
   async function mutate<T = unknown>(url: string, opts: MutateOptions = {}): Promise<T> {
     pending.value = true
     try {
-      const res = await $fetch<T>(url, { method: opts.method ?? 'POST', body: opts.body as Record<string, unknown> })
+      const res = await $fetch<T>(url, { method: opts.method ?? 'POST', body: opts.body as Record<string, unknown> }) as T
       await invalidate(...(opts.invalidates ?? []))
       if (opts.success) toast.success(opts.success)
       return res

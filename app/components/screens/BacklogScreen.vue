@@ -5,6 +5,7 @@ import { ExternalLink } from 'lucide-vue-next'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { formatDate } from '~/utils/time'
+import type { FeatureDetailData } from '~/types/feature'
 
 interface Feature {
   id: string; title: string; problem: string; appetite: string | null
@@ -90,21 +91,11 @@ const { table, vis, hideableCols } = useDataTable({
   statusFilter,
 })
 
-// ── Detail Sheet ──────────────────────────────────────────────────────────
-interface FeatureFull extends Feature { solution: string | null; rabbit_holes: string | null; out_of_bounds: string | null }
-interface FeatureEvent { seq: number; actor: string; summary: string; created_at: string }
-interface Detail {
-  feature: FeatureFull
-  feedback: { id: string; content: string; source: string; classification: string }[]
-  decisions: { id: string; verdict: string; rationale: string; decided_by: string | null; decided_at: string }[]
-  pr_links: { id: string; repo: string; pr_number: number; pr_url: string; status: string }[]
-  events: FeatureEvent[]
-  attachments: { id: string; filename: string; kind: string }[]
-}
-const detail = ref<Detail | null>(null)
+// ── Detail Sheet — the /api/features/:id payload (shared shape with the feature page) ─────────
+const detail = ref<FeatureDetailData | null>(null)
 watch(selectedFeatureId, async (id) => {
   detail.value = null
-  if (id) detail.value = await $fetch<Detail>(`/api/features/${id}`)
+  if (id) detail.value = await $fetch<FeatureDetailData>(`/api/features/${id}`)
 })
 const open = computed({
   get: () => selectedFeatureId.value !== null,
@@ -125,7 +116,7 @@ const open = computed({
       <Table class="table-fixed">
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
-            <TableHead class="w-10"><SelectAllCheckbox :table="table" :aria-label="t('backlog.selectAll')" /></TableHead>
+            <TableHead class="w-10"><SelectAllCheckbox :table="table" :label="t('backlog.selectAll')" /></TableHead>
             <TableHead><SortHeaderButton :table="table" column="title" :label="t('backlog.col.title')" /></TableHead>
             <TableHead v-if="vis('status')" class="w-28"><SortHeaderButton :table="table" column="status" :label="t('backlog.col.status')" /></TableHead>
             <TableHead v-if="vis('signal_count')" class="w-24 text-right"><SortHeaderButton :table="table" column="signal_count" :label="t('backlog.col.signals')" /></TableHead>
@@ -143,7 +134,7 @@ const open = computed({
             class="cursor-pointer"
             @click="bike.selectFeature(row.original.id)"
           >
-            <TableCell @click.stop><SelectRowCheckbox :row="row" :aria-label="t('backlog.selectRow')" /></TableCell>
+            <TableCell @click.stop><SelectRowCheckbox :row="row" :label="t('backlog.selectRow')" /></TableCell>
             <TableCell>
               <div class="flex items-center gap-2 font-medium">
                 <span class="truncate">{{ row.original.title }}</span>
@@ -206,7 +197,7 @@ const open = computed({
     <ConfirmDeleteDialog
       v-model:open="confirmOpen" :deleting="deleting"
       :title="t('backlog.deleteTitle')"
-      :description="t('backlog.deleteDesc', { title: toDelete?.title })"
+      :description="t('backlog.deleteDesc', { title: toDelete?.title ?? '' })"
       :cancel-label="t('backlog.cancel')" :confirm-label="deleting ? t('backlog.deleting') : t('backlog.delete')"
       @confirm="confirmDelete"
     />

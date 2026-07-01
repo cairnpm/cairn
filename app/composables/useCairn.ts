@@ -44,11 +44,11 @@ export function useCairn() {
   })
   const selectedHill = computed<string | null>(() => {
     const m = route.path.match(/^\/hills\/(.+)$/)
-    return m ? decodeURIComponent(m[1]) : null
+    return m?.[1] ? decodeURIComponent(m[1]) : null
   })
   const selectedBettingTable = computed<string | null>(() => {
     const m = route.path.match(/^\/betting\/(.+)$/)
-    return m ? decodeURIComponent(m[1]) : null
+    return m?.[1] ? decodeURIComponent(m[1]) : null
   })
 
   // Backlog view state

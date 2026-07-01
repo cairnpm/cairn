@@ -11,6 +11,7 @@ export default defineNuxtConfig({
   // (Chrome tolerates it), so dev logins on Safari would silently fail without this.
   runtimeConfig: {
     session: {
+      password: '', // overridden at runtime by NUXT_SESSION_PASSWORD; placeholder satisfies the type
       cookie: {
         secure: process.env.NODE_ENV === 'production',
       },

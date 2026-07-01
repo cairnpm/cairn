@@ -81,9 +81,12 @@ const inviteErr = ref('')
 const copied = ref(false)
 const inviteOpen = ref(false)
 function openInvite() { invite.email = ''; invite.role = 'member'; inviteUrl.value = ''; inviteErr.value = ''; inviteOpen.value = true }
-const invites = ref<Array<{ id: string; email: string; role: string; expires_at: string }>>([])
+type Invite = { id: string; email: string; role: string; expires_at: string }
+const invites = ref<Invite[]>([])
 async function loadInvites() {
-  try { invites.value = await $fetch('/api/members/invites') } catch { invites.value = [] }
+  // `'/api/...' as string` forces $fetch's generic overload instead of the route-aware one, whose
+  // all-routes union otherwise blows TS's recursion limit ("excessive stack depth").
+  try { invites.value = await $fetch<Invite[]>('/api/members/invites' as string) } catch { invites.value = [] }
 }
 watchEffect(() => { if (isOwner.value) loadInvites() })
 async function sendInvite() {

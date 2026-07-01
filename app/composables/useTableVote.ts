@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue'
+import type { QueryKey } from '~/utils/queryKeys'
 
 // Toggle a vote on a betting-table candidate. Shared by the list Sheet and the dedicated page —
 // they differ only in the id/data source and whether they reload vs invalidate afterwards.
@@ -7,7 +8,7 @@ export function useTableVote(opts: {
   candidates: Ref<{ id: string; voters: string[] }[] | undefined>
   status: Ref<string | null | undefined>
   author: Ref<string>
-  invalidates: string[]
+  invalidates: QueryKey[]
   onVoted?: () => Promise<void> | void
 }) {
   const { t } = useUiLang()

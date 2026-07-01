@@ -37,17 +37,17 @@ const MERGE_RE = /\b(fusionne|fusionner|fusion|merge|doublon de)\b/i
 /** Extract a feature-name search string from a refine/query message. */
 function extractTarget(message: string): string {
   const m = message.match(/(?:ticket|feature|pitch)\s+«?\s*([^,.?»\n]+)/i)
-  return (m ? m[1] : message).trim()
+  return (m?.[1] ?? message).trim()
 }
 
 /** Extract (absorbed, surviving) feature names from a merge instruction. */
 function extractMergePair(message: string): { target: string | null, target2: string | null } {
   // "X est un doublon de Y" → absorb X into Y
   const dup = message.match(/(.+?)\s+est un doublon de\s+(.+)/i)
-  if (dup) return { target: dup[1].replace(MERGE_RE, '').trim(), target2: dup[2].trim() }
+  if (dup) return { target: (dup[1] ?? '').replace(MERGE_RE, '').trim(), target2: (dup[2] ?? '').trim() }
   // "fusionne X et Y" / "fusionne X dans Y"
   const pair = message.replace(MERGE_RE, '').match(/(.+?)\s+(?:et|dans|avec)\s+(.+)/i)
-  if (pair) return { target: pair[1].trim(), target2: pair[2].trim() }
+  if (pair) return { target: (pair[1] ?? '').trim(), target2: (pair[2] ?? '').trim() }
   return { target: extractTarget(message), target2: null }
 }
 

@@ -1,4 +1,5 @@
 import { computed, onUnmounted, ref, watchEffect, type Ref } from 'vue'
+import type { QueryKey } from '~/utils/queryKeys'
 
 // Delete / restore lifecycle for a soft-deletable detail resource, plus the breadcrumb wiring.
 // Toast labels are passed as getters so they stay correct across a live locale switch.
@@ -8,7 +9,7 @@ export function useDetailCrud(opts: {
   title: Ref<string | null | undefined>
   status?: Ref<string | null | undefined>
   listRoute: string
-  invalidates: { delete: string[]; restore: string[] }
+  invalidates: { delete: QueryKey[]; restore: QueryKey[] }
   toasts: { deleted: () => string; restored: () => string }
   onDelete?: () => void
   crumb?: boolean

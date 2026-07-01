@@ -147,7 +147,7 @@ const { table, vis, hideableCols } = useDataTable({
       <Table>
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
-            <TableHead class="w-10"><SelectAllCheckbox :table="table" :aria-label="t('betting.selectAll')" /></TableHead>
+            <TableHead class="w-10"><SelectAllCheckbox :table="table" :label="t('betting.selectAll')" /></TableHead>
             <TableHead><SortHeaderButton :table="table" column="title" :label="t('betting.col.title')" /></TableHead>
             <TableHead v-if="vis('status')" class="w-32"><SortHeaderButton :table="table" column="status" :label="t('betting.col.status')" /></TableHead>
             <TableHead v-if="vis('candidate_count')" class="w-28 text-right"><SortHeaderButton :table="table" column="candidate_count" :label="t('betting.col.candidates')" /></TableHead>
@@ -159,7 +159,7 @@ const { table, vis, hideableCols } = useDataTable({
         </TableHeader>
         <TableBody>
           <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
-            <TableCell @click.stop><SelectRowCheckbox :row="row" :aria-label="t('betting.selectRow')" /></TableCell>
+            <TableCell @click.stop><SelectRowCheckbox :row="row" :label="t('betting.selectRow')" /></TableCell>
             <TableCell>
               <div class="flex items-center gap-2 font-medium">
                 {{ row.original.title }}
@@ -250,7 +250,7 @@ const { table, vis, hideableCols } = useDataTable({
     <ConfirmDeleteDialog
       v-model:open="confirmOpen" :deleting="deleting"
       :title="t('betting.deleteDialog.title')"
-      :description="t('betting.deleteDialog.description', { title: toDelete?.title })"
+      :description="t('betting.deleteDialog.description', { title: toDelete?.title ?? '' })"
       :cancel-label="t('betting.cancel')" :confirm-label="deleting ? t('betting.deleting') : t('betting.delete')"
       @confirm="confirmDelete"
     />

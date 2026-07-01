@@ -59,7 +59,7 @@ const isOpen = computed(() => data.value?.table.status === 'open')
     <FeatureDetailOverlay v-model:feature-id="featPeek" mode="sheet" />
 
     <!-- Validate dialog -->
-    <ValidateTableDialog v-model:open="showValidate" :table-id="id" :candidates="data.candidates" @validated="onValidated" />
+    <ValidateTableDialog v-model:open="showValidate" :table-id="id ?? ''" :candidates="data.candidates" @validated="onValidated" />
 
     <!-- Delete confirmation -->
     <ConfirmDeleteDialog

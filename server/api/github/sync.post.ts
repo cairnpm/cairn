@@ -12,12 +12,12 @@ export default defineOwnerHandler(async () => {
   for (const inst of installs) {
     const token = await installationTokenFor(inst.id)
     if (!token) continue
-    const repos = await listInstallationRepos(token)
-    if (!repos.length) continue
+    const repo = (await listInstallationRepos(token))[0]
+    if (!repo) continue
     setSetting('github_installation_id', String(inst.id), 'github-app')
-    setSetting('code_repo', repos[0], 'github-app')
-    const status = await syncRepo(repos[0], token)
-    return { ...status, account: inst.account, repo: repos[0], installations: installs.map(i => i.account) }
+    setSetting('code_repo', repo, 'github-app')
+    const status = await syncRepo(repo, token)
+    return { ...status, account: inst.account, repo, installations: installs.map(i => i.account) }
   }
   return { ok: false as const, error: 'no-repos' as const, installations: installs.map(i => i.account) }
 })

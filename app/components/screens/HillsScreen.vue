@@ -70,7 +70,7 @@ const { table, vis, hideableCols } = useDataTable({
       <Table>
         <TableHeader class="bg-muted/50 sticky top-0">
           <TableRow>
-            <TableHead class="w-10"><SelectAllCheckbox :table="table" :aria-label="t('hill.selectAll')" /></TableHead>
+            <TableHead class="w-10"><SelectAllCheckbox :table="table" :label="t('hill.selectAll')" /></TableHead>
             <TableHead><SortHeaderButton :table="table" column="name" label="Hill" /></TableHead>
             <TableHead v-if="vis('status')" class="w-28"><SortHeaderButton :table="table" column="status" :label="t('hill.col.status')" /></TableHead>
             <TableHead v-if="vis('progress')" class="w-48"><SortHeaderButton :table="table" column="progress" :label="t('hill.col.progress')" /></TableHead>
@@ -79,7 +79,7 @@ const { table, vis, hideableCols } = useDataTable({
         </TableHeader>
         <TableBody>
           <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
-            <TableCell @click.stop><SelectRowCheckbox :row="row" :aria-label="t('hill.selectRow')" /></TableCell>
+            <TableCell @click.stop><SelectRowCheckbox :row="row" :label="t('hill.selectRow')" /></TableCell>
             <TableCell>
               <span class="mr-2 font-mono text-xs text-muted-foreground">{{ shortId(row.original.id) }}</span>
               <span class="font-medium">{{ row.original.name }}</span>

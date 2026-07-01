@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^22.20.0",
     "shadcn-nuxt": "^2.0.0",
     "tailwindcss": "^4.0.0",
     "tw-animate-css": "^1.0.0",

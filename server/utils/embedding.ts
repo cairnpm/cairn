@@ -32,7 +32,7 @@ function hash(token: string): number {
 /** Local embedding: tf-weighted, L2-normalized hashed vector. */
 export function localEmbed(text: string): number[] {
   const v = new Array<number>(DIM).fill(0)
-  for (const tok of tokenize(text)) v[hash(tok)] += 1
+  for (const tok of tokenize(text)) { const i = hash(tok); v[i] = (v[i] ?? 0) + 1 }
   let norm = 0
   for (const x of v) norm += x * x
   norm = Math.sqrt(norm) || 1
@@ -42,7 +42,7 @@ export function localEmbed(text: string): number[] {
 export function cosine(a: number[], b: number[]): number {
   if (!a?.length || !b?.length || a.length !== b.length) return 0
   let dot = 0
-  for (let i = 0; i < a.length; i++) dot += a[i] * b[i]
+  for (let i = 0; i < a.length; i++) dot += (a[i] ?? 0) * (b[i] ?? 0)
   return dot // both vectors are L2-normalized
 }
 
