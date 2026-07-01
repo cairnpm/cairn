@@ -139,7 +139,7 @@ const open = computed({
             <TableHead v-if="vis('hill')" class="w-44"><SortHeaderButton :table="table" column="hill" label="Hill" /></TableHead>
             <TableHead v-if="vis('updated_at')" class="w-28 text-right"><SortHeaderButton :table="table" column="updated_at" :label="t('backlog.col.updated')" /></TableHead>
             <TableHead v-if="vis('actor')" class="w-32">{{ t('backlog.col.actor') }}</TableHead>
-            <TableHead class="w-10" />
+            <TableHead class="w-14" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -176,7 +176,7 @@ const open = computed({
             <TableCell v-if="vis('actor')">
               <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.last_actor" /><span class="truncate text-muted-foreground">{{ row.original.last_actor || '—' }}</span></div>
             </TableCell>
-            <TableCell @click.stop>
+            <TableCell class="pr-4" @click.stop>
               <ResourceActionsMenu
                 :is-deleted="row.original.status === 'deleted'" :restoring="restoring"
                 :actions-label="t('backlog.actions')" :restore-label="t('backlog.restore')" :delete-label="t('backlog.delete')" :purge-label="t('backlog.purge')"

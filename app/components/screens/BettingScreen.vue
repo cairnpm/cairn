@@ -88,6 +88,21 @@ async function restore(id: string) {
   try { await mutate(`/api/betting-tables/${id}/restore`, { invalidates: [qk.bettingTables, qk.overview], success: t('betting.toast.restored') }) } finally { restoring.value = false }
 }
 
+// Permanent delete (irreversible) — only offered on already-deleted tables, confirmed via a dialog.
+const toPurge = ref<{ id: string; title: string } | null>(null)
+const purgeOpen = ref(false)
+const purging = ref(false)
+function askPurge(t: { id: string; title: string }) { toPurge.value = t; purgeOpen.value = true }
+async function confirmPurge() {
+  if (!toPurge.value || purging.value) return
+  purging.value = true
+  const id = toPurge.value.id
+  try {
+    await mutate(`/api/betting-tables/${id}/purge`, { method: 'DELETE', invalidates: [qk.bettingTables, qk.overview], success: t('betting.toast.purged') })
+    if (selectedId.value === id) selectedId.value = null
+  } finally { purging.value = false; purgeOpen.value = false; toPurge.value = null }
+}
+
 
 const statusFilter = useState<string>('bike-betting-filter', () => 'all')
 const counts = computed(() => {
@@ -181,11 +196,11 @@ const { table, vis, hideableCols } = useDataTable({
               <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.owner_name" :src="row.original.owner_avatar" /><span class="truncate text-muted-foreground">{{ row.original.owner_name || '—' }}</span></div>
             </TableCell>
             <TableCell v-if="vis('generated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.generated_at, locale) }}</TableCell>
-            <TableCell @click.stop>
+            <TableCell class="pr-4" @click.stop>
               <ResourceActionsMenu
                 :is-deleted="row.original.status === 'deleted'" :restoring="restoring"
-                :actions-label="t('betting.actions')" :restore-label="t('betting.restore')" :delete-label="t('betting.delete')"
-                @restore="restore(row.original.id)" @delete="askDelete({ id: row.original.id, title: row.original.title })"
+                :actions-label="t('betting.actions')" :restore-label="t('betting.restore')" :delete-label="t('betting.delete')" :purge-label="t('betting.purge')"
+                @restore="restore(row.original.id)" @delete="askDelete({ id: row.original.id, title: row.original.title })" @purge="askPurge({ id: row.original.id, title: row.original.title })"
               />
             </TableCell>
           </TableRow>
@@ -253,6 +268,15 @@ const { table, vis, hideableCols } = useDataTable({
       :description="t('betting.deleteDialog.description', { title: toDelete?.title ?? '' })"
       :cancel-label="t('betting.cancel')" :confirm-label="deleting ? t('betting.deleting') : t('betting.delete')"
       @confirm="confirmDelete"
+    />
+
+    <!-- Permanent delete confirmation (irreversible) -->
+    <ConfirmDeleteDialog
+      v-model:open="purgeOpen" :deleting="purging"
+      :title="t('betting.purgeDialog.title')"
+      :description="t('betting.purgeDialog.description', { title: toPurge?.title ?? '' })"
+      :cancel-label="t('betting.cancel')" :confirm-label="purging ? t('betting.deleting') : t('betting.purge')"
+      @confirm="confirmPurge"
     />
   </div>
 </template>

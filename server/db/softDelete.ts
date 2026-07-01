@@ -92,3 +92,19 @@ export function hardDeleteFeature(id: string): boolean {
   finally { d.exec('PRAGMA foreign_keys = ON') }
   return true
 }
+
+/** Permanent, irreversible delete of a betting table and its candidates, votes and events. Used only
+ *  from the betting-table trash. Returns false if unknown. */
+export function hardDeleteBettingTable(id: string): boolean {
+  if (!get(`SELECT id FROM betting_tables WHERE id = ?`, id)) return false
+  const d = db()
+  d.exec('PRAGMA foreign_keys = OFF')
+  try {
+    for (const t of ['betting_votes', 'betting_candidates', 'betting_events']) {
+      run(`DELETE FROM ${t} WHERE table_id = ?`, id)
+    }
+    run('DELETE FROM betting_tables WHERE id = ?', id)
+  }
+  finally { d.exec('PRAGMA foreign_keys = ON') }
+  return true
+}
