@@ -42,6 +42,11 @@ goes to the decision, not the pile.
   meeting transcript. The intake agent extracts the distinct signals, recontextualizes
   each one, deduplicates against the backlog, and proposes where it belongs — you
   confirm. Writing only ever happens on confirmation.
+- **🔍 Grounded in your real code.** Link your product repo (read-only GitHub App or a
+  local path) and the agent checks what's *actually shipped* before it shapes: it dedupes
+  against reality — citing `file:line`, not a stale ticket — grounds each pitch in the real
+  architecture, and answers "is X built yet?" by reconciling the roadmap with the code.
+  Zero-egress: the repo is grepped locally, never sent anywhere.
 - **🧗 Shape Up, natively.** Pitches with a real problem and an appetite, a betting
   table to choose what's worth doing, hills to track in-flight work, frozen scope
   once a bet is placed. The method is the product, not a template.
@@ -60,6 +65,7 @@ goes to the decision, not the pile.
 | | |
 |---|---|
 | **Intake** | Conversational agent: triage → clarify → propose → commit. Reads `.docx`/images, splits transcripts into N features, dedupes, attributes every change. |
+| **Code-aware** | Link the product repo; the intake greps it to dedupe against what's *shipped* and ground specs. Read-only, zero-egress — GitHub App (short-lived tokens, self-host manifest flow) or a local clone. |
 | **Backlog** | Shaped features with problem · appetite · solution · rabbit holes · no-gos. Manually-assigned shapers. |
 | **Betting table** | Collaborative deliberation: members vote, the owner validates → it bets features and opens a hill. |
 | **Hills** | In-flight cycles with builders, periods and frozen scope. |
