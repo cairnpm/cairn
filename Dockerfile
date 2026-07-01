@@ -14,6 +14,12 @@ RUN pnpm build
 # ── Runtime ──────────────────────────────────────────────────────────────────
 FROM node:24-slim AS runtime
 WORKDIR /app
+# git (+ CA certs) required at runtime: the code-aware intake clones + `git grep`s the linked product
+# repo over HTTPS. node:*-slim ships neither — without git the clone can't run, and without
+# ca-certificates git's TLS verification of github.com fails ("server certificate verification failed").
+# Missing either → clone fails silently and shaping loses its code grounding (code_repo_linked = false).
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 ENV PORT=3000
 # SQLite file + uploads on a persistent volume mounted at /data.
