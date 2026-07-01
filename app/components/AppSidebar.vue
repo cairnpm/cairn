@@ -33,7 +33,7 @@ const items = computed(() => [
         <SidebarMenuItem>
           <SidebarMenuButton size="lg" as-child>
             <NuxtLink to="/">
-              <div class="bg-primary text-primary-foreground flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg">
+              <div class="bg-primary text-primary-foreground flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg">
                 <img v-if="ov?.workspace_logo" :src="`/api/attachments/${ov.workspace_logo}`" class="size-full object-cover" alt="">
                 <CairnMark v-else class="h-5 w-auto" />
               </div>
