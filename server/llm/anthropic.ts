@@ -307,7 +307,11 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       const candList = candidates.map(c => `- ${c.feature_id} | ${c.title} | sim=${c.similarity.toFixed(2)}`).join('\n') || '(none)'
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
       const existingBlock = existing
-        ? `\n\nYou are REFINING this existing feature — preserve what still applies and INTEGRATE the new precision (do not drop context):\n`
+        ? `\n\nYou are REFINING this existing feature by MERGING the new signal into it. This is EDITORIAL, not append-only: `
+          + `keep what still holds, and you MAY rewrite or CUT parts the new signal supersedes, contradicts or makes obsolete. `
+          + `What is forbidden is WHOLESALE replacement — do NOT discard the existing pitch to keep only the new signal; every `
+          + `cut must be justified by the new signal, not by inattention. The result must still cover the original feature's `
+          + `still-valid substance PLUS the addition:\n`
           + `title: ${existing.title}\nproblem: ${existing.problem}\nsolution: ${existing.solution}\nrabbit_holes: ${existing.rabbit_holes}\nout_of_bounds: ${existing.out_of_bounds}\nappetite: ${existing.appetite}`
         : ''
       const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
@@ -318,9 +322,12 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'NOT a yes-man. Prioritise the CORRECT routing decision over agreeing with the user. '
         + 'The candidate features below were surfaced by a similarity search — the score is a HINT, not a hard rule '
         + `(ignore the ${DEDUP_STRONG} cosine threshold; judge meaning, not numbers). `
-        + 'If ANY candidate addresses the SAME underlying problem/feature as this signal — even worded very '
-        + 'differently — choose action "append" and set target_feature_id to that candidate. Choose "create_feature" '
-        + 'ONLY when no candidate is genuinely the same feature (creating is a deliberate act — duplicates pollute the backlog). '
+        + 'APPEND ONLY when a candidate solves the SAME PROBLEM as this signal. Touching the same module, file, table, '
+        + 'subsystem or resource is NOT enough — two different improvements to the same area are SEPARATE features (e.g. '
+        + 'RENAMING a thing vs OPTIMISING its performance, or fixing a bug in X vs adding a capability to X). Always ask: '
+        + 'is this the same PROBLEM, or merely the same SUBJECT? Same subject + different problem → "create_feature". Only '
+        + 'when it is genuinely the same problem, choose "append" and set target_feature_id. Creating is deliberate, but a '
+        + 'WRONG merge is worse: it buries a distinct feature and overwrites its pitch — when unsure between append and create, CREATE. '
         + 'Choose "discard" ONLY for genuine noise — spam, empty/test input, or chatter that is not about this '
         + 'product — or an exact duplicate that adds NOTHING new to an existing feature. '
         + 'A BUG report is IN SCOPE: shape it into a feature/pitch (the problem IS the bug); NEVER discard a bug or '
