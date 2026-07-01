@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { ExternalLink } from 'lucide-vue-next'
 
 // Quick-view Sheet shell shared by the list screens: the sized SheetContent, the keep-open guards,
@@ -17,9 +17,10 @@ defineProps<{
 
 <template>
   <Sheet v-model:open="open">
-    <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" aria-describedby="undefined" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
-      <!-- Always render the title (a11y) even before the content loads. -->
+    <SheetContent class="flex w-full flex-col gap-0 p-0 sm:max-w-[min(92vw,1100px)]" @interact-outside="keepOverlayOpen" @focus-outside="keepOverlayOpen">
+      <!-- Always render the title + description (a11y) even before the content loads. -->
       <SheetTitle class="sr-only">{{ title }}</SheetTitle>
+      <SheetDescription class="sr-only">{{ title }}</SheetDescription>
       <template v-if="ready">
         <slot name="actions" />
         <NuxtLink
