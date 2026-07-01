@@ -12,7 +12,7 @@ import { toast } from 'vue-sonner'
 
 const { t } = useUiLang()
 
-interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean; github_app_ready: boolean; github_app_slug: string; github_connected: boolean; product_context: string }
+interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; key_hint: string | null; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean; github_app_ready: boolean; github_app_slug: string; github_connected: boolean; product_context: string }
 interface Profile { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 interface Member { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 
@@ -119,6 +119,9 @@ const workspaceName = ref('')
 const workspaceLogo = ref<string | null>(null)
 const uploadingLogo = ref(false)
 const keyInput = ref('')
+// When a key is already set we show a "configured" card; this flips to the input to replace it.
+const editingKey = ref(false)
+function cancelKeyEdit() { editingKey.value = false; keyInput.value = '' }
 const modelInput = ref('claude-sonnet-4-6')
 watchEffect(() => { if (cfg.value) { workspaceName.value = cfg.value.workspace_name; workspaceLogo.value = cfg.value.workspace_logo; modelInput.value = cfg.value.model } })
 // Product repo — the intake greps it (ground truth of what's built) to dedupe + ground specs. One
@@ -192,6 +195,7 @@ async function save() {
       product_context: productCtx.value,
     }, invalidates: [qk.settings, qk.overview], success: t('settings.toast.settingsSaved') })
     keyInput.value = ''
+    editingKey.value = false
     saved.value = true
   } finally { saving.value = false }
 }
@@ -307,10 +311,24 @@ async function save() {
             <Badge :variant="cfg?.has_key ? 'default' : 'destructive'">{{ cfg?.has_key ? t('settings.ia.keyOk') : t('settings.ia.keyMissing') }}</Badge>
           </div>
           <Separator />
-          <div class="grid gap-2 sm:max-w-sm">
+          <div class="grid gap-2">
             <Label for="key">{{ t('settings.ia.keyLabel') }}</Label>
-            <Input id="key" v-model="keyInput" type="password" placeholder="sk-ant-…" autocomplete="off" class="font-mono" />
-            <p class="text-xs text-muted-foreground">{{ cfg?.key_source === 'env' ? t('settings.ia.keyFromEnv') : cfg?.key_source === 'settings' ? t('settings.ia.keyFromSettings') : t('settings.ia.keyNone') }} {{ t('settings.ia.keyNeverShown') }}</p>
+            <div class="rounded-lg border p-4">
+              <template v-if="cfg?.has_key && !editingKey">
+                <div class="flex items-center justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5 text-sm font-medium"><Check class="size-4 text-emerald-500" /> Clé Anthropic configurée</div>
+                    <div class="truncate text-xs text-muted-foreground"><span class="font-mono">{{ cfg?.key_hint }}</span> · {{ cfg?.key_source === 'env' ? 'environnement' : 'saisie ici' }}</div>
+                  </div>
+                  <Button variant="outline" size="sm" @click="editingKey = true">Remplacer</Button>
+                </div>
+              </template>
+              <template v-else>
+                <Input id="key" v-model="keyInput" type="password" placeholder="sk-ant-…" autocomplete="off" class="font-mono" />
+                <p class="mt-2 text-xs text-muted-foreground">{{ cfg?.has_key ? 'Laisse vide pour garder la clé actuelle.' : t('settings.ia.keyNone') }} {{ t('settings.ia.keyNeverShown') }}</p>
+                <Button v-if="cfg?.has_key" variant="ghost" size="sm" class="mt-2 text-muted-foreground" @click="cancelKeyEdit">Annuler</Button>
+              </template>
+            </div>
           </div>
           <div class="grid gap-2">
             <Label>{{ t('settings.ia.modelLabel') }}</Label>

@@ -1,17 +1,20 @@
-import { getSetting } from '~~/server/db/settings'
+import { getSecret, getSetting } from '~~/server/db/settings'
 import { grepPath } from '~~/server/utils/codeRepo'
 import { githubAppReady } from '~~/server/utils/githubApp'
 
-// Read-only settings view. NEVER returns the API key in clear — only whether one is set, and
-// where it comes from (DB setting vs env fallback).
+// Read-only settings view. NEVER returns the API key in clear — only whether one is set, where it
+// comes from, and a MASKED hint (prefix + last 4, e.g. "sk-ant-…a1b2") so the UI can prove a real key
+// is stored without exposing it.
 export default defineEventHandler(() => {
   const dbKey = getSetting('anthropic_api_key')
+  const realKey = getSecret('anthropic_api_key') || process.env.ANTHROPIC_API_KEY || ''
   const model = getSetting('anthropic_model') ?? process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6'
   return {
     workspace_name: getSetting('workspace_name') ?? 'Cairn',
     workspace_logo: getSetting('workspace_logo') ?? null,
     has_key: !!(dbKey || process.env.ANTHROPIC_API_KEY),
     key_source: dbKey ? 'settings' : process.env.ANTHROPIC_API_KEY ? 'env' : 'none',
+    key_hint: realKey.length >= 11 ? `${realKey.slice(0, 7)}…${realKey.slice(-4)}` : null,
     model,
     models: ['claude-sonnet-4-6', 'claude-opus-4-8'],
     // Linked product repo (ground truth the intake searches when shaping). Env-set is read-only here.
