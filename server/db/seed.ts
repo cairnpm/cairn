@@ -85,8 +85,11 @@ const FEATURES: SeedFeature[] = [
   },
 ]
 
-/** Seed demo data once, only when the DB is empty. Never mutates an existing DB. */
+/** Seed the showcase backlog/hills once, only when the DB is empty. Never mutates an existing DB.
+ *  Opt-in via CAIRN_SEED_DEMO — a fresh install starts empty (real teams don't want to delete fake
+ *  data); set the flag for demos, screenshots, or local dev. */
 export function seedIfEmpty(): void {
+  if (!process.env.CAIRN_SEED_DEMO) return
   const count = get<{ n: number }>('SELECT COUNT(*) AS n FROM features')
   if (count && count.n > 0) return
 

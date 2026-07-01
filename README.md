@@ -93,8 +93,9 @@ Also supported — **Fly.io**, plain **Docker**, backups and env vars: see
 **[DEPLOY.md](./DEPLOY.md)**. Prebuilt images are published to
 `ghcr.io/cairnpm/cairn`.
 
-First boot seeds a demo team — `ceo@cairn.local` / `cairn` — change the password
-right away.
+First boot creates a single owner account — `ceo@cairn.local` / `cairn` — change the
+password right away. The workspace starts **empty**; set `CAIRN_SEED_DEMO=1` to load a
+demo backlog/hills/team for a tour.
 
 ### Develop locally
 

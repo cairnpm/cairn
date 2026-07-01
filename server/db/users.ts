@@ -70,11 +70,14 @@ export function reconcileAttribution(): void {
 export function seedUsersIfEmpty(): void {
   const count = get<{ n: number }>('SELECT COUNT(*) AS n FROM users')?.n ?? 0
   if (count > 0) return
-  const team = [
-    { name: 'CEO', email: 'ceo@cairn.local', role: 'owner', bg: '#18181b', init: 'C' },
+  // Always bootstrap ONE owner so the admin can sign in (change the password immediately). Alex & Sam
+  // exist only to attribute the CAIRN_SEED_DEMO showcase data — a real install just needs the owner.
+  const owner = { name: 'CEO', email: 'ceo@cairn.local', role: 'owner', bg: '#18181b', init: 'C' }
+  const demoMates = [
     { name: 'Alex', email: 'alex@cairn.local', role: 'member', bg: '#2563eb', init: 'A' },
     { name: 'Sam', email: 'sam@cairn.local', role: 'member', bg: '#16a34a', init: 'S' },
   ]
+  const team = process.env.CAIRN_SEED_DEMO ? [owner, ...demoMates] : [owner]
   for (const m of team) {
     run(
       `INSERT INTO users (id, name, email, password_hash, role, avatar_bg, avatar_init, created_at)
