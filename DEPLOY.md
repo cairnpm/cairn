@@ -89,6 +89,11 @@ fly deploy
 Pull the latest code and redeploy (`docker build` again, or `fly deploy`). The
 SQLite schema migrates itself on boot — your data on `/data` is preserved.
 
+On Fly, `fly deploy` updates the **same machine in place** and re-attaches the **same volume**, so a
+redeploy never wipes `/data`. Keep it that way: run exactly **one machine** (single-writer SQLite),
+never `fly scale count >1`, and never a `bluegreen`/`canary` deploy strategy — those spin up a second
+machine on a fresh, empty volume. The included `fly.toml` pins `strategy = "rolling"` for this reason.
+
 ## Backups
 
 Everything lives in `/data`. Back it up by copying the volume, or snapshot it on

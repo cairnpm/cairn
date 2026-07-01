@@ -5,6 +5,12 @@ primary_region = "cdg"
 
 [build]
 
+# Single-writer SQLite lives on ONE volume → update the machine IN PLACE. Never bluegreen/canary
+# (they boot a second machine that would grab a fresh, EMPTY volume — apparent data loss), and never
+# `fly scale count >1`. Brief downtime on redeploy is expected and correct here.
+[deploy]
+  strategy = "rolling"
+
 [env]
   PORT = "3000"
   NUXT_DB_URL = "file:/data/app.db"
