@@ -10,4 +10,5 @@ node_modules
 .env.*
 .DS_Store
 docs/monetisation-distribution.md
+roadmap.json
 README.md
