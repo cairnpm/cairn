@@ -143,13 +143,15 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       try {
         let r = await attempt(true)
-        if (!r.ok && r.status === 400 && opts.schema) r = await attempt(false)
+        if (!r.ok && r.status === 400 && opts.schema) { console.warn(`[llm] schema request 400 → retry without schema (attempt ${i})`); r = await attempt(false) }
         if (r.ok) return r.text
+        console.warn(`[llm] callClaude non-ok status=${r.status} schema=${!!opts.schema} attempt=${i}`)
         const retryable = r.status === 429 || r.status === 529 || r.status >= 500
         if (!retryable) return null
-      } catch { /* network error — treat as transient, retry */ }
+      } catch (e) { console.warn(`[llm] callClaude threw (attempt ${i}, schema=${!!opts.schema}): ${String(e)}`) }
       if (i < MAX_ATTEMPTS - 1) await new Promise(res => setTimeout(res, 400 * 2 ** i + Math.floor(Math.random() * 250)))
     }
+    console.warn(`[llm] callClaude exhausted → null (caller will stub) schema=${!!opts.schema}`)
     return null
   }
 
@@ -339,6 +341,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       )
       const parsed = parseJson<Partial<Proposal>>(text)
       if (!parsed || (parsed.action !== 'create_feature' && parsed.action !== 'append' && parsed.action !== 'discard')) {
+        console.warn(`[llm] propose → stub fallback. text=${text === null ? 'NULL(call failed)' : 'len ' + text.length + ' unparseable: ' + text.slice(0, 160)}`)
         return stub.propose(input)
       }
       return {
