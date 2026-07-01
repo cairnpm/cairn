@@ -3,15 +3,15 @@
  * rabbit holes are grounded in this product's reality (brief: agent §3.4). Keep it terse —
  * NOT the whole repo. Fine code exploration happens in Claude Code at build time, not here.
  */
-export const ARCHITECTURE_CONTEXT = `Produit : « Cairn », un pipeline produit Shape Up contraint.
-Stack : Nuxt 4 + Nitro (server routes = la write gateway, seul chemin d'écriture), node:sqlite
-(SQLite fichier, 1 machine), shadcn-vue (UI lecture seule + actions). Embeddings stockés en JSON,
-dédup par cosine brute-force JS.
-Domaine : feedback (signal brut) → feature/pitch (problème, appétit, solution, rabbit holes,
-no-gos ; agrège plusieurs feedback) → hill (cycle) → decision (bet/pass/defer). Journal
-d'activité append-only par feature.
-Signaux : un signal peut être un bug, une demande, une idée — TOUS sont des signaux produit à
-capturer ici (l'intake EST la porte d'entrée de l'équipe, y compris pour les bugs). Un bug devient
-un pitch de correction (problème = le bug). On ne renvoie JAMAIS un signal vers un autre outil.
-Conventions : tout passe par la gateway ; l'écriture n'a lieu qu'à la confirmation humaine ;
-pas de Notion-bis, pas de backlog qui pourrit.`
+export const ARCHITECTURE_CONTEXT = `Product: "Cairn", a constrained Shape Up product pipeline.
+Stack: Nuxt 4 + Nitro (server routes = the write gateway, the only write path), node:sqlite (file
+SQLite, one machine), shadcn-vue (read-only UI + actions). Embeddings stored as JSON, dedup via
+brute-force cosine in JS.
+Domain: feedback (raw signal) → feature/pitch (problem, appetite, solution, rabbit holes, no-gos;
+aggregates several feedback) → hill (cycle) → decision (bet/pass/defer). Append-only activity log
+per feature.
+Signals: a signal can be a bug, a request, an idea — ALL are product signals to capture here (the
+intake IS the team's entry point, bugs included). A bug becomes a fix pitch (the problem = the bug).
+NEVER redirect a signal to another tool.
+Conventions: everything goes through the gateway; writing happens only on human confirmation; no
+second Notion, no rotting backlog.`

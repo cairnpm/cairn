@@ -164,7 +164,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
             role: 'user',
             content: [
               { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
-              { type: 'text', text: 'Décris en 2-3 phrases ce que montre cette image, dans un contexte produit/logiciel (FR). Sois factuel.' },
+              { type: 'text', text: 'Describe in 2-3 sentences what this image shows, in a product/software context (a screenshot, diagram, bug, etc.). Be factual.' },
             ],
           }],
         }),
@@ -213,14 +213,14 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
 
     answerQuery: async (question: string, context: string) => {
       const text = await callClaude(
-        `Contexte produit :\n${productContext()}\n\n`
+        `Product context:\n${productContext()}\n\n`
         + 'You answer a question about the PRODUCT — its backlog, cycles (Hills), in-flight and shipped work, '
         + 'or a specific feature — using ONLY the provided state snapshot. '
         + 'Be concise and concrete (French), PLAIN TEXT only — no markdown (no **, no #, no markdown bullets). '
         + 'Use the relevant part of the snapshot for the question (a roadmap/backlog question vs a single feature). '
         + 'When asked about changes or history, be SPECIFIC: name the actual signal that was added (quote it briefly), '
         + 'say WHICH fields were refined and HOW they changed, and WHO did it — never just "a mis à jour un signal". '
-        + 'If a "Code existant" block is present, it is the GROUND TRUTH of what is actually SHIPPED: use it to answer '
+        + 'If a "Existing code" block is present, it is the GROUND TRUTH of what is actually SHIPPED: use it to answer '
         + '"où en est X / est-ce livré ?" — a feature the roadmap still marks shaped/bet/building may already be merged '
         + 'in the code, so SAY SO and cite the file:line; conversely flag when the code shows no trace. The snapshot is '
         + 'intent/status, the code is reality — reconcile them. '
@@ -248,7 +248,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
       const codeBlock = code ? `\n\n${code}` : ''
       const text = await callClaude(
-        `Contexte produit :\n${productContext()}\n\n`
+        `Product context:\n${productContext()}\n\n`
         + 'You are a SENIOR product manager doing Shape Up intake — NOT an order-taker. Do not accept the '
         + 'request at face value and do not flatter; your job is to protect a finite roadmap. '
         + 'Bugs and incidents — even a critical/production one — ARE valid product signals to capture here: this '
@@ -268,7 +268,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'pad with filler. As soon as you could write a confident, bounded pitch — OR conclude there is no real '
         + 'problem to shape (pure noise) — reply with ONLY "OK" and nothing else (do NOT write the pitch, that is a '
         + 'later step). Note: a low-priority but real problem is still worth shaping — timing is decided later at betting. '
-        + 'CRITICAL — when a "Code existant" block is present, it is the GROUND TRUTH of what is already built: READ '
+        + 'CRITICAL — when a "Existing code" block is present, it is the GROUND TRUTH of what is already built: READ '
         + 'it before asking anything. NEVER ask a question whose answer is in that code (how a mechanism works, where '
         + 'some context comes from, whether something exists) — you can already see it. If the signal is ALREADY '
         + 'implemented there, do not interrogate it: reply ONLY "OK" immediately so routing can dedup it (it will flag '
@@ -307,7 +307,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
       const codeBlock = code ? `\n\n${code}` : ''
       const text = await callClaude(
-        `Contexte produit :\n${productContext()}\n\n`
+        `Product context:\n${productContext()}\n\n`
         + 'You route a raw product signal in a Shape Up pipeline, acting as a critical PM and the DEDUP JUDGE — '
         + 'NOT a yes-man. Prioritise the CORRECT routing decision over agreeing with the user. '
         + 'The candidate features below were surfaced by a similarity search — the score is a HINT, not a hard rule '
@@ -329,7 +329,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'and separate fact from interpretation. '
         + 'The proposed_spec is a Shape Up pitch grounded in the product context above: real problem (what breaks today), '
         + 'appetite, sketched solution, rabbit_holes (risks), out_of_bounds (no-gos). '
-        + 'When a "Code existant" block is present, treat it as the GROUND TRUTH of what is already built (more reliable than '
+        + 'When a "Existing code" block is present, treat it as the GROUND TRUTH of what is already built (more reliable than '
         + 'any ticket): if the signal is already implemented there, prefer append/refine or discard-as-duplicate over creating '
         + 'a new feature, and ground the solution / rabbit_holes / out_of_bounds in the real modules cited (file:line). The code '
         + 'shows what EXISTS, not what is prioritised — never infer priority from it, and stay skeptical (dead code, half-built). '
@@ -383,7 +383,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
     decompose: async ({ raw, roadmap }) => {
       const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
       const text = await callClaude(
-        `Contexte produit :\n${productContext()}\n\n`
+        `Product context:\n${productContext()}\n\n`
         + 'You are a senior PM doing Shape Up intake. The input is often a meeting/demo transcript where most of the '
         + 'text is narration, sales pitch and small talk — but participants raise SEVERAL distinct product signals: '
         + 'a feature request, a limitation/gap someone points out, a "could we also…", a bug, an improvement. '

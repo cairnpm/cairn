@@ -78,6 +78,6 @@ export async function codeContextFor(query: string, opts?: { repo?: string }): P
   const hits = await searchCode(query, opts)
   if (!hits.length) return ''
   const lines = hits.map(h => `- ${h.file}:${h.line} — ${h.text}`).join('\n')
-  return `Code existant potentiellement lié (vérité terrain du repo) :\n${lines}\n`
-    + `→ Si le sujet semble déjà construit, propose un complément/amélioration plutôt qu'un doublon, et ancre la solution sur l'existant.`
+  return `Existing code that may be related (ground truth from the repo):\n${lines}\n`
+    + `→ If the topic looks already built, propose a complement/improvement rather than a duplicate, and ground the solution in what exists.`
 }

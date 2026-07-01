@@ -79,19 +79,19 @@ keep `/data`. Pick whichever fits:
 
 **One-click on Render:**
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jrpersico/cairn)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/cairnpm/cairn)
 
 **Docker Compose** (recommended for your own server):
 
 ```bash
-git clone https://github.com/jrpersico/cairn && cd cairn
+git clone https://github.com/cairnpm/cairn && cd cairn
 cp .env.example .env        # set NUXT_SESSION_PASSWORD (and your Anthropic key)
 docker compose up -d        # → http://localhost:3000
 ```
 
 Also supported — **Fly.io**, plain **Docker**, backups and env vars: see
 **[DEPLOY.md](./DEPLOY.md)**. Prebuilt images are published to
-`ghcr.io/jrpersico/cairn`.
+`ghcr.io/cairnpm/cairn`.
 
 First boot seeds a demo team — `ceo@cairn.local` / `cairn` — change the password
 right away.

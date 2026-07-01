@@ -26,12 +26,12 @@ The default team is seeded on first boot: `ceo@cairn.local` / `cairn`
 The repo ships a [`docker-compose.yml`](./docker-compose.yml).
 
 ```bash
-git clone https://github.com/jrpersico/cairn && cd cairn
+git clone https://github.com/cairnpm/cairn && cd cairn
 cp .env.example .env          # set NUXT_SESSION_PASSWORD (+ ANTHROPIC_API_KEY)
 docker compose up -d          # → http://localhost:3000
 ```
 
-It pulls the prebuilt image `ghcr.io/jrpersico/cairn:latest` (published by CI). To
+It pulls the prebuilt image `ghcr.io/cairnpm/cairn:latest` (published by CI). To
 build from source instead, uncomment `build: .` in the compose file. Put it behind
 a reverse proxy (Caddy, nginx, Traefik) for TLS.
 
@@ -39,7 +39,7 @@ a reverse proxy (Caddy, nginx, Traefik) for TLS.
 
 ## Option B — One-click on Render
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/jrpersico/cairn)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/cairnpm/cairn)
 
 Render reads [`render.yaml`](./render.yaml): a Docker web service with a 1 GB
 persistent disk at `/data` and an auto-generated session secret. Add your
