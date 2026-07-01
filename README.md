@@ -137,5 +137,5 @@ good intent.
 ## License
 
 [FSL-1.1-ALv2](./LICENSE) — source-available now, **Apache-2.0** two years after
-each release. © 2026 Jean-Romain Persico. "Cairn" and the logo are trademarks and
+each release. © 2026 The Cairn Authors. "Cairn" and the logo are trademarks and
 are not covered by the code license.
