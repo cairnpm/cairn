@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: typecheck · build · tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm build
+      # Deterministic: the intake suite runs against the offline stub (no LLM call, no API key needed).
+      - run: INTAKE_TEST_STUB=1 pnpm test
+
+  intake-llm:
+    name: intake · real LLM (non-blocking)
+    runs-on: ubuntu-latest
+    # Informational: exercises the intake against the real Anthropic API. Flaky by nature (LLM
+    # non-determinism), so it never blocks a merge. Set the ANTHROPIC_API_KEY repo secret to enable it;
+    # without the secret the suite falls back to the stub and this job is a no-op.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:intake
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

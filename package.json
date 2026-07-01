@@ -2,6 +2,10 @@
   "name": "cairn",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.19.0",
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",
