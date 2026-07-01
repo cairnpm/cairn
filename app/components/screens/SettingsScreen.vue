@@ -153,6 +153,11 @@ function createGithubApp() {
   const q = ghOrg.value.trim() ? `?org=${encodeURIComponent(ghOrg.value.trim())}` : ''
   navigateTo(`/api/github/manifest${q}`, { external: true })
 }
+// Start over — e.g. the App was created under the wrong account/org so the install can't see the repo.
+async function resetGithubApp() {
+  await mutate('/api/github/app', { method: 'DELETE', invalidates: [qk.settings], success: 'App GitHub supprimée — recrée-la en renseignant l\'org.' })
+  ghOrg.value = ''
+}
 onMounted(() => {
   const g = new URLSearchParams(window.location.search).get('github')
   if (g === 'connected') toast.success('Accès accordé — repo connecté.')
@@ -325,12 +330,21 @@ async function save() {
                     <div class="flex items-center gap-1.5 text-sm font-medium"><Check class="size-4 text-emerald-500" /> Connecté</div>
                     <div class="truncate font-mono text-xs text-muted-foreground">{{ cfg.code_repo }}</div>
                   </div>
-                  <Button variant="outline" size="sm" @click="connectGithub">Changer de repo</Button>
+                  <div class="flex items-center gap-2">
+                    <Button variant="outline" size="sm" @click="connectGithub">Changer de repo</Button>
+                    <Button variant="ghost" size="sm" class="text-muted-foreground hover:text-destructive" @click="resetGithubApp">Supprimer l'App</Button>
+                  </div>
                 </div>
               </template>
               <template v-else>
                 <p class="mb-3 text-sm text-muted-foreground">Donne à Cairn un accès <strong>lecture seule</strong> à ton repo GitHub — il s'en sert pour dédupliquer et ancrer les specs (jamais d'écriture).</p>
-                <Button v-if="cfg?.github_app_ready" @click="connectGithub">Grant access</Button>
+                <div v-if="cfg?.github_app_ready" class="space-y-2">
+                  <div class="flex items-center gap-2">
+                    <Button @click="connectGithub">Grant access</Button>
+                    <Button variant="ghost" size="sm" class="text-muted-foreground hover:text-destructive" @click="resetGithubApp">Supprimer l'App</Button>
+                  </div>
+                  <p class="text-xs text-muted-foreground">L'install ne montre pas ton repo (ex. un repo d'organisation) ? L'App a été créée sous le mauvais compte — supprime-la et recrée-la en renseignant l'org.</p>
+                </div>
                 <template v-else>
                   <div class="flex gap-2">
                     <Input v-model="ghOrg" placeholder="org GitHub (optionnel)" class="font-mono" />
