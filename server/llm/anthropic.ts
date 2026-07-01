@@ -52,8 +52,9 @@ const PROPOSE_SCHEMA = {
   properties: {
     action: { type: 'string', enum: ['create_feature', 'append', 'discard'] },
     target_feature_id: nullableString,
-    confidence: { type: 'number' },
-    rationale: { type: 'string' },
+    // proposed_spec BEFORE confidence/rationale: structured output emits fields in schema order, so the
+    // pitch is generated FIRST. A verbose rationale then can't truncate the spec away when a big signal
+    // pushes the response toward max_tokens (the failure mode that silently degraded routing to the stub).
     proposed_spec: {
       type: 'object',
       additionalProperties: false,
@@ -67,8 +68,10 @@ const PROPOSE_SCHEMA = {
       },
       required: ['title', 'problem', 'appetite', 'solution', 'rabbit_holes', 'out_of_bounds'],
     },
+    confidence: { type: 'number' },
+    rationale: { type: 'string' },
   },
-  required: ['action', 'target_feature_id', 'confidence', 'rationale', 'proposed_spec'],
+  required: ['action', 'target_feature_id', 'proposed_spec', 'confidence', 'rationale'],
 }
 
 const TRIAGE_SCHEMA = {
@@ -337,7 +340,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'shows what EXISTS, not what is prioritised — never infer priority from it, and stay skeptical (dead code, half-built). '
         + 'Write every text field in FRENCH.',
         `Signal: ${raw}\n\nConversation:\n${convo}\n\nCandidate features:\n${candList}${existingBlock}${roadmapBlock}${codeBlock}`,
-        900, { temperature: 0, schema: PROPOSE_SCHEMA },
+        2500, { temperature: 0, schema: PROPOSE_SCHEMA },
       )
       const parsed = parseJson<Partial<Proposal>>(text)
       if (!parsed || (parsed.action !== 'create_feature' && parsed.action !== 'append' && parsed.action !== 'discard')) {
