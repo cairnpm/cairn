@@ -293,7 +293,7 @@ async function save() {
         </section>
 
         <!-- IA -->
-        <section v-show="active === 'ia'" class="flex max-w-xl flex-col gap-5">
+        <section v-show="active === 'ia'" class="flex max-w-3xl flex-col gap-5">
           <div class="flex items-start justify-between gap-3">
             <div>
               <h2 class="text-base font-medium">{{ t('settings.ia.heading') }}</h2>
@@ -347,8 +347,12 @@ async function save() {
               <Label for="productctx">Contexte produit</Label>
               <Button variant="ghost" size="sm" :disabled="suggesting" @click="suggestProductContext">{{ suggesting ? '…' : 'Pré-remplir depuis le repo' }}</Button>
             </div>
-            <textarea id="productctx" v-model="productCtx" rows="5" placeholder="En 5-10 lignes : ce que fait le produit, pour qui, le glossaire, les no-gos. (Vide = défaut générique.)" class="w-full rounded-md border bg-transparent p-2 text-sm" />
-            <p class="text-xs text-muted-foreground">Injecté dans chaque tour de l'agent (clarify, propose, réponses) pour le cadrer sur TON produit — pas sur Cairn.</p>
+            <textarea
+              id="productctx" v-model="productCtx" spellcheck="false"
+              placeholder="# Produit&#10;Ce que fait le produit, pour qui.&#10;&#10;## Glossaire&#10;- terme : définition&#10;&#10;## No-gos&#10;- ce qu'on ne fait PAS&#10;&#10;(Markdown. Vide = défaut générique.)"
+              class="min-h-[420px] w-full resize-y rounded-md border bg-muted/30 p-3.5 font-mono text-[13px] leading-relaxed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            <p class="text-xs text-muted-foreground">Fichier markdown injecté dans chaque tour de l'agent (clarify, propose, réponses) pour le cadrer sur TON produit — pas sur Cairn. {{ productCtx.length }} caractères.</p>
           </div>
 
           <div class="flex items-center justify-end gap-3">
