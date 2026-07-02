@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { onBeforeUnmount, onMounted, watch } from 'vue'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -14,6 +14,17 @@ watch(() => route.path, () => {
   bike.clearFeature()
   bike.clearBet()
 })
+
+// Global command palette shortcut (Cmd/Ctrl+K). Cmd+P is reserved by the browser (print), so K it is.
+const { toggle } = useSearchPalette()
+function onKeydown(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    toggle()
+  }
+}
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -48,5 +59,6 @@ watch(() => route.path, () => {
         <slot />
       </main>
     </SidebarInset>
+    <SearchPalette />
   </SidebarProvider>
 </template>

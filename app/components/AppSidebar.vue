@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ChevronsUpDown, Inbox, Languages, ListTodo, LogOut, Mountain, Settings2, Target } from 'lucide-vue-next'
+import { ChevronsUpDown, Inbox, Languages, ListTodo, LogOut, Mountain, Search, Settings2, Target } from 'lucide-vue-next'
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarHeader, SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarRail,
@@ -16,6 +16,7 @@ const bike = useCairn()
 const { screen, author, role } = bike
 const { user } = useUserSession()
 const { t, locale, setLocale } = useUiLang()
+const { toggle: openSearch } = useSearchPalette()
 const { data: ov } = await useApiData<Overview>(qk.overview, '/api/overview')
 
 const items = computed(() => [
@@ -52,6 +53,13 @@ const items = computed(() => [
         <SidebarGroupLabel>{{ t('nav.workspace') }}</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton :tooltip="t('search.button')" @click="openSearch">
+                <Search />
+                <span>{{ t('search.button') }}</span>
+                <span class="ml-auto text-xs tracking-wide text-muted-foreground group-data-[collapsible=icon]:hidden">⌘K</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem v-for="it in items" :key="it.id">
               <SidebarMenuButton as-child :is-active="screen === it.id" :tooltip="it.label">
                 <NuxtLink :to="it.to">
