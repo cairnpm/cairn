@@ -26,12 +26,17 @@ export default defineEventHandler((event) => {
     ...args,
   )
 
-  // Attach the shapers (avatars shown as a column).
-  const byFeature = new Map<string, { user_id: string, name: string, avatar_url: string | null }[]>()
-  for (const s of assigneesByRole('shaper')) {
-    const list = byFeature.get(s.feature_id) ?? []
-    list.push({ user_id: s.user_id, name: s.name, avatar_url: s.avatar_url })
-    byFeature.set(s.feature_id, list)
+  // Attach assignees per role: shapers drive the avatars column; both feed the backlog's user filter.
+  const byRole = (role: 'shaper' | 'builder') => {
+    const m = new Map<string, { user_id: string, name: string, avatar_url: string | null }[]>()
+    for (const s of assigneesByRole(role)) {
+      const list = m.get(s.feature_id) ?? []
+      list.push({ user_id: s.user_id, name: s.name, avatar_url: s.avatar_url })
+      m.set(s.feature_id, list)
+    }
+    return m
   }
-  return rows.map(r => ({ ...r, shapers: byFeature.get(r.id) ?? [] }))
+  const shapers = byRole('shaper')
+  const builders = byRole('builder')
+  return rows.map(r => ({ ...r, shapers: shapers.get(r.id) ?? [], builders: builders.get(r.id) ?? [] }))
 })

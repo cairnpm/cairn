@@ -4,14 +4,16 @@ import { type ColumnDef } from '@tanstack/vue-table'
 import { ExternalLink } from 'lucide-vue-next'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatDate } from '~/utils/time'
 import type { FeatureDetailData } from '~/types/feature'
 
+interface Assignee { user_id: string; name: string; avatar_url: string | null }
 interface Feature {
   id: string; title: string; problem: string; appetite: string | null
   status: string; stale: number; hill_id: string | null; hill_name: string | null
   signal_count: number; updated_at: string; last_actor: string | null
-  shapers: { user_id: string; name: string; avatar_url: string | null }[]
+  shapers: Assignee[]; builders: Assignee[]
 }
 
 const { t, locale } = useUiLang()
@@ -19,6 +21,19 @@ const bike = useCairn()
 const { statusFilter, selectedFeatureId } = bike
 const { data: features } = await useApiData<Feature[]>(qk.features, '/api/features', { default: () => [] })
 const { mutate } = useApiMutation()
+
+// Filter the backlog by a member across roles: matches when they are the (last) author, a shaper, or a
+// builder. '__all' (the default) shows everything. Applied UPSTREAM of the status tabs + table.
+const { members } = useMembers()
+const userFilter = ref<string | null>(null)
+const userModel = computed({
+  get: () => userFilter.value ?? '__all',
+  set: (v: string) => { userFilter.value = v === '__all' ? null : v },
+})
+function matchesUser(f: Feature, name: string) {
+  return f.last_actor === name || f.shapers.some(s => s.name === name) || f.builders.some(b => b.name === name)
+}
+const shownFeatures = computed(() => userFilter.value ? features.value.filter(f => matchesUser(f, userFilter.value!)) : features.value)
 
 // Row delete (confirmed via AlertDialog). Open-state is a separate flag so closing the dialog
 // never races with confirmDelete reading the payload.
@@ -38,7 +53,7 @@ async function confirmDelete() {
 
 
 const counts = computed(() => {
-  const f = features.value
+  const f = shownFeatures.value
   const by = (s: string) => f.filter(x => x.status === s).length
   const deleted = by('deleted')
   return { all: f.length - deleted, shaped: by('shaped'), bet: by('bet'), building: by('building'), done: by('done'), deleted }
@@ -100,7 +115,7 @@ const columns: ColumnDef<Feature>[] = [
 
 // Backlog's filterFn handles the 'all'/'deleted' tabs itself, so the raw value is forwarded as-is.
 const { table, vis, hideableCols } = useDataTable({
-  data: features,
+  data: shownFeatures,
   columns,
   initialSort: [{ id: 'updated_at', desc: true }],
   statusFilter,
@@ -123,7 +138,16 @@ const open = computed({
     <!-- Toolbar -->
     <div class="flex items-center justify-between gap-2">
       <StatusFilterTabs v-model="statusModel" :filters="FILTERS" />
-      <ColumnToggle :columns="hideableCols" :labels="COL_LABEL" :button-text="t('backlog.columns')" />
+      <div class="flex items-center gap-2">
+        <Select v-model="userModel">
+          <SelectTrigger size="sm" class="w-40"><SelectValue :placeholder="t('backlog.filterUser')" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all">{{ t('backlog.allUsers') }}</SelectItem>
+            <SelectItem v-for="m in members" :key="m.id" :value="m.name">{{ m.name }}</SelectItem>
+          </SelectContent>
+        </Select>
+        <ColumnToggle :columns="hideableCols" :labels="COL_LABEL" :button-text="t('backlog.columns')" />
+      </div>
     </div>
 
     <!-- Table -->
