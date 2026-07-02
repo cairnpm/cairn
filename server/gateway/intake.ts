@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { all, get, run, tx } from '../db/client'
-import { getAttachment, linkAttachments, uploadsDir } from '../db/attachments'
+import { cloneAttachmentsTo, getAttachment, linkAttachments, uploadsDir } from '../db/attachments'
 import { logEvent } from '../db/events'
 import { ensureSchema } from '../db/schema'
 import type {
@@ -851,9 +851,10 @@ export async function commitBatch(sessionId: string, selections: BatchSelection[
     if (sel.action_override) proposal.action = sel.action_override
     if (sel.target_override !== undefined) proposal.target_feature_id = sel.target_override
     if (proposal.action === 'append' && !proposal.target_feature_id) continue // invalid override
-    // The source attachment spawned many features → not linked to any one (a transcript↔features
-    // many-to-many would need a join table; out of scope). Each segment commits its own problem text.
     const res = await commitProposal(proposal, { raw: seg.signal.problem, source: data.source, capturedBy: data.captured_by })
+    // One uploaded source (a transcript) fans out into many features — clone its attachment onto each so
+    // every spawned signal keeps a link back to the source document (shared file, one row per feature).
+    if (res.feature_id) cloneAttachmentsTo(data.attachment_ids ?? [], res.feature_id, res.feedback_id)
     if (res.action === 'create_feature') created++
     else if (res.action === 'append' || res.action === 'merge') updated++
     else discarded++

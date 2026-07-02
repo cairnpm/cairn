@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { mkdirSync } from 'node:fs'
 import { all, dataDir, get, run } from './client'
+import { newId } from '../utils/id'
 
 export interface Attachment {
   id: string
@@ -52,5 +53,16 @@ export function listByFeature(featureId: string): Attachment[] {
 export function linkAttachments(ids: string[], featureId: string | null, feedbackId: string | null): void {
   for (const id of ids) {
     run('UPDATE attachments SET feature_id = COALESCE(?, feature_id), feedback_id = COALESCE(?, feedback_id) WHERE id = ?', featureId, feedbackId, id)
+  }
+}
+
+/** Duplicate source attachments (by id) onto a feature/feedback — same file, fresh rows. Used when ONE
+ *  uploaded source (e.g. a transcript) is decomposed into several features: each feature gets its own
+ *  row pointing at the shared storage_path, so the source stays traceable on every signal it spawned. */
+export function cloneAttachmentsTo(sourceIds: string[], featureId: string, feedbackId: string | null): void {
+  for (const id of sourceIds) {
+    const a = getAttachment(id)
+    if (!a) continue
+    insertAttachment({ ...a, id: newId(), feature_id: featureId, feedback_id: feedbackId })
   }
 }
