@@ -27,7 +27,10 @@ export function codeRepo(): string | undefined {
 async function codeGroundingFor(text: string, llm: LlmProvider, repo: string | undefined): Promise<string> {
   if (!repo) return ''
   const terms = llm.codeTerms ? await llm.codeTerms(text).catch(() => []) : []
-  return codeContextFor([text, ...terms].join(' '), { repo })
+  // Expanded identifiers FIRST: searchCode keeps only the first ~10 query tokens, so leading with the
+  // curated terms (not the raw text) is what makes the grep hit the real concepts — critical when `text`
+  // is long (a whole transcript), where raw-first would grep only the opening narration.
+  return codeContextFor([...terms, text].join(' '), { repo })
 }
 
 /** Context for a read-only product question: the roadmap/backlog snapshot + any related code, so
@@ -768,7 +771,7 @@ export async function decomposeIntake(message: string, attachmentIds: string[] =
     const candidates = topCandidates(embedding)
     const code = await codeGroundingFor(signal.problem, llm, repo)
     const proposal = await llm.propose({ raw: signal.problem, transcript: [], candidates, classification: signal.classification, roadmap, code })
-    segments.push({ id: newId(), signal, proposal, include: proposal.action !== 'discard', clarifying_question: signal.clarifying_question ?? null, answer: null })
+    segments.push({ id: newId(), signal, proposal, include: proposal.action !== 'discard', clarifying_question: proposal.clarifying_question ?? null, answer: null })
     embeddings.push(embedding)
   }
   flagDuplicates(segments, embeddings)
@@ -805,7 +808,7 @@ async function advanceBatchClarify(sessionId: string, data: IntakeSessionData, a
     await refreshIfStale()
     const code = await codeGroundingFor(enriched, llm, codeRepo())
     seg.proposal = await llm.propose({ raw: enriched, transcript: [], candidates, classification: seg.signal.classification, roadmap: roadmapContext(), code })
-    seg.signal = { ...seg.signal, problem: enriched, clarifying_question: null }
+    seg.signal = { ...seg.signal, problem: enriched }
     seg.answer = answer
     seg.clarifying_question = null
     seg.include = seg.proposal.action !== 'discard'

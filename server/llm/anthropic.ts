@@ -71,8 +71,9 @@ const PROPOSE_SCHEMA = {
     signal_summary: { type: 'string' },
     confidence: { type: 'number' },
     rationale: { type: 'string' },
+    clarifying_question: nullableString,
   },
-  required: ['action', 'target_feature_id', 'proposed_spec', 'signal_summary', 'confidence', 'rationale'],
+  required: ['action', 'target_feature_id', 'proposed_spec', 'signal_summary', 'confidence', 'rationale', 'clarifying_question'],
 }
 
 const TRIAGE_SCHEMA = {
@@ -99,9 +100,8 @@ const DECOMPOSE_SCHEMA = {
           title: { type: 'string' },
           problem: { type: 'string' },
           classification: { type: 'string', enum: ['musing', 'explore', 'directive'] },
-          clarifying_question: nullableString,
         },
-        required: ['title', 'problem', 'classification', 'clarifying_question'],
+        required: ['title', 'problem', 'classification'],
       },
     },
   },
@@ -360,10 +360,19 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'formatted list. Be precise, cut the filler. '
         + 'signal_summary: a 1-2 sentence PLAIN reformulation of what THIS incoming signal actually asks or '
         + 'reports — its essence, as a PM would log it. NOT a restatement of the shaped pitch, NO markdown, terse. '
+        + 'clarifying_question: usually null. Set it ONLY when the signal is under-specified on a genuine HUMAN-judgment '
+        + 'axis that neither the code nor the candidates can resolve — an ambiguous core problem, a solution stated without '
+        + 'its underlying need, or unclear scope/appetite/intent. NEVER ask what the code or candidates already answer '
+        + '(whether something exists, is built, is in production, is covered) — you have them; determine it yourself. One '
+        + 'targeted question in FRENCH, otherwise null. '
         + 'When a "Existing code" block is present, treat it as the GROUND TRUTH of what is already built (more reliable than '
         + 'any ticket): if the signal is already implemented there, prefer append/refine or discard-as-duplicate over creating '
         + 'a new feature, and ground the solution / rabbit_holes / out_of_bounds in the real modules cited (file:line). The code '
         + 'shows what EXISTS, not what is prioritised — never infer priority from it, and stay skeptical (dead code, half-built). '
+        + 'A meeting/demo transcript often CLAIMS a capability is missing ("il n\'y a pas de moyen de…", "aujourd\'hui seul X '
+        + 'est possible", "ça n\'existe pas") — NEVER take an absence claim at face value; verify it against the code. If a '
+        + 'related capability exists (even on an adjacent surface — e.g. exporting a saved list vs exporting a search shortlist), '
+        + 'treat the signal as an extension/gap on top of it and cite the file, not a greenfield feature. '
         + 'Write every text field in FRENCH.',
         `Signal: ${raw}\n\nConversation:\n${convo}\n\nCandidate features:\n${candList}${existingBlock}${roadmapBlock}${codeBlock}`,
         2500, { temperature: 0, schema: PROPOSE_SCHEMA },
@@ -380,6 +389,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         confidence: typeof parsed.confidence === 'number' ? parsed.confidence : (candidates[0]?.similarity ?? 0.5),
         rationale: parsed.rationale || 'Routing proposé par le modèle.',
         signal_summary: parsed.signal_summary || raw.trim().slice(0, 200),
+        clarifying_question: (typeof parsed.clarifying_question === 'string' && parsed.clarifying_question.trim()) ? parsed.clarifying_question.trim() : null,
         proposed_spec: {
           title: parsed.proposed_spec?.title || raw.trim().slice(0, 60),
           problem: parsed.proposed_spec?.problem || raw.trim(),
@@ -425,15 +435,10 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'statement (RECONTEXTUALIZE — the reader has NOT seen the transcript and does not know the product jargon), '
         + 'plus a classification (musing | explore | directive). '
         + 'IGNORE narration, demo walkthrough, sales pitch and chatter. MERGE duplicates (one entry per real signal). '
-        + 'Do NOT invent problems that are not genuinely raised. '
-        + 'For EACH signal, set clarifying_question: if the transcript leaves a signal too UNDER-SPECIFIED to shape '
-        + 'well (the core problem is ambiguous, it reads as a solution without the underlying need, the scope/appetite '
-        + 'is unclear, or it might overlap an existing feature), write ONE targeted question (FR) to ask the human. '
-        + 'If the signal is already clear enough to shape, set clarifying_question to null. Be SELECTIVE — most '
-        + 'well-stated signals need null; only flag the genuinely ambiguous ones. Write every field in FRENCH. '
-        + 'When an "Existing code" block is present, treat it as GROUND TRUTH of what is already BUILT: do NOT extract '
-        + 'an already-shipped capability as a NEW signal, and when a signal overlaps existing code, say so in its '
-        + 'clarifying_question (e.g. "X semble déjà exister dans le code (…) — s\'agit-il d\'une évolution ou d\'un oubli ?").'
+        + 'Do NOT invent problems that are not genuinely raised. Write every field in FRENCH. '
+        + 'When an "Existing code" block is present, treat it as GROUND TRUTH of what is already BUILT: do NOT extract an '
+        + 'already-shipped capability as a NEW signal, and when a signal overlaps existing code, REFLECT that in the problem '
+        + 'statement itself (e.g. "X existe déjà (fichier Y) ; le besoin porte sur Z").'
         + roadmapBlock,
         `Source:\n${raw.slice(0, 120000)}${codeBlock}`,
         2600, { temperature: 0, schema: DECOMPOSE_SCHEMA },
@@ -445,7 +450,6 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         title: (s.title || s.problem).trim().slice(0, 80),
         problem: s.problem.trim(),
         classification: (['musing', 'explore', 'directive'].includes(s.classification as string) ? s.classification : 'explore') as Classification,
-        clarifying_question: (typeof s.clarifying_question === 'string' && s.clarifying_question.trim()) ? s.clarifying_question.trim() : null,
       }))
     },
   }

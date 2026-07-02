@@ -81,9 +81,9 @@ export interface Triage { mode: 'single' | 'multi'; count: number; reason: strin
 
 // A discrete product signal carved out of a transcript/dense input, recontextualized into a
 // standalone problem so the normal routing (embed → candidates → propose) applies per segment.
-// clarifying_question: set by the decompose pass when the segment is too under-specified to shape
-// well — the agent will ASK it (guided clarify) before the final recap. Null = ready as-is.
-export interface DecomposedSignal { title: string; problem: string; classification: Classification; clarifying_question?: string | null }
+// The guided-clarify question is decided per segment by propose (which has the focused code +
+// candidates), NOT here — decompose only splits and shapes.
+export interface DecomposedSignal { title: string; problem: string; classification: Classification }
 
 export interface Candidate {
   feature_id: string
@@ -112,6 +112,9 @@ export interface Proposal {
   // Concise 1-2 sentence reformulation of the RAW signal — stored as the logged feedback (the raw paste
   // is not kept; the detail lives in proposed_spec). The essence of what this signal asks/reports.
   signal_summary: string
+  // A targeted human-judgment question when the signal is under-specified on an axis the code/candidates
+  // can't resolve (else null). Drives guided clarify in the decompose/batch flow. Ignored in single mode.
+  clarifying_question?: string | null
   candidates: Candidate[]
 }
 
