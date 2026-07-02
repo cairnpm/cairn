@@ -10,6 +10,7 @@ import type {
 } from '../domain/types'
 import { getLlm } from '../llm/provider'
 import type { AttachmentForLlm, LlmProvider } from '../llm/provider'
+import { im } from './intakeMessages'
 import { grepPath, refreshIfStale } from '../utils/codeRepo'
 import { codeContextFor } from '../utils/codeSearch'
 import { cosine, decodeEmbedding, encodeEmbedding, localEmbed } from '../utils/embedding'
@@ -430,7 +431,7 @@ async function advance(
     proposal.target_feature_id = data.target_feature_id
     proposal.merge_from_feature_id = data.merge_from_id
     proposal.confidence = 1
-    reflect = `Je propose de fusionner « ${absorbed?.title} » dans « ${survivor?.title} » et de consolider le pitch — signaux, décisions et historique rapatriés, l'absorbée archivée. Tu confirmes, ou tu corriges ?`
+    reflect = im.merge(data.lang, absorbed?.title ?? '', survivor?.title ?? '')
   } else if (data.mode === 'refine' && data.target_feature_id) {
     // Explicit target: force append to it, and feed Claude the current pitch to merge into.
     const target = get<Feature>('SELECT * FROM features WHERE id = ?', data.target_feature_id)
@@ -446,25 +447,25 @@ async function advance(
       proposal.action = 'create_feature'
       proposal.target_feature_id = null
       proposal.supersedes_id = target.id
-      reflect = `« ${target.title} » est déjà ${target.status === 'done' ? 'livrée' : 'archivée'} — pas de réouverture. Je propose une NOUVELLE itération « ${proposal.proposed_spec.title} » liée à la version précédente. Tu confirmes, ou tu corriges ?`
+      reflect = im.supersede(data.lang, target.title, target.status === 'done', proposal.proposed_spec.title)
     } else if (target && (target.status === 'bet' || target.status === 'building')) {
       // In a validated cycle → scope is frozen. No mid-cycle amend; shape a new feature for later.
       proposal.action = 'create_feature'
       proposal.target_feature_id = null
-      reflect = `« ${target.title} » est déjà engagée dans un cycle (${target.status}) — on ne modifie pas le périmètre d'un pari en cours. Je propose une NOUVELLE feature « ${proposal.proposed_spec.title} » pour un prochain cycle. Tu confirmes, ou tu corriges ?`
+      reflect = im.frozen(data.lang, target.title, target.status, proposal.proposed_spec.title)
     } else {
       proposal.action = 'append'
       proposal.target_feature_id = data.target_feature_id
-      reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose d'affiner la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
+      reflect = im.refineAppend(data.lang, proposal.proposed_spec.problem, proposal.proposed_spec.title, proposal.confidence * 100 | 0)
     }
   } else {
     proposal = await llm.propose({ raw: data.raw, transcript: data.transcript, candidates, classification, roadmap, code, lang: data.lang })
     if (proposal.action === 'append') {
-      reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose de le rattacher à la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
+      reflect = im.signalAppend(data.lang, proposal.proposed_spec.problem, proposal.proposed_spec.title, proposal.confidence * 100 | 0)
     } else if (proposal.action === 'discard') {
-      reflect = `Ce signal n'apporte rien de nouveau (doublon / hors-scope) — je propose de l'écarter. ${proposal.rationale} Tu confirmes, ou tu corriges ?`
+      reflect = im.discard(data.lang, proposal.rationale)
     } else {
-      reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Aucun doublon fort — je propose de créer une nouvelle feature « ${proposal.proposed_spec.title} » (appétit ${proposal.proposed_spec.appetite}). Tu confirmes, ou tu corriges ?`
+      reflect = im.create(data.lang, proposal.proposed_spec.problem, proposal.proposed_spec.title, proposal.proposed_spec.appetite)
     }
   }
 
@@ -479,7 +480,7 @@ async function advance(
   const lowConf = data.mode === 'signal' && proposal.confidence < CONFIDENCE_THRESHOLD
   if (lowConf) {
     const cands = proposal.candidates.map((c, i) => `${i + 1}. « ${c.title} » (${c.similarity * 100 | 0}%)`).join(' · ')
-    reflect = `⚠ Confiance faible (${proposal.confidence * 100 | 0}%). À toi de trancher : créer une nouvelle feature, ou rattacher à un candidat${cands ? ` — ${cands}` : ''} ?\n\n${reflect}`
+    reflect = im.lowConf(data.lang, proposal.confidence * 100 | 0, cands, reflect)
   }
   data.transcript.push({ role: 'agent', text: reflect })
 
@@ -722,26 +723,25 @@ function currentClarifySegment(batch: BatchSession): BatchSegment | undefined {
   const id = batch.clarify_order[batch.cursor]
   return id ? batch.segments.find(s => s.id === id) : undefined
 }
-const questionFor = (seg: BatchSegment) => `**${seg.signal.title}** — ${seg.clarifying_question}`
+const questionFor = (seg: BatchSegment, lang?: UiLang) => im.question(lang, seg.signal.title, seg.clarifying_question)
 
-/** Opening message: how many sujets, how many need precision, then the first question (if any). */
-function batchOpening(batch: BatchSession): string {
+/** Opening message: how many topics, how many need precision, then the first question (if any). */
+function batchOpening(batch: BatchSession, lang?: UiLang): string {
   const total = batch.segments.length
   const need = batch.clarify_order.length
   const ready = total - need
-  if (!need) return `J'ai repéré **${total} sujets**, tous assez clairs pour être shapés. Voici le récap à valider.`
-  const head = `J'ai repéré **${total} sujets**. ${ready > 0 ? `${ready} ${ready > 1 ? 'sont clairs' : 'est clair'}, ` : ''}`
-    + `${need} ${need > 1 ? 'ont' : 'a'} besoin d'une précision de ta part — je te les passe un par un.`
+  if (!need) return im.batchAllClear(lang, total)
+  const head = im.batchHead(lang, total, ready, need)
   const seg = currentClarifySegment(batch)
-  return seg ? `${head}\n\n${questionFor(seg)}` : head
+  return seg ? `${head}\n\n${questionFor(seg, lang)}` : head
 }
 
 /** Recap message once everything is clarified — hands off to the validation screen. */
-function batchRecap(batch: BatchSession): string {
+function batchRecap(batch: BatchSession, lang?: UiLang): string {
   const inc = batch.segments.filter(s => s.include)
   const creates = inc.filter(s => s.proposal.action === 'create_feature').length
   const appends = inc.filter(s => s.proposal.action === 'append').length
-  return `C'est clair pour moi. Récap : **${creates} à créer**, **${appends} à rattacher**. Vérifie et valide dans l'écran de validation.`
+  return im.batchRecap(lang, creates, appends)
 }
 
 /** Read the full source (message + attachments incl. .docx), segment it into discrete signals, route
@@ -781,7 +781,7 @@ export async function decomposeIntake(message: string, attachmentIds: string[] =
   const clarify_order = segments.filter(s => s.clarifying_question && s.proposal.action !== 'discard').map(s => s.id)
   const batch: BatchSession = { source, segments, clarify_order, cursor: 0 }
   const state: IntakeState = clarify_order.length ? 'batch_clarify' : 'batch_review'
-  const agentMsg = clarify_order.length ? batchOpening(batch) : batchRecap(batch)
+  const agentMsg = clarify_order.length ? batchOpening(batch, lang) : batchRecap(batch, lang)
 
   const data: IntakeSessionData = {
     raw, source, captured_by: capturedBy, mode: 'signal',
@@ -817,12 +817,12 @@ async function advanceBatchClarify(sessionId: string, data: IntakeSessionData, a
 
   const next = currentClarifySegment(batch)
   if (next) {
-    const msg = questionFor(next)
+    const msg = questionFor(next, data.lang)
     data.transcript.push({ role: 'agent', text: msg })
     saveSession(sessionId, 'batch_clarify', turns, data)
     return { session_id: sessionId, state: 'batch_clarify', agent_message: msg, proposal: null }
   }
-  const recap = batchRecap(batch)
+  const recap = batchRecap(batch, data.lang)
   data.transcript.push({ role: 'agent', text: recap })
   saveSession(sessionId, 'batch_review', turns, data)
   return { session_id: sessionId, state: 'batch_review', agent_message: recap, proposal: null, batch: { session_id: sessionId, segments: batch.segments } }
