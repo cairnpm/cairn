@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { ArrowDown, ArrowUp, Layers, Paperclip, X } from 'lucide-vue-next'
+import { ArrowDown, ArrowUp, FileText, Image as ImageIcon, Layers, Paperclip, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
@@ -189,7 +189,7 @@ const QUICK = computed(() => [
           <CardContent class="p-2">
             <Textarea v-model="draft" :placeholder="t('intake.placeholder')" class="min-h-28 resize-none border-0 shadow-none focus-visible:ring-0 dark:bg-transparent" @keydown="onKey" />
             <div v-if="attachments.length" class="flex flex-wrap gap-1.5 px-2 pb-2">
-              <Badge v-for="a in attachments" :key="a.id" variant="secondary" class="gap-1">{{ a.kind === 'image' ? '🖼️' : '📄' }} {{ a.filename }}<button @click="removeAttachment(a.id)"><X class="size-3" /></button></Badge>
+              <Badge v-for="a in attachments" :key="a.id" variant="secondary" class="gap-1"><component :is="a.kind === 'image' ? ImageIcon : FileText" class="size-3 shrink-0" /> {{ a.filename }}<button @click="removeAttachment(a.id)"><X class="size-3" /></button></Badge>
             </div>
             <div class="flex items-center justify-between px-1 pb-1">
               <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" @change="onFiles">
@@ -214,7 +214,7 @@ const QUICK = computed(() => [
             <CairnMark v-if="m.role === 'agent'" inverted class="mt-0.5 h-6 w-auto shrink-0" />
             <div class="max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm leading-relaxed" :class="m.role === 'agent' ? 'bg-muted' : 'bg-primary text-primary-foreground'">
               <div v-if="m.attachments?.length" class="mb-2 flex flex-wrap gap-1.5">
-                <AttachmentPreview v-for="a in m.attachments" :key="a.id" :attachment="a" size="size-16" />
+                <AttachmentPreview v-for="a in m.attachments" :key="a.id" :attachment="a" size="size-16" :tone="m.role === 'user' ? 'onPrimary' : 'default'" />
               </div>
               <span class="whitespace-pre-wrap">{{ m.text }}</span>
             </div>
@@ -289,7 +289,7 @@ const QUICK = computed(() => [
           <Card class="py-0 transition-colors" :class="dragOver ? 'border-primary ring-2 ring-primary/30' : ''" @dragover.prevent="dragOver = true" @dragleave="onDragLeave" @drop.prevent="onDrop">
             <CardContent class="p-2">
               <div v-if="attachments.length" class="flex flex-wrap gap-1.5 px-1 pb-2">
-                <Badge v-for="a in attachments" :key="a.id" variant="secondary" class="gap-1">{{ a.kind === 'image' ? '🖼️' : '📄' }} {{ a.filename }}<button @click="removeAttachment(a.id)"><X class="size-3" /></button></Badge>
+                <Badge v-for="a in attachments" :key="a.id" variant="secondary" class="gap-1"><component :is="a.kind === 'image' ? ImageIcon : FileText" class="size-3 shrink-0" /> {{ a.filename }}<button @click="removeAttachment(a.id)"><X class="size-3" /></button></Badge>
               </div>
               <div class="flex items-end gap-1.5">
                 <input ref="fileInput" type="file" multiple accept="image/*,text/*,.txt,.md,.csv,.json,.log,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="hidden" @change="onFiles">

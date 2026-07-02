@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Download, Expand } from 'lucide-vue-next'
+import { Download, Expand, FileText } from 'lucide-vue-next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 const props = withDefaults(defineProps<{
   attachment: { id: string; filename: string; kind: string }
   size?: string // Tailwind size utility for the image thumbnail
-}>(), { size: 'size-14' })
+  tone?: 'default' | 'onPrimary' // 'onPrimary' = sitting on a bg-primary surface (intake user bubble)
+}>(), { size: 'size-14', tone: 'default' })
 
 const open = ref(false)
 const src = `/api/attachments/${props.attachment.id}`
@@ -25,7 +26,7 @@ const src = `/api/attachments/${props.attachment.id}`
         <Expand class="size-5 text-white" />
       </span>
     </template>
-    <Badge v-else variant="outline" class="gap-1 font-normal transition-colors group-hover:bg-accent">📄 {{ attachment.filename }}</Badge>
+    <Badge v-else variant="outline" :class="['max-w-full gap-1.5 font-normal transition-colors', tone === 'onPrimary' ? 'border-primary-foreground/25 bg-primary-foreground/10 text-primary-foreground group-hover:bg-primary-foreground/20' : 'group-hover:bg-accent']"><FileText class="size-3.5 shrink-0" /><span class="truncate">{{ attachment.filename || 'Document' }}</span></Badge>
   </button>
 
   <Dialog v-model:open="open">
@@ -33,7 +34,7 @@ const src = `/api/attachments/${props.attachment.id}`
       <DialogTitle class="border-b px-4 py-3 text-sm font-medium">{{ attachment.filename }}</DialogTitle>
       <img v-if="attachment.kind === 'image'" :src="src" :alt="attachment.filename" class="max-h-[78vh] w-full bg-muted/30 object-contain">
       <div v-else class="flex flex-col items-center gap-3 p-10 text-center text-sm text-muted-foreground">
-        <span>📄 {{ attachment.filename }}</span>
+        <span class="inline-flex items-center gap-1.5"><FileText class="size-4" /> {{ attachment.filename || 'Document' }}</span>
         <Button as-child variant="outline" size="sm">
           <a :href="src" target="_blank" rel="noopener"><Download class="size-3.5" /> Ouvrir le document</a>
         </Button>
