@@ -200,12 +200,17 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
 
     detectIntent: async (message: string) => {
       const text = await callClaude(
-        'Classify a message to a product backlog gateway into exactly one intent: '
-        + '"query" (read-only question about a feature\'s state/progress), '
-        + '"refine" (refine/update a NAMED existing feature), '
-        + '"merge" (explicitly merge/deduplicate two named features, e.g. "fusionne X et Y", "X est un doublon de Y"), '
-        + 'or "signal" (a raw new feedback/feature/bug to route). '
-        + 'target = the feature named (for query/refine: the feature; for merge: the feature to ABSORB), else null. '
+        'Classify a message to a product backlog gateway into exactly one intent. '
+        + 'SIGNAL is the DEFAULT — a raw new feedback/feature/bug/idea to route — INCLUDING when its content describes '
+        + 'renaming, refactoring or reworking something in the PRODUCT. Verbs about the INPUT itself ("reformule", "log", '
+        + '"capture", "note", "shape this", "renomme X→Y") mean signal: they say how to RECORD the new item, they are NOT a '
+        + 'request to refine an existing backlog feature. '
+        + 'Pick a non-signal intent ONLY when the message EXPLICITLY targets an EXISTING backlog item the user refers to as '
+        + 'existing: "query" = a read-only question about a named feature\'s state/progress; "refine" = an explicit request to '
+        + 'update a SPECIFIC existing feature ("sur le ticket X, ajoute…", "affine la feature Y", "mets à jour Z") — NOT a '
+        + 'message that merely describes product work whose subject resembles some feature; "merge" = explicitly merge two '
+        + 'named features ("fusionne X et Y", "X est un doublon de Y"). When in doubt, choose "signal". '
+        + 'target = the existing feature named (query/refine: the feature; merge: the feature to ABSORB), else null. '
         + 'target2 = for merge only, the SURVIVING feature (the one kept), else null.',
         message, 100, { temperature: 0, schema: INTENT_SCHEMA },
       )
