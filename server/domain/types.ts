@@ -1,4 +1,6 @@
 // ── Entities ───────────────────────────────────────────────────────────────
+// UI locale (cookie `bike-lang`) — drives the language the LLM writes its user-facing output in.
+export type UiLang = 'fr' | 'en'
 export type Classification = 'musing' | 'explore' | 'directive'
 export type FeedbackStatus = 'new' | 'routed' | 'pending_review' | 'archived'
 export type FeatureStatus = 'raw' | 'shaped' | 'bet' | 'building' | 'done' | 'archived'
@@ -135,6 +137,7 @@ export interface IntakeSessionData {
   attachment_ids: string[]            // files uploaded with the first turn, linked at commit
   triage?: Triage | null             // first-turn triage result (drives single vs decompose offer)
   batch?: BatchSession | null        // present once decomposed: the N segments under review
+  lang?: UiLang                      // UI locale captured on the first turn — the LLM writes output in it
 }
 
 // A reviewable segment from decomposition: the carved signal + its routed proposal + include flag.

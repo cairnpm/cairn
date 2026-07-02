@@ -1,4 +1,4 @@
-import type { Classification, DecomposedSignal, Proposal, Triage } from '../domain/types'
+import type { Classification, DecomposedSignal, Proposal, Triage, UiLang } from '../domain/types'
 import { localEmbed } from '../utils/embedding'
 import { getSetting } from '../db/settings'
 import { ARCHITECTURE_CONTEXT } from './architecture'
@@ -34,6 +34,9 @@ function parseJson<T>(text: string | null): T | null {
 }
 
 const nullableString = { anyOf: [{ type: 'string' }, { type: 'null' }] }
+
+/** The language the agent writes user-facing output in, from the UI locale (defaults to French). */
+function langName(lang?: UiLang): string { return lang === 'en' ? 'English' : 'French' }
 
 const INTENT_SCHEMA = {
   type: 'object',
@@ -222,12 +225,12 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       return stub.detectIntent(message)
     },
 
-    answerQuery: async (question: string, context: string) => {
+    answerQuery: async (question: string, context: string, lang?: UiLang) => {
       const text = await callClaude(
         `Product context:\n${productContext()}\n\n`
         + 'You answer a question about the PRODUCT — its backlog, cycles (Hills), in-flight and shipped work, '
         + 'or a specific feature — using ONLY the provided state snapshot. '
-        + 'Be concise and concrete (French), PLAIN TEXT only — no markdown (no **, no #, no markdown bullets). '
+        + `Be concise and concrete (${langName(lang)}), PLAIN TEXT only — no markdown (no **, no #, no markdown bullets). `
         + 'Use the relevant part of the snapshot for the question (a roadmap/backlog question vs a single feature). '
         + 'When asked about changes or history, be SPECIFIC: name the actual signal that was added (quote it briefly), '
         + 'say WHICH fields were refined and HOW they changed, and WHO did it — never just "a mis à jour un signal". '
@@ -253,7 +256,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       return stub.classify(content)
     },
 
-    clarify: async ({ raw, transcript, code }) => {
+    clarify: async ({ raw, transcript, code, lang }) => {
       const agentQuestions = transcript.filter(t => t.role === 'agent' && t.text.includes('?')).length
       if (agentQuestions >= MAX_CLARIFY) return null
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
@@ -274,7 +277,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'is unbounded (open rabbit holes, unclear success, scope that could balloon), surface it — do not '
         + 'pretend it is ready to bet. A bettable pitch is rough + solved + bounded (real problem, appetite, '
         + 'solution direction, rabbit holes, explicit no-gos), NOT a reworded request. '
-        + 'Ask ONE sharp question at a time (French, ending in "?"), and keep challenging across as many turns as '
+        + `Ask ONE sharp question at a time (${langName(lang)}, ending in "?"), and keep challenging across as many turns as `
         + 'the subject genuinely needs — a clear signal may need one, a vague or far-reaching one several. Do NOT '
         + 'pad with filler. As soon as you could write a confident, bounded pitch — OR conclude there is no real '
         + 'problem to shape (pure noise) — reply with ONLY "OK" and nothing else (do NOT write the pitch, that is a '
@@ -308,7 +311,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
     },
 
     propose: async (input: ProposeInput) => {
-      const { raw, candidates, classification, transcript, existing, roadmap, code } = input
+      const { raw, candidates, classification, transcript, existing, roadmap, code, lang } = input
       const candList = candidates.map(c => `- ${c.feature_id} | ${c.title} | sim=${c.similarity.toFixed(2)}`).join('\n') || '(none)'
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
       const existingBlock = existing
@@ -364,7 +367,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'axis that neither the code nor the candidates can resolve — an ambiguous core problem, a solution stated without '
         + 'its underlying need, or unclear scope/appetite/intent. NEVER ask what the code or candidates already answer '
         + '(whether something exists, is built, is in production, is covered) — you have them; determine it yourself. One '
-        + 'targeted question in FRENCH, otherwise null. '
+        + `targeted question in ${langName(lang)}, otherwise null. `
         + 'When a "Existing code" block is present, treat it as the GROUND TRUTH of what is already built (more reliable than '
         + 'any ticket): if the signal is already implemented there, prefer append/refine or discard-as-duplicate over creating '
         + 'a new feature, and ground the solution / rabbit_holes / out_of_bounds in the real modules cited (file:line). The code '
@@ -373,7 +376,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'est possible", "ça n\'existe pas") — NEVER take an absence claim at face value; verify it against the code. If a '
         + 'related capability exists (even on an adjacent surface — e.g. exporting a saved list vs exporting a search shortlist), '
         + 'treat the signal as an extension/gap on top of it and cite the file, not a greenfield feature. '
-        + 'Write every text field in FRENCH.',
+        + `Write every text field in ${langName(lang)}.`,
         `Signal: ${raw}\n\nConversation:\n${convo}\n\nCandidate features:\n${candList}${existingBlock}${roadmapBlock}${codeBlock}`,
         2500, { temperature: 0, schema: PROPOSE_SCHEMA },
       )
@@ -402,7 +405,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       }
     },
 
-    triage: async ({ raw }) => {
+    triage: async ({ raw, lang }) => {
       const text = await callClaude(
         'You triage a raw input for a Shape Up product backlog. Decide whether it describes ONE shapeable '
         + 'problem or SEVERAL distinct ones. Shape Up: a pitch = one bounded problem with one appetite. '
@@ -413,7 +416,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + '(a missing filter, a limitation a prospect points out, a "could we also…", a bug) — count EACH of those, '
         + 'even though most of the transcript is narration/demo/small-talk you ignore → mode "multi". '
         + 'Only the SAME problem\'s sub-details do not add to the count. When the input is a transcript/long doc, '
-        + 'lean toward "multi". Write reason in FRENCH.',
+        + `lean toward "multi". Write reason in ${langName(lang)}.`,
         `Input:\n${raw.slice(0, 60000)}`,
         300, { temperature: 0, schema: TRIAGE_SCHEMA },
       )
@@ -423,7 +426,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       return { mode: parsed.mode, count: parsed.mode === 'multi' ? Math.max(2, count) : 1, reason: parsed.reason || '' }
     },
 
-    decompose: async ({ raw, roadmap, code }) => {
+    decompose: async ({ raw, roadmap, code, lang }) => {
       const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
       const codeBlock = code ? `\n\n${code}` : ''
       const text = await callClaude(
@@ -435,7 +438,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'statement (RECONTEXTUALIZE — the reader has NOT seen the transcript and does not know the product jargon), '
         + 'plus a classification (musing | explore | directive). '
         + 'IGNORE narration, demo walkthrough, sales pitch and chatter. MERGE duplicates (one entry per real signal). '
-        + 'Do NOT invent problems that are not genuinely raised. Write every field in FRENCH. '
+        + `Do NOT invent problems that are not genuinely raised. Write every field in ${langName(lang)}. `
         + 'When an "Existing code" block is present, treat it as GROUND TRUTH of what is already BUILT: do NOT extract an '
         + 'already-shipped capability as a NEW signal, and when a signal overlaps existing code, REFLECT that in the problem '
         + 'statement itself (e.g. "X existe déjà (fichier Y) ; le besoin porte sur Z").'

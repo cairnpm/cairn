@@ -1,10 +1,12 @@
-import type { Candidate, Classification, DecomposedSignal, Intent, Proposal, TranscriptEntry, Triage } from '../domain/types'
+import type { Candidate, Classification, DecomposedSignal, Intent, Proposal, TranscriptEntry, Triage, UiLang } from '../domain/types'
 
 export interface ProposeInput {
   raw: string
   transcript: TranscriptEntry[]
   candidates: Candidate[]
   classification: Classification
+  /** UI locale — the language the agent writes its user-facing output in (defaults to French). */
+  lang?: UiLang
   /** Present when refining a known feature — its current pitch, to merge into. */
   existing?: { title: string; problem: string; solution: string; rabbit_holes: string; out_of_bounds: string; appetite: string }
   /** Read-only roadmap context (active cycles + in-flight features) so the agent routes with the
@@ -41,15 +43,15 @@ export interface LlmProvider {
   /** Route the input: a read-only question, a refine of a named feature, or a raw signal. */
   detectIntent: (message: string) => Promise<Intent>
   /** Answer a read-only question about a feature from its current DB state (no writing). */
-  answerQuery: (question: string, context: string) => Promise<string>
+  answerQuery: (question: string, context: string, lang?: UiLang) => Promise<string>
   classify: (content: string) => Promise<Classification>
   /** A single targeted question, or null when the spec is complete enough. */
-  clarify: (input: { raw: string; transcript: TranscriptEntry[]; code?: string }) => Promise<string | null>
+  clarify: (input: { raw: string; transcript: TranscriptEntry[]; code?: string; lang?: UiLang }) => Promise<string | null>
   propose: (input: ProposeInput) => Promise<Proposal>
   /** Triage a raw input: one shapeable problem (single) or several (multi → offer decomposition). */
-  triage: (input: { raw: string }) => Promise<Triage>
+  triage: (input: { raw: string; lang?: UiLang }) => Promise<Triage>
   /** Carve a dense input (e.g. a transcript) into discrete, recontextualized product signals. */
-  decompose: (input: { raw: string; roadmap?: string; code?: string }) => Promise<DecomposedSignal[]>
+  decompose: (input: { raw: string; roadmap?: string; code?: string; lang?: UiLang }) => Promise<DecomposedSignal[]>
 }
 
 let _provider: LlmProvider | null = null

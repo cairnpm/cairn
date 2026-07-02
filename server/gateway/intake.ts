@@ -6,7 +6,7 @@ import { getAttachment, linkAttachments, uploadsDir } from '../db/attachments'
 import { logEvent } from '../db/events'
 import { ensureSchema } from '../db/schema'
 import type {
-  BatchSegment, BatchSession, Candidate, Feature, IntakeSessionData, IntakeState, Proposal, TurnResponse,
+  BatchSegment, BatchSession, Candidate, Feature, IntakeSessionData, IntakeState, Proposal, TurnResponse, UiLang,
 } from '../domain/types'
 import { getLlm } from '../llm/provider'
 import type { AttachmentForLlm, LlmProvider } from '../llm/provider'
@@ -248,7 +248,7 @@ async function fullSourceText(message: string, ids: string[], llm: LlmProvider):
   return parts.join('\n\n')
 }
 
-export async function intakeTurn(sessionId: string | null, message: string, source = 'manual', capturedBy: string | null = null, attachmentIds: string[] = []): Promise<TurnResponse> {
+export async function intakeTurn(sessionId: string | null, message: string, source = 'manual', capturedBy: string | null = null, attachmentIds: string[] = [], lang: UiLang = 'fr'): Promise<TurnResponse> {
   ensureSchema()
   const llm = await getLlm()
   let text = message.trim()
@@ -267,14 +267,14 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
       mode: intent.intent, target_feature_id: null, merge_from_id: null,
       initial_action: null, initial_target: null,
       transcript: [{ role: 'user', text }], proposal: null, candidates: [],
-      attachment_ids: attachmentIds,
+      attachment_ids: attachmentIds, lang,
     }
 
     // Read-only question → answer from current state (whole-product snapshot), no write.
     if (intent.intent === 'query') {
       const hit = searchFeatures(intent.target || text, 1)[0]
       data.target_feature_id = hit?.id ?? null
-      const answer = await llm.answerQuery(text, await queryContext(intent.target || text))
+      const answer = await llm.answerQuery(text, await queryContext(intent.target || text), lang)
       data.transcript.push({ role: 'agent', text: answer })
       run(
         'INSERT INTO intake_session (id, state, turns, data, committed, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)',
@@ -312,11 +312,11 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
     // (in chat), and ends on a recap. Triage reads the FULL source (untruncated attachments).
     if (data.mode === 'signal') {
       const triageSource = attachmentIds.length ? await fullSourceText(message, attachmentIds, llm) : text
-      const triage = await llm.triage({ raw: triageSource })
+      const triage = await llm.triage({ raw: triageSource, lang })
       if (triage.mode === 'multi' && triage.count >= 2) {
         // Decompose drives the rest (guided clarify → recap). If it finds nothing to split, fall
         // through to the normal single-signal shaping.
-        try { return await decomposeIntake(message, attachmentIds, source, capturedBy) }
+        try { return await decomposeIntake(message, attachmentIds, source, capturedBy, lang) }
         catch { /* degrade to single shaping */ }
       }
     }
@@ -354,7 +354,7 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
         if (hit) fid = hit.id
       }
       if (fid) data.target_feature_id = fid
-      const answer = await llm.answerQuery(text, await queryContext(intent.target || text))
+      const answer = await llm.answerQuery(text, await queryContext(intent.target || text), data.lang)
       data.transcript.push({ role: 'agent', text: answer })
       saveSession(sessionId, 'answered', turns, data)
       return { session_id: sessionId, state: 'answered', agent_message: answer, proposal: null }
@@ -401,7 +401,7 @@ async function advance(
 
   // Ask at most until the cap; once capped, force a proposal.
   if (!skipClarify && turns < MAX_TURNS) {
-    const question = await llm.clarify({ raw: data.raw, transcript: data.transcript, code })
+    const question = await llm.clarify({ raw: data.raw, transcript: data.transcript, code, lang: data.lang })
     if (question) {
       data.transcript.push({ role: 'agent', text: question })
       saveSession(id, 'clarify', turns, data)
@@ -420,7 +420,7 @@ async function advance(
     const absorbed = get<Feature>('SELECT * FROM features WHERE id = ?', data.merge_from_id)
     const mergeRaw = `Fusion de deux features. À ABSORBER : « ${absorbed?.title} » — problème: ${absorbed?.problem} ; solution: ${absorbed?.solution} ; rabbit holes: ${absorbed?.rabbit_holes} ; no-gos: ${absorbed?.out_of_bounds}. Produis un pitch CONSOLIDÉ qui couvre les deux features.`
     proposal = await llm.propose({
-      raw: mergeRaw, transcript: data.transcript, classification, roadmap, code,
+      raw: mergeRaw, transcript: data.transcript, classification, roadmap, code, lang: data.lang,
       candidates: survivor ? [{ feature_id: survivor.id, title: survivor.title, similarity: 1 }] : candidates,
       existing: survivor
         ? { title: survivor.title, problem: survivor.problem, solution: survivor.solution || '', rabbit_holes: survivor.rabbit_holes || '', out_of_bounds: survivor.out_of_bounds || '', appetite: survivor.appetite || 'small' }
@@ -435,7 +435,7 @@ async function advance(
     // Explicit target: force append to it, and feed Claude the current pitch to merge into.
     const target = get<Feature>('SELECT * FROM features WHERE id = ?', data.target_feature_id)
     proposal = await llm.propose({
-      raw: data.raw, transcript: data.transcript, classification, roadmap, code,
+      raw: data.raw, transcript: data.transcript, classification, roadmap, code, lang: data.lang,
       candidates: target ? [{ feature_id: target.id, title: target.title, similarity: 1 }] : candidates,
       existing: target
         ? { title: target.title, problem: target.problem, solution: target.solution || '', rabbit_holes: target.rabbit_holes || '', out_of_bounds: target.out_of_bounds || '', appetite: target.appetite || 'small' }
@@ -458,7 +458,7 @@ async function advance(
       reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose d'affiner la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
     }
   } else {
-    proposal = await llm.propose({ raw: data.raw, transcript: data.transcript, candidates, classification, roadmap, code })
+    proposal = await llm.propose({ raw: data.raw, transcript: data.transcript, candidates, classification, roadmap, code, lang: data.lang })
     if (proposal.action === 'append') {
       reflect = `J'ai compris : « ${proposal.proposed_spec.problem} ». Je propose de le rattacher à la feature « ${proposal.proposed_spec.title} » (${proposal.confidence * 100 | 0}% de confiance). Tu confirmes, ou tu corriges ?`
     } else if (proposal.action === 'discard') {
@@ -747,7 +747,7 @@ function batchRecap(batch: BatchSession): string {
 /** Read the full source (message + attachments incl. .docx), segment it into discrete signals, route
  *  each (embed → candidates → propose), then EITHER open guided clarify (agent-decided) or, if every
  *  segment is clear, go straight to the recap. Returns a TurnResponse the chat drives. */
-export async function decomposeIntake(message: string, attachmentIds: string[] = [], source = 'manual', capturedBy: string | null = null): Promise<TurnResponse> {
+export async function decomposeIntake(message: string, attachmentIds: string[] = [], source = 'manual', capturedBy: string | null = null, lang: UiLang = 'fr'): Promise<TurnResponse> {
   ensureSchema()
   const llm = await getLlm()
   const raw = await fullSourceText(message, attachmentIds, llm)
@@ -761,7 +761,7 @@ export async function decomposeIntake(message: string, attachmentIds: string[] =
   await refreshIfStale()
   const repo = codeRepo()
   const sourceCode = await codeGroundingFor(raw, llm, repo)
-  const signals = await llm.decompose({ raw, roadmap, code: sourceCode })
+  const signals = await llm.decompose({ raw, roadmap, code: sourceCode, lang })
   if (!signals.length) throw createError({ statusCode: 422, statusMessage: 'Aucun signal distinct trouvé' })
 
   const segments: BatchSegment[] = []
@@ -770,7 +770,7 @@ export async function decomposeIntake(message: string, attachmentIds: string[] =
     const embedding = await llm.embed(signal.problem)
     const candidates = topCandidates(embedding)
     const code = await codeGroundingFor(signal.problem, llm, repo)
-    const proposal = await llm.propose({ raw: signal.problem, transcript: [], candidates, classification: signal.classification, roadmap, code })
+    const proposal = await llm.propose({ raw: signal.problem, transcript: [], candidates, classification: signal.classification, roadmap, code, lang })
     segments.push({ id: newId(), signal, proposal, include: proposal.action !== 'discard', clarifying_question: proposal.clarifying_question ?? null, answer: null })
     embeddings.push(embedding)
   }
@@ -787,7 +787,7 @@ export async function decomposeIntake(message: string, attachmentIds: string[] =
     raw, source, captured_by: capturedBy, mode: 'signal',
     target_feature_id: null, merge_from_id: null, initial_action: null, initial_target: null,
     transcript: [{ role: 'agent', text: agentMsg }], proposal: null, candidates: [], attachment_ids: attachmentIds,
-    batch,
+    batch, lang,
   }
   const id = newId()
   const now = new Date().toISOString()
@@ -807,7 +807,7 @@ async function advanceBatchClarify(sessionId: string, data: IntakeSessionData, a
     const candidates = topCandidates(embedding)
     await refreshIfStale()
     const code = await codeGroundingFor(enriched, llm, codeRepo())
-    seg.proposal = await llm.propose({ raw: enriched, transcript: [], candidates, classification: seg.signal.classification, roadmap: roadmapContext(), code })
+    seg.proposal = await llm.propose({ raw: enriched, transcript: [], candidates, classification: seg.signal.classification, roadmap: roadmapContext(), code, lang: data.lang })
     seg.signal = { ...seg.signal, problem: enriched }
     seg.answer = answer
     seg.clarifying_question = null
