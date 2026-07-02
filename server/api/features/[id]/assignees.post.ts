@@ -17,6 +17,6 @@ export default defineAuthedHandler(async (event, { actor }) => {
   if (!member) throw createError({ statusCode: 400, statusMessage: 'Unknown member' })
 
   addAssignee(id, userId, role, actor)
-  logEvent(id, actor, 'assigned', `${actor} a ajouté ${member.name} comme ${ROLE_LABEL[role]}`, { user_id: userId, role })
+  logEvent(id, actor, 'assigned', `${actor} a ajouté ${member.name} comme ${ROLE_LABEL[role]}`, { user_id: userId, role, name: member.name })
   return { assignees: listAssignees(id), events: listFeatureEvents(id) }
 })

@@ -572,7 +572,7 @@ export async function commitProposal(proposal: Proposal, ctx: CommitContext): Pr
         survivor.signal_count + absorbed.signal_count, encodeEmbedding(localEmbed(merged)), now, survivorId,
       )
       run('UPDATE features SET status = ?, updated_at = ? WHERE id = ?', 'archived', now, absorbedId)
-      logEvent(survivorId, actor, 'merged', `Feature « ${absorbed.title} » fusionnée dans « ${survivor.title} » par ${actor || 'inconnu'}`, { from: absorbed.title, changes })
+      logEvent(survivorId, actor, 'merged', `Feature « ${absorbed.title} » fusionnée dans « ${survivor.title} » par ${actor || 'inconnu'}`, { from: absorbed.title, into: survivor.title, changes })
       logEvent(absorbedId, actor, 'merged', `Fusionnée dans « ${survivor.title} » par ${actor || 'inconnu'} — archivée`, { into: survivor.title })
       featureId = survivorId
       feedbackStatus = 'archived' // the merge instruction is not a product signal

@@ -22,11 +22,11 @@ export default defineAuthedHandler(async (event, { user, actor }) => {
     if (existing) {
       run('DELETE FROM betting_votes WHERE id = ?', existing.id)
       voted = false
-      logBettingEvent(id, actor, 'vote_cleared', `${actor} a retiré son vote sur « ${cand.title_snap} »`, { candidate_id: candidateId })
+      logBettingEvent(id, actor, 'vote_cleared', `${actor} a retiré son vote sur « ${cand.title_snap} »`, { candidate_id: candidateId, title: cand.title_snap })
     } else {
       run('INSERT INTO betting_votes (id, table_id, candidate_id, voter_id, voter_name, created_at) VALUES (?, ?, ?, ?, ?, datetime(\'now\'))', newId(), id, candidateId, user.id, actor)
       voted = true
-      logBettingEvent(id, actor, 'vote_cast', `${actor} a voté pour « ${cand.title_snap} »`, { candidate_id: candidateId })
+      logBettingEvent(id, actor, 'vote_cast', `${actor} a voté pour « ${cand.title_snap} »`, { candidate_id: candidateId, title: cand.title_snap })
     }
   })
   return { ok: true, voted: voted! }

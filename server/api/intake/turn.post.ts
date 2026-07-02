@@ -9,7 +9,8 @@ export default defineAuthedHandler(async (event, { actor }) => {
   // A turn needs either text or at least one attachment (e.g. a transcript dropped without a note).
   if (!message.trim() && !attachmentIds.length) throw createError({ statusCode: 400, statusMessage: 'message or attachment required' })
   // Output language follows the UI locale (cookie set by the client's language switcher; defaults to fr).
-  const lang = getCookie(event, 'bike-lang') === 'en' ? 'en' : 'fr'
+  const cookieLang = getCookie(event, 'bike-lang')
+  const lang = cookieLang === 'en' || cookieLang === 'es' ? cookieLang : 'fr'
   // Attribution comes from the authenticated session, never the request body.
   return intakeTurn(sessionId, message, source, actor, attachmentIds, lang)
 })

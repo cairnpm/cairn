@@ -100,7 +100,7 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
     </div>
 
     <template #aside>
-      <ActivityTimeline :events="events" :title="t('feature.activity')" :empty-text="t('feature.noActivity')" />
+      <ActivityTimeline :events="events" :title="t('feature.activity')" :empty-text="t('feature.noActivity')" scope="feature" />
     </template>
   </DetailLayout>
 </template>

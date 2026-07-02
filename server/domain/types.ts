@@ -1,6 +1,6 @@
 // ── Entities ───────────────────────────────────────────────────────────────
 // UI locale (cookie `bike-lang`) — drives the language the LLM writes its user-facing output in.
-export type UiLang = 'fr' | 'en'
+export type UiLang = 'fr' | 'en' | 'es'
 export type Classification = 'musing' | 'explore' | 'directive'
 export type FeedbackStatus = 'new' | 'routed' | 'pending_review' | 'archived'
 export type FeatureStatus = 'raw' | 'shaped' | 'bet' | 'building' | 'done' | 'archived'

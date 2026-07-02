@@ -49,7 +49,7 @@ export default defineAuthedHandler(async (event, { user, actor }) => {
       `UPDATE betting_tables SET status = 'validated', hill_id = ?, validated_at = datetime('now'), validated_by = ? WHERE id = ?`,
       hillId, actor, id,
     )
-    logBettingEvent(id, actor, 'validated', `Validée par ${actor} → hill « ${hillName} » · ${bet.length} pari(s)`, { hill_id: hillId, bet, skipped })
+    logBettingEvent(id, actor, 'validated', `Validée par ${actor} → hill « ${hillName} » · ${bet.length} pari(s)`, { hill_id: hillId, hill_name: hillName, bet, skipped })
   })
 
   return { ok: true, hill_id: hillId, bet, skipped }

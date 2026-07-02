@@ -18,6 +18,6 @@ export function markStaleFeatures(days = STALE_DAYS): void {
   if (!newlyStale.length) return
   for (const f of newlyStale) {
     run('UPDATE features SET stale = 1 WHERE id = ?', f.id)
-    logEvent(f.id, 'system', 'stale', `Marquée stale — non pariée depuis plus de ${days} jours`, undefined, 'system')
+    logEvent(f.id, 'system', 'stale', `Marquée stale — non pariée depuis plus de ${days} jours`, { days }, 'system')
   }
 }

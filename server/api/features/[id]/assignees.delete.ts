@@ -11,6 +11,6 @@ export default defineAuthedHandler(async (event, { actor }) => {
 
   removeAssignee(id, userId, role)
   const member = userId ? getUserById(userId) : undefined
-  if (member) logEvent(id, actor, 'unassigned', `${actor} a retiré ${member.name} (${role})`, { user_id: userId, role })
+  if (member) logEvent(id, actor, 'unassigned', `${actor} a retiré ${member.name} (${role})`, { user_id: userId, role, name: member.name })
   return { assignees: listAssignees(id), events: listFeatureEvents(id) }
 })

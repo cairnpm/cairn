@@ -36,7 +36,7 @@ function parseJson<T>(text: string | null): T | null {
 const nullableString = { anyOf: [{ type: 'string' }, { type: 'null' }] }
 
 /** The language the agent writes user-facing output in, from the UI locale (defaults to French). */
-function langName(lang?: UiLang): string { return lang === 'en' ? 'English' : 'French' }
+function langName(lang?: UiLang): string { return lang === 'en' ? 'English' : lang === 'es' ? 'Spanish' : 'French' }
 
 const INTENT_SCHEMA = {
   type: 'object',

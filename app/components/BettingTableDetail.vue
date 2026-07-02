@@ -68,7 +68,7 @@ const totalVotes = () => props.data.candidates.reduce((s, c) => s + c.voters.len
         </div>
 
     <template #aside>
-      <ActivityTimeline :events="data.events" :title="t('betting.timeline')" :empty-text="t('betting.noActivity')" />
+      <ActivityTimeline :events="data.events" :title="t('betting.timeline')" :empty-text="t('betting.noActivity')" scope="betting" />
     </template>
   </DetailLayout>
 </template>
