@@ -21,6 +21,15 @@ export function codeRepo(): string | undefined {
   return grepPath()
 }
 
+/** Zero-egress code grounding for a signal: expand it into likely identifiers, then grep the clone so
+ *  routing dedupes against what's actually BUILT, not just the tickets. Empty when no repo is linked.
+ *  Shared by the single-signal path and the decompose/batch path. */
+async function codeGroundingFor(text: string, llm: LlmProvider, repo: string | undefined): Promise<string> {
+  if (!repo) return ''
+  const terms = llm.codeTerms ? await llm.codeTerms(text).catch(() => []) : []
+  return codeContextFor([text, ...terms].join(' '), { repo })
+}
+
 /** Context for a read-only product question: the roadmap/backlog snapshot + any related code, so
  *  "où en est X ?" can verify what's actually SHIPPED in the repo — not just the roadmap status. */
 async function queryContext(focus: string): Promise<string> {
@@ -381,13 +390,7 @@ async function advance(
   // dedupes against reality, not just tickets. Empty when no repo is linked.
   await refreshIfStale() // keep the clone current (lazy, ≤ every 10 min) before grepping
   const repo = codeRepo()
-  let code = ''
-  if (repo) {
-    // Expand the signal into likely code identifiers (zero-egress query expansion) so the lexical
-    // search catches paraphrased concepts, then grep the signal + those terms.
-    const terms = llm.codeTerms ? await llm.codeTerms(data.raw).catch(() => []) : []
-    code = await codeContextFor([data.raw, ...terms].join(' '), { repo })
-  }
+  const code = await codeGroundingFor(data.raw, llm, repo)
 
   // A merge is an explicit human directive (the survivor/absorbed are already resolved) — skip the
   // adaptive shaping loop and go straight to the consolidated-pitch proposal for confirmation.
@@ -748,7 +751,14 @@ export async function decomposeIntake(message: string, attachmentIds: string[] =
   if (!raw.trim()) throw createError({ statusCode: 400, statusMessage: 'Rien à décomposer (source vide)' })
 
   const roadmap = roadmapContext()
-  const signals = await llm.decompose({ raw, roadmap })
+
+  // Ground against the actual codebase, exactly like the single-signal path — dedupe vs what's already
+  // BUILT, not just the tickets. Refresh the clone once; ground the whole source for segmentation (so
+  // decompose doesn't extract shipped capabilities as new), then per segment for routing.
+  await refreshIfStale()
+  const repo = codeRepo()
+  const sourceCode = await codeGroundingFor(raw, llm, repo)
+  const signals = await llm.decompose({ raw, roadmap, code: sourceCode })
   if (!signals.length) throw createError({ statusCode: 422, statusMessage: 'Aucun signal distinct trouvé' })
 
   const segments: BatchSegment[] = []
@@ -756,7 +766,8 @@ export async function decomposeIntake(message: string, attachmentIds: string[] =
   for (const signal of signals) {
     const embedding = await llm.embed(signal.problem)
     const candidates = topCandidates(embedding)
-    const proposal = await llm.propose({ raw: signal.problem, transcript: [], candidates, classification: signal.classification, roadmap })
+    const code = await codeGroundingFor(signal.problem, llm, repo)
+    const proposal = await llm.propose({ raw: signal.problem, transcript: [], candidates, classification: signal.classification, roadmap, code })
     segments.push({ id: newId(), signal, proposal, include: proposal.action !== 'discard', clarifying_question: signal.clarifying_question ?? null, answer: null })
     embeddings.push(embedding)
   }
@@ -791,7 +802,9 @@ async function advanceBatchClarify(sessionId: string, data: IntakeSessionData, a
     const enriched = `${seg.signal.problem}\n\n[Précision de l'auteur] ${answer}`
     const embedding = await llm.embed(enriched)
     const candidates = topCandidates(embedding)
-    seg.proposal = await llm.propose({ raw: enriched, transcript: [], candidates, classification: seg.signal.classification, roadmap: roadmapContext() })
+    await refreshIfStale()
+    const code = await codeGroundingFor(enriched, llm, codeRepo())
+    seg.proposal = await llm.propose({ raw: enriched, transcript: [], candidates, classification: seg.signal.classification, roadmap: roadmapContext(), code })
     seg.signal = { ...seg.signal, problem: enriched, clarifying_question: null }
     seg.answer = answer
     seg.clarifying_question = null

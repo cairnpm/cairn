@@ -413,8 +413,9 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       return { mode: parsed.mode, count: parsed.mode === 'multi' ? Math.max(2, count) : 1, reason: parsed.reason || '' }
     },
 
-    decompose: async ({ raw, roadmap }) => {
+    decompose: async ({ raw, roadmap, code }) => {
       const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
+      const codeBlock = code ? `\n\n${code}` : ''
       const text = await callClaude(
         `Product context:\n${productContext()}\n\n`
         + 'You are a senior PM doing Shape Up intake. The input is often a meeting/demo transcript where most of the '
@@ -429,9 +430,12 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'well (the core problem is ambiguous, it reads as a solution without the underlying need, the scope/appetite '
         + 'is unclear, or it might overlap an existing feature), write ONE targeted question (FR) to ask the human. '
         + 'If the signal is already clear enough to shape, set clarifying_question to null. Be SELECTIVE — most '
-        + 'well-stated signals need null; only flag the genuinely ambiguous ones. Write every field in FRENCH.'
+        + 'well-stated signals need null; only flag the genuinely ambiguous ones. Write every field in FRENCH. '
+        + 'When an "Existing code" block is present, treat it as GROUND TRUTH of what is already BUILT: do NOT extract '
+        + 'an already-shipped capability as a NEW signal, and when a signal overlaps existing code, say so in its '
+        + 'clarifying_question (e.g. "X semble déjà exister dans le code (…) — s\'agit-il d\'une évolution ou d\'un oubli ?").'
         + roadmapBlock,
-        `Source:\n${raw.slice(0, 120000)}`,
+        `Source:\n${raw.slice(0, 120000)}${codeBlock}`,
         2600, { temperature: 0, schema: DECOMPOSE_SCHEMA },
       )
       const parsed = parseJson<{ signals?: DecomposedSignal[] }>(text)

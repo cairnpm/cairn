@@ -49,7 +49,7 @@ export interface LlmProvider {
   /** Triage a raw input: one shapeable problem (single) or several (multi → offer decomposition). */
   triage: (input: { raw: string }) => Promise<Triage>
   /** Carve a dense input (e.g. a transcript) into discrete, recontextualized product signals. */
-  decompose: (input: { raw: string; roadmap?: string }) => Promise<DecomposedSignal[]>
+  decompose: (input: { raw: string; roadmap?: string; code?: string }) => Promise<DecomposedSignal[]>
 }
 
 let _provider: LlmProvider | null = null
