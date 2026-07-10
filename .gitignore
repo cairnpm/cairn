@@ -24,6 +24,9 @@ node_modules
 # Local data (SQLite file)
 .data
 
+# CLI session cache (cached auth cookie — a credential)
+.cairn
+
 # Local working notes (not published)
 docs/monetisation-distribution.md
 
