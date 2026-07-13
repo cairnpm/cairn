@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Tailwind detects sources from the build root. The public site (site/) builds from its own root and
+   reuses this app's components, so their classes would be stripped there unless we say where they live. */
+@source "../..";
+
 @custom-variant dark (&:is(.dark *));
 
 /* shadcn-vue — neutral base color. Black & white. */
