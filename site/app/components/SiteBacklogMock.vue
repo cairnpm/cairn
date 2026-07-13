@@ -5,16 +5,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 // The landing renders the shipped UI, so it can't drift the way a screenshot would.
 const ROWS = [
   { title: 'Merge duplicate signals at capture', status: 'building', appetite: '6 weeks', people: [{ name: 'Nadia' }, { name: 'Tom' }] },
-  { title: 'Grep the linked repo before shaping', status: 'bet', appetite: '6 weeks', people: [{ name: 'Léo' }] },
+  { title: 'Grep the repo before shaping', status: 'bet', appetite: '6 weeks', people: [{ name: 'Léo' }] },
   { title: 'Quorum before a table is validated', status: 'shaped', appetite: '2 weeks', people: [{ name: 'Marie' }] },
   { title: 'Discard noise without deleting it', status: 'shaped', appetite: '1 week', people: [{ name: 'Marie' }, { name: 'Tom' }] },
-  { title: 'Activity log in the reader’s language', status: 'done', appetite: '2 weeks', people: [{ name: 'Nadia' }] },
+  { title: 'Activity log in your language', status: 'done', appetite: '2 weeks', people: [{ name: 'Nadia' }] },
 ]
 </script>
 
 <template>
   <SitePanel title="cairn — backlog">
-    <Table>
+    <!-- The product's table is dense by design (px-2), which reads as cramped when the panel is the hero
+         shot. Widen the gutter here only — the row rules stay full-bleed, so the frame keeps its grid. -->
+    <Table class="[&_td]:px-5 [&_th]:px-5">
       <TableHeader>
         <TableRow class="hover:bg-transparent">
           <TableHead>Feature</TableHead>
