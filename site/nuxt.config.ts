@@ -17,6 +17,19 @@ const productServer = fileURLToPath(new URL('../server', import.meta.url))
 export default defineNuxtConfig({
   extends: ['..'],
 
+  // SEO, site-only: the product is auth-gated and must never be indexed, so it doesn't load these.
+  // `nuxt-seo-utils` is what turns the relative og:image into an absolute URL and emits the canonical.
+  modules: ['@nuxtjs/robots', '@nuxtjs/sitemap', 'nuxt-schema-org', 'nuxt-seo-utils'],
+
+  // Every absolute URL (canonical, og:url, sitemap, robots) derives from this. Override per-deploy with
+  // NUXT_SITE_URL — e.g. a preview deployment — without touching the code.
+  site: {
+    url: 'https://cairnpm.com',
+    name: 'Cairn',
+    description: 'The PM agent that turns a scattered stream of feedback into a roadmap you can reason about. Open, self-hosted, built on Shape Up.',
+    defaultLocale: 'en',
+  },
+
   // The product's code aliases itself (`@/components/ui/badge`), and Nuxt resolves aliases against the
   // *extending* app — here, site/ — so point them back at the product, or none of it resolves.
   // Site-local modules therefore import each other with relative paths, never `~`.
