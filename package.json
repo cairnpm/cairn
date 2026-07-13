@@ -12,6 +12,10 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
+    "site:dev": "nuxt dev site",
+    "site:generate": "nuxt generate site",
+    "site:typecheck": "nuxt typecheck site",
+    "site:deploy": "fly deploy . --config site/fly.toml --dockerfile site/Dockerfile",
     "test": "vitest run",
     "test:intake": "vitest run tests/intake.test.ts",
     "test:members": "vitest run tests/members.test.ts"
@@ -34,8 +38,12 @@
     "vue-sonner": "^2.0.9"
   },
   "devDependencies": {
+    "@nuxtjs/robots": "^6.1.2",
+    "@nuxtjs/sitemap": "^8.2.2",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.20.0",
+    "nuxt-schema-org": "^6.2.3",
+    "nuxt-seo-utils": "^8.3.1",
     "shadcn-nuxt": "^2.0.0",
     "tailwindcss": "^4.0.0",
     "tw-animate-css": "^1.0.0",

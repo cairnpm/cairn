@@ -1,6 +1,8 @@
 node_modules
 .output
 .nuxt
+site/.output
+site/.nuxt
 .data
 .git
 .github
