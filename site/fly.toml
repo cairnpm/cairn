@@ -1,0 +1,30 @@
+# Fly.io configuration for the PUBLIC LANDING PAGE — a separate app from the product (`../fly.toml`).
+#
+# Everything the product's config warns about does not apply here: the site is prerendered static HTML
+# with no database and no volume, so it is stateless. It may run several machines, and a redeploy can
+# replace them however it likes.
+#
+# Deploy from the repo root — the build context is the whole tree, because the site is a Nuxt layer over
+# the product app:
+#
+#   pnpm site:deploy
+app = "cairn-site"
+primary_region = "cdg"
+
+[build]
+
+[deploy]
+  strategy = "immediate"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  # A landing page is a first impression: keep one machine warm rather than make the first visitor of the
+  # day wait on a cold start.
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
