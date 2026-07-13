@@ -36,9 +36,9 @@ const STAGES = [
 </script>
 
 <template>
-  <SiteBand label="The loop" title="You don’t fill a backlog. Signals bubble up.">
-    <div class="grid gap-px border-y bg-border sm:grid-cols-2 lg:grid-cols-5">
-      <div v-for="stage in STAGES" :key="stage.step" class="flex min-w-0 flex-col bg-background p-6">
+  <SiteBand label="The loop" title="You don’t fill a backlog. Signals bubble up." flush>
+    <SiteFlushRow :cols="5">
+      <div v-for="stage in STAGES" :key="stage.step" class="flex flex-col">
         <div class="flex items-center justify-between gap-2">
           <span class="font-mono text-[11px] tracking-[0.09em] text-muted-foreground/50">{{ stage.step }}</span>
           <StatusBadge v-if="stage.status" :status="stage.status" />
@@ -46,6 +46,6 @@ const STAGES = [
         <div class="mt-4 text-[14px] font-medium">{{ stage.name }}</div>
         <p class="mt-2 text-[13px] leading-[21px] text-muted-foreground">{{ stage.body }}</p>
       </div>
-    </div>
+    </SiteFlushRow>
   </SiteBand>
 </template>
