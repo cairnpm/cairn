@@ -11,6 +11,69 @@ const DOCKER = `docker run -d --name cairn \\
   -e ANTHROPIC_API_KEY="sk-ant-…" \\
   ghcr.io/cairnpm/cairn:latest`
 
+// The four actions the agent can commit — docs/intake.md §4.
+const ROUTING = [
+  {
+    name: 'create_feature',
+    meta: 'No candidate is the same feature.',
+    body: 'Inserts a shaped feature. Creating is a deliberate act — the agent has to justify a new one, because duplicates are what kill a backlog.',
+  },
+  {
+    name: 'append',
+    meta: 'A shaped candidate addresses the same problem.',
+    body: 'Refines the existing pitch instead of forking it, attaches the signal to it, and resets the staleness clock.',
+  },
+  {
+    name: 'merge',
+    meta: '“X is a duplicate of Y.”',
+    body: 'Feedback, decisions, PR links and history all repatriate onto the survivor. The absorbed feature is archived, never destroyed.',
+  },
+  {
+    name: 'discard',
+    meta: 'True noise, or a duplicate that adds nothing.',
+    body: 'The raw signal is still stored and archived — nothing is lost. A bug report is never discarded, whatever it looks like.',
+  },
+]
+
+// Dedup runs at two levels, on every turn and again at commit — docs/intake.md §5.
+const DEDUP = [
+  {
+    name: 'topCandidates()',
+    meta: 'Semantic — on every turn',
+    body: 'Cosine similarity against shaped features only. The score is a hint, not a rule: the agent is the judge, and it appends when a candidate addresses the same underlying problem — even when the two share not one word.',
+  },
+  {
+    name: 'content_hash',
+    meta: 'Exact — at commit',
+    body: 'sha256 of the normalised signal. If it has already been routed, the commit is an idempotent no-op. Paste the same thread twice and nothing is written twice.',
+  },
+  {
+    name: 'anti-echo guard',
+    meta: 'On every append',
+    body: 'A pitch field is never overwritten by the raw instruction that triggered it. A shaped pitch cannot be degraded back into a reworded request.',
+  },
+]
+
+// The self-host ethos — README.
+const ETHOS = [
+  {
+    name: 'Zero-egress',
+    body: 'No telemetry, no phone-home. A linked product repo is grepped on your own disk and never uploaded anywhere.',
+  },
+  {
+    name: 'Bring your own key',
+    body: 'The agent runs on your Anthropic key. There is no data detour through us, because there is no “us” in the loop.',
+  },
+  {
+    name: 'One process, one file',
+    body: 'Node and an embedded SQLite file. No external database, no queue, no account on someone else’s server.',
+  },
+  {
+    name: 'Source-available',
+    body: 'FSL-1.1-ALv2: read every line, audit it, run it free forever. Each release turns Apache-2.0 two years after it ships.',
+  },
+]
+
 const FAQ = [
   {
     q: 'What does Cairn actually do?',
@@ -79,6 +142,8 @@ const FAQ = [
       </div>
     </section>
 
+    <SiteFlow />
+
     <SiteSection label="Intake" title="An agent, not a form.">
       <template #body>
         Paste a Slack thread, a bug report, a whole meeting transcript. The agent splits it into the
@@ -87,6 +152,10 @@ const FAQ = [
       </template>
       <template #visual><SiteIntakeMock /></template>
     </SiteSection>
+
+    <SiteCardGrid
+      label="Routing" title="Every signal ends in one of four decisions." :cards="ROUTING" :cols="4"
+    />
 
     <SiteSection label="Code-aware" title="Grounded in the code you already shipped." reverse>
       <template #body>
@@ -98,6 +167,10 @@ const FAQ = [
       <template #visual><SiteCodeMock /></template>
     </SiteSection>
 
+    <SiteCardGrid
+      label="Dedup" title="Deduplication isn’t a feature. It’s the floor." :cards="DEDUP" :cols="3"
+    />
+
     <SiteSection label="Shape Up" title="The method is the product.">
       <template #body>
         Pitches with a real problem and a fixed appetite. A betting table where members vote and the owner
@@ -106,6 +179,16 @@ const FAQ = [
       </template>
       <template #visual><SitePitchMock /></template>
     </SiteSection>
+
+    <SiteBand>
+      <blockquote class="mx-auto max-w-[22ch] text-center text-[30px] font-medium leading-[36px] tracking-[-0.03em] text-balance lg:text-[44px] lg:leading-[50px]">
+        Whatever isn’t bet on goes stale — and has to be re-defended.
+      </blockquote>
+      <p class="mx-auto mt-8 max-w-[58ch] text-center text-[15px] leading-[25px] text-muted-foreground">
+        There is no infinite backlog to hide in. A shaped feature nobody bets on is marked stale and has to
+        earn its place again. The pile doesn’t grow — it gets defended, merged, or dropped.
+      </p>
+    </SiteBand>
 
     <SiteSection label="Self-hosted" title="You own the data. There is no “us” in the loop." reverse>
       <template #body>
@@ -118,6 +201,8 @@ const FAQ = [
         </SitePanel>
       </template>
     </SiteSection>
+
+    <SiteCardGrid label="Ethos" title="No telemetry. No detour. No lock-in." :cards="ETHOS" :cols="4" />
 
     <section class="grid border-t lg:grid-cols-3">
       <div class="min-w-0 px-6 pt-14 lg:px-16 lg:py-24">
