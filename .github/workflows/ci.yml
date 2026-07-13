@@ -19,6 +19,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm build
+      # The public site (site/) is a second build target over the same code: without these, a change to a
+      # shared component can break the landing page while this job stays green.
+      - run: pnpm site:typecheck
+      - run: pnpm site:generate
       # Deterministic: the intake suite runs against the offline stub (no LLM call, no API key needed).
       - run: INTAKE_TEST_STUB=1 pnpm test
 
