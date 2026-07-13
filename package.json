@@ -12,6 +12,9 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "typecheck": "nuxt typecheck",
+    "site:dev": "nuxt dev site",
+    "site:generate": "nuxt generate site",
+    "site:typecheck": "nuxt typecheck site",
     "test": "vitest run",
     "test:intake": "vitest run tests/intake.test.ts",
     "test:members": "vitest run tests/members.test.ts"

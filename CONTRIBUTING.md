@@ -19,6 +19,22 @@ pnpm dev                                    # http://localhost:3000
 
 Default login on first boot: `ceo@cairn.local` / `cairn`.
 
+## Public site
+
+The landing page lives in [`site/`](./site) — a Nuxt layer over this app, so it renders the *real*
+components (status pills, tables, avatars) fed with fixtures rather than screenshots that rot.
+
+```bash
+pnpm site:dev                     # http://localhost:3000
+pnpm site:generate                # static HTML → site/.output/public
+```
+
+It ships as a **static** build to its own host; the product image never contains it, and the site build
+never compiles `server/` (the layer drops it from Nitro's scan dirs). Two consequences worth knowing
+before you touch it: the site has no API, so a product component that fetches needs a fixture override
+(see `site/app/composables/useMembers.ts`); and a layer's `~`/`@` resolve against the *extending* app,
+so they point at the product and site-local modules import each other with relative paths.
+
 ## Tests
 
 ```bash
