@@ -21,19 +21,26 @@ Default login on first boot: `ceo@cairn.local` / `cairn`.
 
 ## Public site
 
-The landing page lives in [`site/`](./site) — a Nuxt layer over this app, so it renders the *real*
-components (status pills, tables, avatars) fed with fixtures rather than screenshots that rot.
+[cairnpm.com](https://cairnpm.com) lives in [`site/`](./site) — a Nuxt layer over this app, so it renders
+the *real* components (status pills, tables, avatars) fed with fixtures rather than screenshots that rot.
 
 ```bash
 pnpm site:dev                     # http://localhost:3000
 pnpm site:generate                # static HTML → site/.output/public
+pnpm site:deploy                  # → Fly (app `cairn-site`, nginx over the static build)
 ```
 
-It ships as a **static** build to its own host; the product image never contains it, and the site build
-never compiles `server/` (the layer drops it from Nitro's scan dirs). Two consequences worth knowing
-before you touch it: the site has no API, so a product component that fetches needs a fixture override
-(see `site/app/composables/useMembers.ts`); and a layer's `~`/`@` resolve against the *extending* app,
-so they point at the product and site-local modules import each other with relative paths.
+It is **prerendered static HTML** on its own Fly app, separate from the product: the product image never
+contains it, and the site build never compiles `server/` (the layer drops it from Nitro's scan dirs).
+
+Three things worth knowing before you touch it:
+
+- **No API.** A product component that fetches needs a fixture override — see
+  `site/app/composables/useMembers.ts`.
+- **Aliases point at the product.** A layer's `~`/`@` resolve against the *extending* app, so they are
+  remapped to `app/`; site-local modules import each other with relative paths.
+- **The domain is baked in at build time.** Canonical, `og:image` and the sitemap are absolute URLs
+  written during prerender, so `NUXT_SITE_URL` is a build arg, not a runtime env var.
 
 ## Tests
 
