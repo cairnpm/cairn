@@ -89,6 +89,36 @@ describe('cairn CLI', () => {
     expect(JSON.parse(readFileSync(join(dir, 'session.json'), 'utf8')).cookie).toBe('nuxt-session=xyz')
   })
 
+  it('multiple Set-Cookie headers → uses getSetCookie(), not the comma-joined get()', async () => {
+    const features = [{ id: 'f1' }]
+    // The stub deliberately makes get() and getSetCookie() DISAGREE: undici comma-joins multiple
+    // Set-Cookie via get(), so the CLI must prefer getSetCookie(). If it regressed to get(), the
+    // attached cookie would be the decoy below and this test would fail.
+    const loginRes = {
+      status: 200, ok: true,
+      headers: {
+        get: (k: string) => (k.toLowerCase() === 'set-cookie' ? 'decoy=WRONG; Path=/' : null),
+        getSetCookie: () => ['nuxt-session=real; Path=/; HttpOnly', 'csrf=zzz; Path=/'],
+      },
+      async json() { return { ok: true } }, async text() { return '' },
+    }
+    const fetch = stubFetch({
+      'POST /api/auth/login': () => loginRes,
+      'GET /api/features': () => res(200, features),
+    })
+    const out = capture()
+
+    const code = await run(['features'], {
+      fetch, configDir: dir, out,
+      env: { CAIRN_URL: URL_BASE, CAIRN_EMAIL: 'a@b.c', CAIRN_PASSWORD: 'p' },
+    })
+
+    expect(code).toBe(0)
+    // The first (session) cookie is attached and cached — never the decoy from get().
+    expect(fetch.calls[1].headers.cookie).toBe('nuxt-session=real')
+    expect(JSON.parse(readFileSync(join(dir, 'session.json'), 'utf8')).cookie).toBe('nuxt-session=real')
+  })
+
   it('stale cookie → 401 triggers transparent re-login and one retry, refreshed cookie persisted', async () => {
     seedSession(dir, 'nuxt-session=stale')
     const features = [{ id: 'f1' }]
@@ -121,7 +151,7 @@ describe('cairn CLI', () => {
     const turn = { session_id: 's1', state: 'clarify', agent_message: 'Quelle est la priorité ?', proposal: null }
     const fetch = stubFetch({
       'POST /api/intake/turn': ({ body }) => {
-        expect(body).toEqual({ message: 'les utilisateurs veulent le mode sombre' })
+        expect(body).toEqual({ message: 'les utilisateurs veulent le mode sombre', source: 'agent' })
         return res(200, turn)
       },
     })
@@ -139,7 +169,7 @@ describe('cairn CLI', () => {
     const turn = { session_id: 's1', state: 'propose', agent_message: 'Voici ma proposition', proposal: { action: 'create' } }
     const fetch = stubFetch({
       'POST /api/intake/turn': ({ body }) => {
-        expect(body).toEqual({ message: 'priorité haute', session_id: 's1' })
+        expect(body).toEqual({ message: 'priorité haute', session_id: 's1', source: 'agent' })
         return res(200, turn)
       },
     })
@@ -168,6 +198,48 @@ describe('cairn CLI', () => {
     expect(JSON.parse(out.text)).toEqual(committed)
   })
 
+  it('capture that decomposes → batch_review surfaced; commit-batch posts the selected segments', async () => {
+    seedSession(dir, 'nuxt-session=abc')
+    // Multi-topic input auto-decomposes: state is batch_review, proposal is null, segments carry ids.
+    const batchTurn = {
+      session_id: 's1', state: 'batch_review', agent_message: 'Deux sujets détectés', proposal: null,
+      batch: { session_id: 's1', segments: [{ id: 'seg1' }, { id: 'seg2' }] },
+    }
+    const committed = { created: 2, updated: 0, discarded: 0, results: [] }
+    const fetch = stubFetch({
+      'POST /api/intake/turn': () => res(200, batchTurn),
+      'POST /api/intake/commit-batch': ({ body }) => {
+        // The selected segment ids are forwarded as the selection array the endpoint expects.
+        expect(body).toEqual({ session_id: 's1', segments: [{ id: 'seg1' }, { id: 'seg2' }] })
+        return res(200, committed)
+      },
+    })
+
+    const outT = capture()
+    expect(await run(['capture', 'A et B'], { fetch, configDir: dir, out: outT, env: { CAIRN_URL: URL_BASE } })).toBe(0)
+    expect(JSON.parse(outT.text)).toEqual(batchTurn) // batch state is surfaced, not swallowed
+
+    const outC = capture()
+    expect(await run(['commit-batch', '--session', 's1', '--segments', 'seg1,seg2'], { fetch, configDir: dir, out: outC, env: { CAIRN_URL: URL_BASE } })).toBe(0)
+    expect(JSON.parse(outC.text)).toEqual(committed)
+  })
+
+  it('commit / commit-batch without a session → rejected client-side, no request', async () => {
+    seedSession(dir, 'nuxt-session=abc')
+    const fetch = stubFetch({})
+
+    const out1 = capture()
+    expect(await run(['commit'], { fetch, configDir: dir, out: out1, env: { CAIRN_URL: URL_BASE } })).toBe(1)
+    expect(JSON.parse(out1.text)).toEqual({ error: { status: 0, message: 'usage: cairn commit --session <id>' } })
+
+    // commit-batch also needs --segments (the ids can't be inferred client-side).
+    const out2 = capture()
+    expect(await run(['commit-batch', '--session', 's1'], { fetch, configDir: dir, out: out2, env: { CAIRN_URL: URL_BASE } })).toBe(1)
+    expect(JSON.parse(out2.text)).toEqual({ error: { status: 0, message: 'usage: cairn commit-batch --session <id> --segments <id,id,…>' } })
+
+    expect(fetch.calls).toHaveLength(0)
+  })
+
   it('--pretty prints indented JSON (compact by default)', async () => {
     seedSession(dir, 'nuxt-session=abc')
     const features = [{ id: 'f1', title: 'Onboarding' }]
@@ -177,7 +249,7 @@ describe('cairn CLI', () => {
     const code = await run(['features', '--pretty'], { fetch, configDir: dir, out, env: { CAIRN_URL: URL_BASE } })
 
     expect(code).toBe(0)
-    expect(out.text).toBe(JSON.stringify(features, null, 2))
+    expect(out.text).toBe(`${JSON.stringify(features, null, 2)}\n`) // indented, newline-terminated
   })
 
   it('non-2xx (non-401) → nonzero exit + JSON error envelope, no re-login', async () => {
@@ -217,11 +289,11 @@ describe('cairn CLI', () => {
     expect(JSON.parse(out.text)).toEqual({ error: { status: 0, message: 'usage: cairn feature <id>' } })
   })
 
-  it('failed login → does not cache a blank cookie; surfaces the 401 envelope', async () => {
-    // Bad creds: login 401s with no Set-Cookie. The read then 401s too; the CLI must not persist ''.
+  it('failed login → single attempt, no blank cookie cached, surfaces the login 401', async () => {
+    // Bad creds: login 401s with no Set-Cookie. A fresh login yielding no cookie short-circuits —
+    // no wasted endpoint call, no second login — and the login's own error is what surfaces.
     const fetch = stubFetch({
       'POST /api/auth/login': () => res(401, { statusMessage: 'Identifiants invalides' }),
-      'GET /api/features': () => res(401, { statusMessage: 'Non authentifié' }),
     })
     const out = capture()
 
@@ -231,8 +303,9 @@ describe('cairn CLI', () => {
     })
 
     expect(code).toBe(1)
+    expect(fetch.calls).toHaveLength(1) // one login, and crucially NOT the read (blank cookie never sent)
     expect(() => readFileSync(join(dir, 'session.json'), 'utf8')).toThrow() // nothing persisted
-    expect(JSON.parse(out.text)).toEqual({ error: { status: 401, message: 'Non authentifié' } })
+    expect(JSON.parse(out.text)).toEqual({ error: { status: 401, message: 'Identifiants invalides' } })
   })
 
   it('betting → GET /api/betting-tables; feature <id> → GET /api/features/<id>', async () => {

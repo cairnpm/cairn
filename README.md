@@ -106,6 +106,28 @@ pnpm dev            # http://localhost:3000
 pnpm test:members   # hermetic auth/invitations test suite
 ```
 
+### Drive it from an agent (CLI)
+
+`cairn` is a thin HTTP client over the running server, so an agent can ground itself
+on the roadmap and feed signal into the intake — no second write path.
+
+```bash
+export CAIRN_URL=http://localhost:3000
+export CAIRN_EMAIL=agent@your-workspace   # use a DEDICATED, least-privilege account:
+export CAIRN_PASSWORD=…                    # the cached session can hit any endpoint it's a member of
+
+pnpm exec cairn features --status shaping  # reads: features / feature <id> / hills / betting / overview
+pnpm exec cairn capture "les users veulent le mode sombre"   # → {session_id, state, agent_message, proposal}
+pnpm exec cairn capture --session <id> "priorité haute"      # answer a clarify turn
+pnpm exec cairn commit --session <id>                        # finalise a single proposal
+pnpm exec cairn commit-batch --session <id> --segments a,b   # finalise a decomposed (batch_review) capture
+```
+
+Output is JSON by default (`--pretty` for humans). The session cookie is cached in
+`./.cairn/` **relative to the working directory** — run from the workspace root. The
+command surface is a closed allowlist (reads + intake); it's an agent guardrail, not a
+security boundary — a real boundary is the account's own permissions.
+
 ## Why source-available and not "free for everyone"?
 
 Cairn is free to **run, read, modify and self-host** — for any purpose except
