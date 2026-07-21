@@ -6,12 +6,16 @@
   "engines": {
     "node": ">=22.5"
   },
+  "bin": {
+    "cairn": "bin/cairn.mjs"
+  },
   "scripts": {
     "dev": "nuxt dev",
     "build": "nuxt build",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "typecheck": "nuxt typecheck",
+    "cli": "node bin/cairn.mjs",
+    "typecheck": "nuxt typecheck && tsc -p bin/tsconfig.json",
     "site:dev": "nuxt dev site",
     "site:generate": "nuxt generate site",
     "site:typecheck": "nuxt typecheck site",
