@@ -1,4 +1,10 @@
+import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
+
+// The public site (site/) extends this app as a Nuxt layer, and a layer's relative paths resolve
+// against the *extending* app — not against this directory. Anchor them, or the site build re-resolves
+// them onto itself and registers every component twice.
+const appDir = fileURLToPath(new URL('./app', import.meta.url))
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -19,9 +25,9 @@ export default defineNuxtConfig({
   },
 
   // Flat component names regardless of subfolders (<IntakeScreen />, not <ScreensIntakeScreen />)
-  components: [{ path: '~/components', pathPrefix: false }],
+  components: [{ path: `${appDir}/components`, pathPrefix: false }],
 
-  css: ['~/assets/css/tailwind.css'],
+  css: [`${appDir}/assets/css/tailwind.css`],
 
   vite: {
     plugins: [tailwindcss()],
@@ -31,7 +37,7 @@ export default defineNuxtConfig({
     // No prefix on component names: <Button />, <Card />, ...
     prefix: '',
     // Directory that holds the shadcn-vue components
-    componentDir: './app/components/ui',
+    componentDir: `${appDir}/components/ui`,
   },
 
   app: {
