@@ -1,4 +1,4 @@
-import { get, run } from '../db/client'
+import { all, get, run } from '../db/client'
 import { logEvent } from '../db/events'
 import { getSecret, getSetting } from '../db/settings'
 import { githubInstallationToken } from './githubApp'
@@ -26,24 +26,83 @@ export type OpenIssueResult =
   | { ok: true; issue_number: number; issue_url: string; existing: boolean }
   | { ok: false; error: OpenIssueError }
 
+/** Everything Cairn knows about the feature at bet time, beyond the raw pitch — folded into the issue
+ *  so the builder gets the full picture (why we bet, the evidence, the cycle) not just a title. */
+interface IssueContext {
+  hillName: string | null
+  rationale: string | null       // the "why" from the bet decision
+  decidedBy: string | null
+  signals: { content: string; source: string | null }[]  // the feedback that motivated it
+  signalCount: number
+}
+
 /** Absolute base URL of this instance, for the "back to Cairn" link. Empty when not configured. */
 function baseUrl(): string {
   return (process.env.CAIRN_BASE_URL || process.env.NUXT_PUBLIC_BASE_URL || '').replace(/\/$/, '')
 }
 
-/** Render the pitch as an issue body. Headings mirror the French UI copy (this is product output,
- *  not code); the pitch content is whatever the shaper wrote. */
-export function renderIssueBody(f: FeatureRow): string {
+/** Shape Up appetite → a framing the builder reads as a time box, not a bare word. */
+function appetiteLabel(a: string | null): string | null {
+  if (a === 'small') return 'Small batch — petit lot (~2 semaines)'
+  if (a === 'big') return 'Big batch — cycle complet (~6 semaines)'
+  return a
+}
+
+/** Render the shaped pitch + bet context as a proper execution ticket. Headings mirror the French UI
+ *  copy (this is product output, not code); the pitch content is whatever the shaper wrote. Empty
+ *  sections are dropped so a thin pitch stays clean rather than showing hollow headings. */
+export function renderIssueBody(f: FeatureRow, ctx: IssueContext): string {
   const base = baseUrl()
-  const section = (label: string, value: string | null) => (value?.trim() ? `## ${label}\n\n${value.trim()}\n` : '')
+  const section = (label: string, value: string | null) => (value?.trim() ? `## ${label}\n\n${value.trim()}` : '')
+  const oneLine = (s: string) => s.replace(/\s+/g, ' ').trim()
+
+  // A meta lead so the ticket opens with the cycle / appetite / evidence at a glance.
+  const meta: string[] = []
+  if (ctx.hillName) meta.push(`**Cycle** · ${ctx.hillName}`)
+  const appetite = appetiteLabel(f.appetite)
+  if (appetite) meta.push(`**Appétit** · ${appetite}`)
+  if (ctx.signalCount) meta.push(`**Signaux** · ${ctx.signalCount}`)
+
+  const evidence = ctx.signals.length
+    ? `## Signaux (${ctx.signalCount})\n\n${ctx.signals.map(s => `- ${oneLine(s.content)}${s.source ? ` _(${s.source})_` : ''}`).join('\n')}`
+    : ''
+  const why = ctx.rationale
+    ? `## Pourquoi ce pari\n\n${ctx.rationale.trim()}${ctx.decidedBy ? `\n\n— ${ctx.decidedBy}` : ''}`
+    : ''
+
   return [
+    meta.length ? `> ${meta.join('  ·  ')}` : '',
     section('Problème', f.problem),
-    f.appetite ? `## Appétit\n\n${f.appetite}\n` : '',
-    section('Solution', f.solution),
+    section('Solution envisagée', f.solution),
     section('Rabbit holes', f.rabbit_holes),
-    section('Hors périmètre', f.out_of_bounds),
-    base ? `\n---\n🪨 Suivi dans Cairn : ${base}/features/${f.id}` : '',
-  ].filter(Boolean).join('\n')
+    section('Hors périmètre (no-gos)', f.out_of_bounds),
+    why,
+    evidence,
+    base ? `---\n🪨 Suivi dans Cairn : ${base}/features/${f.id}` : '',
+  ].filter(Boolean).join('\n\n')
+}
+
+/** Gather the bet-time context that enriches the issue body. All best-effort reads — a missing bit
+ *  just drops its section. */
+function gatherContext(featureId: string): IssueContext {
+  const feature = get<{ hill_id: string | null; signal_count: number }>('SELECT hill_id, signal_count FROM features WHERE id = ?', featureId)
+  const decision = get<{ rationale: string; decided_by: string | null; hill_id: string | null }>(
+    "SELECT rationale, decided_by, hill_id FROM decisions WHERE feature_id = ? AND verdict = 'bet' ORDER BY decided_at DESC LIMIT 1",
+    featureId,
+  )
+  const hillId = feature?.hill_id || decision?.hill_id || null
+  const hill = hillId ? get<{ name: string }>('SELECT name FROM hills WHERE id = ?', hillId) : null
+  const signals = all<{ content: string; source: string | null }>(
+    'SELECT content, source FROM feedback WHERE feature_id = ? ORDER BY created_at DESC LIMIT 5',
+    featureId,
+  )
+  return {
+    hillName: hill?.name ?? null,
+    rationale: decision?.rationale ?? null,
+    decidedBy: decision?.decided_by ?? null,
+    signals,
+    signalCount: feature?.signal_count ?? signals.length,
+  }
 }
 
 /** Open (or return the already-open) GitHub issue for a bet feature. Idempotent: at most one open
@@ -81,7 +140,7 @@ export async function openIssueForFeature(featureId: string, actor: string | nul
         'X-GitHub-Api-Version': '2022-11-28',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ title: feature.title, body: renderIssueBody(feature), labels }),
+      body: JSON.stringify({ title: feature.title, body: renderIssueBody(feature, gatherContext(featureId)), labels }),
     })
   }
   catch { return { ok: false, error: 'github-error' } }
