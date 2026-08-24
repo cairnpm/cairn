@@ -72,7 +72,26 @@ export default defineNuxtConfig({
   nitro: { prerender: { routes: ['/'], crawlLinks: false } },
 
   // nuxt-auth-utils still wants a session password at build time. The site never issues a session.
-  runtimeConfig: { session: { password: 'public-site-issues-no-session-placeholder-32' } },
+  runtimeConfig: {
+    session: { password: 'public-site-issues-no-session-placeholder-32' },
+
+    // Prerendered output: `public` is baked in at generate time, exactly like NUXT_SITE_URL — these are
+    // build-time knobs, not runtime ones.
+    public: {
+      posthog: {
+        // NUXT_PUBLIC_POSTHOG_KEY fills this at build time; empty means no tracking at all. Cairn is a
+        // public repo, so the key stays out of it — a fork that runs `pnpm site:generate` reports
+        // nothing rather than into our project. See site/Dockerfile.
+        key: '',
+        // Same-origin path, proxied to PostHog EU by nginx — see site/nginx.conf.template. Cairn's
+        // audience is developers, i.e. the most ad-blocked there is, and a third-party posthog.com
+        // request is simply dropped for a large slice of them.
+        host: '/ingest',
+        // The toolbar and replay links point at the real app, which the proxy doesn't serve.
+        uiHost: 'https://eu.posthog.com',
+      },
+    },
+  },
 
   app: { head: { htmlAttrs: { lang: 'en' } } },
 
