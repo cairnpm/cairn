@@ -21,7 +21,8 @@ export default defineOwnerHandler((event) => {
     callback_urls: [`${base}/api/github/callback`],
     setup_url: `${base}/api/github/callback`,
     public: false,
-    default_permissions: { contents: 'read', metadata: 'read' },
+    // contents/metadata: read (clone + grep the product repo). issues: write so a bet can open an issue.
+    default_permissions: { contents: 'read', metadata: 'read', issues: 'write' },
     default_events: [],
   }
   const action = org

@@ -1,5 +1,6 @@
 import { get, tx } from '~~/server/db/client'
 import { recordDecision } from '~~/server/domain/bet'
+import { autoOpenIssuesOnBet } from '~~/server/utils/githubIssues'
 import type { Verdict } from '~~/server/domain/types'
 
 const VERDICTS: Verdict[] = ['bet', 'pass', 'defer']
@@ -28,6 +29,9 @@ export default defineAuthedHandler(async (event, { actor }) => {
   }
 
   const id = tx(() => recordDecision({ featureId, verdict, hillId, rationale, decidedBy: actor, appetite }))
+
+  // Post-commit, opt-in: materialise the bet as a GitHub issue. Best-effort — never blocks the bet.
+  if (verdict === 'bet') await autoOpenIssuesOnBet([featureId], actor)
 
   return { id, feature_id: featureId, verdict }
 })

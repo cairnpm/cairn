@@ -137,6 +137,11 @@ export async function run(argv, deps) {
   } else if (command === 'commit') {
     if (!values.session) return usage('usage: cairn commit --session <id>')
     res = await api('/api/intake/commit', { method: 'POST', body: { session_id: values.session } })
+  } else if (command === 'issue') {
+    // Open a GitHub issue for a bet feature (the pitch → an execution ticket). Server-side write:
+    // owner-or-assignee guard + attribution from the session, never `gh`, never outside the gateway.
+    if (!arg1) return usage('usage: cairn issue <feature-id>')
+    res = await api(`/api/features/${encodeURIComponent(arg1)}/issue`, { method: 'POST' })
   } else if (command === 'commit-batch') {
     // A decomposed (batch) session has no single proposal — commit the segments the agent selected.
     // Ids come from the `batch.segments` of the capture turn that returned state `batch_review`.

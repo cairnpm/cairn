@@ -32,6 +32,8 @@ export default defineAuthedHandler(async (event, { actor }) => {
   }
   // GitHub App config (so the "Connect GitHub" flow works without a pasted PAT). The private key is
   // write-only — sent here, never read back, like the Anthropic key.
+  // Opt-in: auto-open a GitHub issue whenever a feature is bet (default off). Manual button is unaffected.
+  if (typeof body?.github_issue_on_bet === 'boolean') setSetting('github_issue_on_bet', body.github_issue_on_bet ? '1' : null, by)
   if (typeof body?.github_app_id === 'string') setSetting('github_app_id', body.github_app_id.trim() || null, by)
   if (typeof body?.github_app_slug === 'string') setSetting('github_app_slug', body.github_app_slug.trim() || null, by)
   if (typeof body?.github_app_private_key === 'string' && body.github_app_private_key.trim()) {
