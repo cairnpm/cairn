@@ -1,6 +1,7 @@
 import { all, get } from '~~/server/db/client'
 import { markStaleFeatures } from '~~/server/db/stale'
 import type { Feature } from '~~/server/domain/types'
+import { BETTABLE_STATUSES, sqlIn } from '~~/server/domain/status'
 import { cosine, decodeEmbedding } from '~~/server/utils/embedding'
 
 const CLUSTER_THRESHOLD = 0.4
@@ -10,7 +11,7 @@ export default defineEventHandler((event) => {
   markStaleFeatures()
   const now = Date.now()
 
-  const features = all<Feature>(`SELECT * FROM features WHERE status = 'shaped'`)
+  const features = all<Feature>(`SELECT * FROM features WHERE status IN (${sqlIn(BETTABLE_STATUSES)})`)
 
   const scored = features.map((f) => {
     const ageDays = (now - Date.parse(f.updated_at)) / 86_400_000

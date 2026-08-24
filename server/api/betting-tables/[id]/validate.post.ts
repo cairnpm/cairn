@@ -1,6 +1,7 @@
 import { all, get, run, tx } from '~~/server/db/client'
 import { getBettingTable, logBettingEvent } from '~~/server/db/betting'
 import { recordDecision } from '~~/server/domain/bet'
+import { isBettable } from '~~/server/domain/status'
 import { autoOpenIssuesOnBet } from '~~/server/utils/githubIssues'
 import { newId } from '~~/server/utils/id'
 
@@ -40,7 +41,7 @@ export default defineAuthedHandler(async (event, { user, actor }) => {
     for (const c of selected) {
       run('UPDATE betting_candidates SET selected = 1 WHERE id = ?', c.id)
       const f = get<{ status: string }>('SELECT status FROM features WHERE id = ?', c.feature_id)
-      if (f?.status === 'shaped') {
+      if (isBettable(f?.status as never)) {
         recordDecision({ featureId: c.feature_id, verdict: 'bet', hillId, rationale: rationale || `Parié via la betting table « ${table.title} »`, decidedBy: actor })
         bet.push(c.title_snap)
         betIds.push(c.feature_id)

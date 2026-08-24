@@ -8,6 +8,7 @@ import { ensureSchema } from '../db/schema'
 import type {
   BatchSegment, BatchSession, Candidate, Feature, IntakeSessionData, IntakeState, Proposal, TurnResponse, UiLang,
 } from '../domain/types'
+import { AMENDABLE_STATUSES, sqlIn } from '../domain/status'
 import { getLlm } from '../llm/provider'
 import type { AttachmentForLlm, LlmProvider } from '../llm/provider'
 import { im } from './intakeMessages'
@@ -55,12 +56,13 @@ const CANDIDATE_FLOOR = 0.15 // ignore near-zero similarities in the candidate l
 const TOP_K = 8
 
 // ── Dedup search (brute-force cosine — brief §6) ─────────────────────────────
-// Append targets are SHAPED only: a feature already bet/building lives in a validated cycle and its
-// scope is frozen (Shape Up — no mid-cycle scope creep). In-flight features are surfaced separately
-// as read-only roadmap context so the agent stays aware without amending them.
+// Append targets are the AMENDABLE statuses (shaped + shaping): a signal about the same open question
+// converges onto an existing `shaping` item instead of spawning a duplicate. A feature already
+// bet/building lives in a validated cycle with frozen scope (Shape Up — no mid-cycle scope creep), so it
+// is excluded and surfaced separately as read-only roadmap context.
 export function topCandidates(embedding: number[], k = TOP_K): Candidate[] {
   const rows = all<Pick<Feature, 'id' | 'title' | 'embedding'>>(
-    `SELECT id, title, embedding FROM features WHERE status = 'shaped'`,
+    `SELECT id, title, embedding FROM features WHERE status IN (${sqlIn(AMENDABLE_STATUSES)})`,
   )
   return rows
     .map(r => ({ feature_id: r.id, title: r.title, similarity: cosine(embedding, decodeEmbedding(r.embedding)) }))
@@ -622,6 +624,13 @@ export async function commitProposal(proposal: Proposal, ctx: CommitContext): Pr
         next.problem, next.solution, next.rabbit_holes, next.out_of_bounds, next.appetite,
         encodeEmbedding(localEmbed(merged)), now, featureId,
       )
+      // Promotion: a signal that resolves the open questions of a `shaping` feature shapes it. Only a real
+      // LLM can make that judgement (the stub always reports 'shaped' on append) — hence the same gate as
+      // the pitch rewrite above. Clears the open questions and logs the transition.
+      if (llm.name !== 'stub' && feat.status === 'shaping' && proposal.maturity === 'shaped') {
+        run(`UPDATE features SET status = 'shaped', open_questions = '[]' WHERE id = ?`, featureId)
+        logEvent(featureId, actor, 'shaped', `Pitch shapé par ${actor || 'inconnu'} — questions ouvertes résolues`, { content: data.raw })
+      }
       // ONE grouped "revision" event per append (digest), with the refinements nested in detail.
       const who = actor || 'inconnu'
       const summary = changes.length
@@ -633,16 +642,22 @@ export async function commitProposal(proposal: Proposal, ctx: CommitContext): Pr
       featureId = newId()
       const spec = proposal.proposed_spec
       const supersedes = proposal.supersedes_id ?? null
+      // Maturity decides the birth status: a shaped pitch is bettable, a `shaping` one is captured but not
+      // yet shapeable (open questions recorded). Defaults to shaped for in-flight sessions predating the field.
+      const status = proposal.maturity === 'shaping' ? 'shaping' : 'shaped'
+      const openQuestions = JSON.stringify(proposal.open_questions ?? [])
       run(
-        `INSERT INTO features (id, title, problem, appetite, solution, rabbit_holes, out_of_bounds, status, stale, signal_count, supersedes_id, embedding, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'shaped', 0, 1, ?, ?, ?, ?)`,
+        `INSERT INTO features (id, title, problem, appetite, solution, rabbit_holes, out_of_bounds, status, stale, signal_count, supersedes_id, open_questions, embedding, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?, ?, ?, ?, ?)`,
         featureId, spec.title, spec.problem, spec.appetite, spec.solution || null, spec.rabbit_holes || null, spec.out_of_bounds || null,
-        supersedes, encodeEmbedding(localEmbed([spec.title, spec.problem, spec.solution].join(' \n '))), now, now,
+        status, supersedes, openQuestions, encodeEmbedding(localEmbed([spec.title, spec.problem, spec.solution].join(' \n '))), now, now,
       )
-      const createdSummary = supersedes
-        ? `Nouvelle itération créée par ${data.captured_by || 'inconnu'} (remplace une version livrée)`
-        : `Feature créée par ${data.captured_by || 'inconnu'}`
-      logEvent(featureId, data.captured_by, 'created', createdSummary, { title: spec.title, supersedes })
+      const createdSummary = status === 'shaping'
+        ? `Signal capturé par ${data.captured_by || 'inconnu'} — à shaper (question ouverte)`
+        : supersedes
+          ? `Nouvelle itération créée par ${data.captured_by || 'inconnu'} (remplace une version livrée)`
+          : `Feature créée par ${data.captured_by || 'inconnu'}`
+      logEvent(featureId, data.captured_by, 'created', createdSummary, { title: spec.title, supersedes, status })
     }
 
     run(

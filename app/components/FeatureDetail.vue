@@ -86,6 +86,13 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
             <SectionLabel class="mb-1">{{ t('feature.pitch.' + p) }}</SectionLabel>
             <p class="leading-relaxed">{{ detail.feature[p] }}</p>
           </div>
+          <!-- Why a `shaping` feature isn't shaped yet: the unresolved questions/decisions blocking it. -->
+          <div v-if="detail.feature.open_questions?.length">
+            <SectionLabel class="mb-1">{{ t('feature.openQuestions') }}</SectionLabel>
+            <ul class="list-disc space-y-1 pl-5 leading-relaxed">
+              <li v-for="(q, i) in detail.feature.open_questions" :key="i">{{ q }}</li>
+            </ul>
+          </div>
           <div v-if="detail.attachments.length">
             <SectionLabel class="mb-2">{{ t('feature.attachments') }}</SectionLabel>
             <div class="flex flex-wrap gap-2">

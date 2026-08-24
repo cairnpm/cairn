@@ -8,6 +8,11 @@ export const DEDUP_STRONG = 0.55
 const DIRECTIVE = /\b(bug|crash|cass[ée]|broken|urgent|critique|bloquant|asap|il faut|production|prod|r[ée]gression)\b/i
 const EXPLORE = /\b(feature|fonctionnalit[ée]|id[ée]e|idea|int[ée]gration|support|ajout|ajouter|add|am[ée]liorer|pourrait|serait|redesign|refonte)\b/i
 const BIG = /\b(gros|grosse|large|semaines|refonte|redesign|sso|enterprise|migration|multi|complet|complète)\b/i
+// Deterministic "not yet shapeable" heuristic: an EXPLICIT marker of an unresolved decision / undecided
+// scope / embryonic idea → maturity 'shaping'. Deliberately narrow (no bare "?", which flags plenty of
+// shapeable requests). Matched on the RAW signal only (never the folded clarify answers), so a canned
+// test answer can't flip it. The real LLM decides maturity by judgement, not this regex.
+const SHAPING = /\b(en cours de r[ée]([ée]|-é)valuation|pas encore (défini|tranch|décidé|arbitré)|à définir|on ne sait pas encore|à réévaluer|non tranché|indécis|undecided|not yet decided)\b/i
 
 export function heuristicClassify(content: string): Classification {
   if (DIRECTIVE.test(content)) return 'directive'
@@ -100,11 +105,16 @@ export function createStubProvider(): LlmProvider {
       const top = candidates[0]
       const attach = top && top.similarity >= DEDUP_STRONG
       const appetite = detectAppetite(userText)
+      // Keyed off `raw`, not `userText` — a shaping signal stays shaping through the clarify loop.
+      const maturity = SHAPING.test(raw) ? 'shaping' : 'shaped'
 
       const proposal: Proposal = attach
         ? {
             action: 'append',
             target_feature_id: top.feature_id,
+            // A strong dedup match onto an existing item is treated as resolving material → promote to shaped.
+            maturity: 'shaped',
+            open_questions: [],
             classification,
             confidence: Number(top.similarity.toFixed(2)),
             rationale: `Forte similarité (${(top.similarity * 100).toFixed(0)}%) avec « ${top.title} ». Rattachement proposé par défaut — créer une nouvelle feature reste une action délibérée.`,
@@ -116,6 +126,8 @@ export function createStubProvider(): LlmProvider {
         : {
             action: 'create_feature',
             target_feature_id: null,
+            maturity,
+            open_questions: maturity === 'shaping' ? [`À trancher : ${makeTitle(raw)}`] : [],
             classification,
             confidence: Number((1 - (top?.similarity ?? 0)).toFixed(2)),
             rationale: top

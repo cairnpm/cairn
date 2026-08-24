@@ -8,13 +8,17 @@ import { parseSpec } from '~~/server/utils/codeRepo'
 export default defineEventHandler((event) => {
   const id = getRouterParam(event, 'id')!
 
-  const feature = get(
+  const row = get<{ open_questions: string | null }>(
     `SELECT f.id, f.title, f.problem, f.appetite, f.solution, f.rabbit_holes, f.out_of_bounds,
-            f.status, f.stale, f.hill_id, h.name AS hill_name, f.signal_count, f.created_at, f.updated_at
+            f.status, f.stale, f.hill_id, h.name AS hill_name, f.signal_count, f.open_questions, f.created_at, f.updated_at
      FROM features f LEFT JOIN hills h ON h.id = f.hill_id WHERE f.id = ?`,
     id,
   )
-  if (!feature) throw createError({ statusCode: 404, statusMessage: 'Feature not found' })
+  if (!row) throw createError({ statusCode: 404, statusMessage: 'Feature not found' })
+  // open_questions is stored as a JSON array string; decode at the boundary (guard malformed → []).
+  let openQuestions: string[] = []
+  try { const parsed = JSON.parse(row.open_questions ?? '[]'); if (Array.isArray(parsed)) openQuestions = parsed.filter((s): s is string => typeof s === 'string') } catch { /* keep [] */ }
+  const feature = { ...row, open_questions: openQuestions }
 
   // Attachments are linked to the SIGNAL (feedback) that introduced them — show them inline there.
   const attachments = all<{ id: string, filename: string, mime: string, bytes: number, kind: string, feedback_id: string | null, created_at: string }>(

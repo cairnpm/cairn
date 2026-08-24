@@ -33,15 +33,17 @@ the **validation** of a betting table — both going through `recordDecision()`.
 
 `feedback` (raw signal) — status: `new | routed | pending_review | archived`.
 
-`features` — status: `raw → shaped → bet → building → done`, plus `archived` (merged)
+`features` — status: `shaping → shaped → bet → building → done`, plus `archived` (merged)
 and `deleted` (reversible soft-delete). Transitions:
 
 | From → to | Trigger |
 |---|---|
-| ∅ → `shaped` | intake `create_feature` (every new feature is born shaped, `signal_count=1`) |
-| `shaped` → `shaped` (enriched) | intake `append` (attaches a signal + refines the pitch, `signal_count+1`, `stale=0`) |
-| `shaped` → `bet` | `recordDecision('bet')` (validation of a betting table or manual decision) → `hill_id` set |
-| `shaped` → `shaped` (stale) | not bet on for `NUXT_STALE_DAYS` (14d) → `stale=1`, to be re-defended |
+| ∅ → `shaped` | intake `create_feature` with `maturity: shaped` — a rough+solved+bounded pitch (`signal_count=1`) |
+| ∅ → `shaping` | intake `create_feature` with `maturity: shaping` — a REAL signal that can't be shaped yet (unresolved decision, undecided scope, too embryonic). Captured, **not bettable**; the blockers land in `open_questions`. Shape Up: shapedness = resolving open questions |
+| `shaping` → `shaped` | intake `append` whose proposal returns `maturity: shaped` — a later signal resolves the open questions (real LLM only) → `open_questions` cleared |
+| `shaped`/`shaping` → same (enriched) | intake `append` (attaches a signal + refines the pitch, `signal_count+1`, `stale=0`) |
+| `shaped` → `bet` | `recordDecision('bet')` (validation of a betting table or manual decision) → `hill_id` set. Only `shaped` is bettable — never `shaping` |
+| `shaped`/`shaping` → same (stale) | not bet on for `NUXT_STALE_DAYS` (14d) → `stale=1`, to be re-defended (a `shaping` parking lot can't become a graveyard) |
 | `*` → `archived` | feature absorbed by a `merge` |
 | `done`/`archived` → **new iteration** | intake `refine` on a delivered feature → `create_feature` with `supersedes_id` |
 | `*` → `deleted` | deletion (soft); reactivatable → `prev_status` |
@@ -96,12 +98,17 @@ toward a **proposal** that the human confirms (`POST /api/intake/commit`).
 `temperature: 0`). The `propose` produces an `action` among `create_feature | append | discard`
 (the `merge` is resolved upstream, outside the LLM). Effects at commit:
 
+Each `create_feature`/`append` also carries a **`maturity`** (`shaped | shaping`) and, when `shaping`,
+the `open_questions` that block it. `discard` is reserved for genuine noise — a real signal that can't be
+shaped yet is **captured** as `shaping`, never discarded.
+
 | Action | When | Effect on the domain |
 |---|---|---|
-| `create_feature` | no candidate is the same feature; or `refine` of a **delivered** feature | INSERT `shaped` feature (`supersedes_id` if new iteration); event `created` |
-| `append` | a **`shaped`** candidate addresses the **same problem**; or `refine` of a **`shaped`** feature | UPDATE feature (refined fields before→after), `signal_count+1`, `stale=0`, re-embed; event `signal_added` (digest of the modified fields) |
+| `create_feature` (`shaped`) | no candidate is the same feature; the signal is a rough+solved+bounded pitch | INSERT `shaped` feature (`supersedes_id` if new iteration); event `created` |
+| `create_feature` (`shaping`) | real, on-product, but not yet shapeable (unresolved decision, undecided scope, embryonic) | INSERT `shaping` feature + `open_questions`; captured, **not bettable**; event `created` |
+| `append` | a **`shaped`/`shaping`** candidate addresses the **same problem**; or `refine` of a `shaped` feature | UPDATE feature (refined fields before→after), `signal_count+1`, `stale=0`, re-embed; if it resolves a `shaping` item (`maturity: shaped`) → promote to `shaped`, clear `open_questions`, event `shaped`; event `signal_added` |
 | `merge` | explicit directive "merge X and Y" / "X is a duplicate of Y" | repatriates feedback/decisions/PR/events of the absorbed → survivor, consolidated pitch, absorbed `archived`; `merged` events on both sides |
-| `discard` | **true noise** (spam/test/off-product) or an **exact** duplicate that adds nothing — **never** a bug | feedback `archived`, no feature mutation; event `discarded` (if target) |
+| `discard` | **true noise** (spam/test/off-product) or an **exact** duplicate that adds nothing — **never** a bug, **never** a real-but-unshapeable signal (that is `shaping`) | feedback `archived`, no feature mutation; event `discarded` (if target) |
 
 The raw `feedback` is **always** stored (even a `discard` → `archived`), with its
 `content_hash`, its `embedding` and its `classification` (`musing | explore | directive`).
@@ -113,12 +120,13 @@ the commit re-checks idempotence.
 
 ### 5.1 Semantic (every turn) — `topCandidates()`
 
-- Local embedding of the signal, **cosine similarity** against features with `status = 'shaped'`
-  **only** → top‑5, floor threshold `CANDIDATE_FLOOR` (0.15).
-- **Important**: the only `append` targets are **`shaped`** features. Everything else
-  (`done`, `archived`, `deleted`, **and the `bet`/`building` ones already committed to a cycle**) is
-  excluded from candidates — a signal **never** attaches to delivered work nor to a bet in progress
-  (see §6). Features in a cycle are injected separately as **roadmap context** (read-only).
+- Local embedding of the signal, **cosine similarity** against features with `status IN ('shaped',
+  'shaping')` → top‑5, floor threshold `CANDIDATE_FLOOR` (0.15).
+- **Important**: `append` targets are the **amendable** statuses (`shaped` + `shaping`) — so a signal
+  about the same open question converges onto the existing `shaping` item instead of spawning a
+  duplicate. Everything else (`done`, `archived`, `deleted`, **and the `bet`/`building` ones already
+  committed to a cycle**) is excluded — a signal **never** attaches to delivered work nor to a bet in
+  progress (see §6). Features in a cycle are injected separately as **roadmap context** (read-only).
 - The agent acts as a **dedup judge** (prompt `propose`): the score is a _hint_, not a
   rule. If there is a candidate that addresses **the same underlying problem** — even phrased very
   differently — it chooses `append`. It chooses `create_feature` only if **no**
@@ -135,13 +143,13 @@ the commit re-checks idempotence.
 On `append`, a pitch field is **never** overwritten by the user's raw
 instruction (echo detection): the offline stub cannot degrade a shaped pitch.
 
-## 6. We only amend `shaped` features (neither delivered, nor already in a cycle)
+## 6. We only amend pre-bet features (`shaped` + `shaping`; neither delivered, nor already in a cycle)
 
 Shape Up "fixed scope" rule: you don't grow the scope of a bet in progress, and you don't
-reopen delivered work. **Only `shaped` features are amendable** (`append`/`refine`).
-Four mechanisms guarantee this:
+reopen delivered work. **Only the pre-bet statuses are amendable** (`shaped` and `shaping`) via
+`append`/`refine`; a `bet`/`building`/`done`/`archived` feature is not. Four mechanisms guarantee this:
 
-1. **Dedup scope**: `topCandidates` only searches within `status = 'shaped'` → no
+1. **Dedup scope**: `topCandidates` only searches within `status IN ('shaped','shaping')` → no
    attachment to a delivered feature **nor to a `bet`/`building` feature already in a cycle**.
 2. **Refine on delivered → new iteration**: a `refine` targeting a `done`/`archived` feature
    does **not** `append` — it switches to `create_feature` with `supersedes_id` toward the

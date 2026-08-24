@@ -56,10 +56,11 @@ const counts = computed(() => {
   const f = shownFeatures.value
   const by = (s: string) => f.filter(x => x.status === s).length
   const deleted = by('deleted')
-  return { all: f.length - deleted, shaped: by('shaped'), bet: by('bet'), building: by('building'), done: by('done'), deleted }
+  return { all: f.length - deleted, shaping: by('shaping'), shaped: by('shaped'), bet: by('bet'), building: by('building'), done: by('done'), deleted }
 })
 const FILTERS = computed(() => [
   { key: 'all', label: t('backlog.filters.all'), n: counts.value.all },
+  { key: 'shaping', label: t('backlog.filters.shaping'), n: counts.value.shaping },
   { key: 'shaped', label: 'Shaped', n: counts.value.shaped },
   { key: 'bet', label: 'Bet', n: counts.value.bet },
   { key: 'building', label: 'Building', n: counts.value.building },

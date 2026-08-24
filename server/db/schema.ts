@@ -37,7 +37,7 @@ export function ensureSchema(): void {
       solution       TEXT,                           -- shaped approach (the pitch's core idea)
       rabbit_holes   TEXT,                           -- risks / pitfalls to avoid
       out_of_bounds  TEXT,                           -- no-gos: explicitly excluded
-      status         TEXT NOT NULL DEFAULT 'shaped', -- raw | shaped | bet | building | done | archived
+      status         TEXT NOT NULL DEFAULT 'shaped', -- shaping | shaped | bet | building | done | archived
       stale          INTEGER NOT NULL DEFAULT 0,
       hill_id        TEXT REFERENCES hills(id),
       signal_count   INTEGER NOT NULL DEFAULT 0,
@@ -277,6 +277,10 @@ export function ensureSchema(): void {
 
   // Soft-remove a member (can't log in, drops off the active list) without breaking attribution.
   addColumnIfMissing('users', 'disabled_at', 'disabled_at TEXT')
+
+  // Shape Up "shapedness": the unresolved questions (JSON array) that keep a `shaping` feature from being
+  // shaped. Populated when the intake captures a real-but-not-yet-shapeable signal; cleared on promotion.
+  addColumnIfMissing('features', 'open_questions', 'open_questions TEXT')
 
   // Haiku retired for intake (unreliable routing) — migrate any stored choice to Sonnet.
   db().exec("UPDATE settings SET value = 'claude-sonnet-4-6' WHERE key = 'anthropic_model' AND value = 'claude-haiku-4-5'")
