@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -5,6 +6,10 @@ import tailwindcss from '@tailwindcss/vite'
 // against the *extending* app — not against this directory. Anchor them, or the site build re-resolves
 // them onto itself and registers every component twice.
 const appDir = fileURLToPath(new URL('./app', import.meta.url))
+
+// Baked at build time: the runtime image ships only `.output/` (no package.json), so the version has
+// to travel inside the bundle. This is what the update check compares against the latest GitHub release.
+const pkg: { version?: string } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -16,6 +21,7 @@ export default defineNuxtConfig({
   // Session cookie: Secure only in production. On http://localhost, Safari refuses a Secure cookie
   // (Chrome tolerates it), so dev logins on Safari would silently fail without this.
   runtimeConfig: {
+    cairnVersion: pkg.version ?? '0.0.0',
     session: {
       password: '', // overridden at runtime by NUXT_SESSION_PASSWORD; placeholder satisfies the type
       cookie: {

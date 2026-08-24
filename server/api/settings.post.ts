@@ -30,6 +30,9 @@ export default defineAuthedHandler(async (event, { actor }) => {
     // Workspace product framing injected into every shaping/answer prompt. Empty → generic default.
     setSetting('product_context', body.product_context.trim() || null, by)
   }
+  // Update check against the latest GitHub release — on by default, stored only when turned OFF so
+  // the default lives in one place (server/api/version.get.ts).
+  if (typeof body?.update_check === 'boolean') setSetting('update_check', body.update_check ? null : '0', by)
   // GitHub App config (so the "Connect GitHub" flow works without a pasted PAT). The private key is
   // write-only — sent here, never read back, like the Anthropic key.
   // Opt-in: auto-open a GitHub issue whenever a feature is bet (default off). Manual button is unaffected.

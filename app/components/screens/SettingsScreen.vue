@@ -14,6 +14,7 @@ import { toast } from 'vue-sonner'
 const { t } = useUiLang()
 
 interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; key_hint: string | null; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean; github_app_ready: boolean; github_app_slug: string; github_connected: boolean; github_issue_on_bet: boolean; product_context: string }
+interface VersionView { current: string; host: string; command: string; docs_url: string; check_enabled: boolean; latest: string | null; release_url: string | null; published_at: string | null; update_available: boolean }
 interface Profile { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 interface Member { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 
@@ -27,6 +28,7 @@ async function uploadImage(file: File): Promise<string | null> {
 const { data: cfg } = await useApiData<SettingsView>(qk.settings, '/api/settings')
 const { data: profileData } = await useApiData<Profile>(qk.profile, '/api/profile')
 const { data: members } = await useApiData<Member[]>(qk.members, '/api/members', { default: () => [] })
+const { data: version } = await useApiData<VersionView>(qk.version, '/api/version')
 const { mutate } = useApiMutation()
 const { fetch: refreshSession } = useUserSession()
 
@@ -166,6 +168,29 @@ async function resetGithubApp() {
 async function toggleIssueOnBet(v: boolean) {
   await mutate('/api/settings', { body: { github_issue_on_bet: v }, invalidates: [qk.settings], success: v ? 'Issue GitHub à chaque bet activée.' : 'Ouverture auto désactivée.' })
 }
+// ── Version / mise à jour ───────────────────────────────────────────────
+// The check is server-side and cached 6h; `force=1` is this button — the only way to bypass it.
+const checking = ref(false)
+async function checkUpdate() {
+  if (checking.value) return
+  checking.value = true
+  try {
+    version.value = await $fetch<VersionView>('/api/version', { query: { force: '1' } })
+    toast.success(version.value.update_available ? t('settings.version.available', { version: version.value.latest ?? '' }) : t('settings.version.upToDate'))
+  }
+  finally { checking.value = false }
+}
+async function toggleUpdateCheck(v: boolean) {
+  await mutate('/api/settings', { body: { update_check: v }, invalidates: [qk.version], success: v ? t('settings.toast.updateCheckOn') : t('settings.toast.updateCheckOff') })
+}
+const cmdCopied = ref(false)
+async function copyCommand() {
+  if (!version.value) return
+  await navigator.clipboard.writeText(version.value.command)
+  cmdCopied.value = true
+  setTimeout(() => { cmdCopied.value = false }, 1500)
+}
+
 onMounted(() => {
   const g = new URLSearchParams(window.location.search).get('github')
   // GitHub redirects back here after the app-manifest / install flow. Land on the Intelligence tab —
@@ -306,6 +331,50 @@ async function save() {
           <div class="flex items-center justify-end gap-3">
             <span v-if="saved" class="text-sm text-muted-foreground">✓ {{ t('settings.saved') }}</span>
             <Button :disabled="saving" @click="save">{{ saving ? t('settings.saving') : t('settings.save') }}</Button>
+          </div>
+
+          <Separator />
+          <div>
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-medium">{{ t('settings.version.heading') }}</h2>
+                <p class="text-sm text-muted-foreground">{{ t('settings.version.description') }}</p>
+              </div>
+              <Badge :variant="version?.update_available ? 'default' : 'secondary'" class="font-mono">v{{ version?.current }}</Badge>
+            </div>
+            <div class="mt-4 rounded-lg border p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 text-sm">
+                  <template v-if="version?.update_available">
+                    <div class="font-medium">{{ t('settings.version.available', { version: version.latest ?? '' }) }}</div>
+                    <a v-if="version.release_url" :href="version.release_url" target="_blank" rel="noopener" class="text-xs text-muted-foreground underline-offset-2 hover:underline">{{ t('settings.version.releaseNotes') }} ↗</a>
+                  </template>
+                  <template v-else-if="version?.latest">
+                    <div class="flex items-center gap-1.5 font-medium"><Check class="size-4 text-emerald-500" /> {{ t('settings.version.upToDate') }}</div>
+                  </template>
+                  <div v-else class="text-muted-foreground">{{ version?.check_enabled ? t('settings.version.unreachable') : t('settings.version.disabled') }}</div>
+                </div>
+                <!-- Off means off: no manual escape hatch, or the switch would be a lie. -->
+                <Button v-if="version?.check_enabled" variant="outline" size="sm" :disabled="checking" @click="checkUpdate">{{ checking ? t('settings.version.checking') : t('settings.version.check') }}</Button>
+              </div>
+              <!-- The command matches how THIS instance was deployed (Fly, Render, Docker, source). -->
+              <div v-if="version?.update_available" class="mt-4 border-t pt-4">
+                <div class="mb-1.5 text-xs text-muted-foreground">{{ t(`settings.version.host.${version.host}`) }}</div>
+                <button type="button" class="flex w-full items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2 text-left font-mono text-xs hover:bg-muted" @click="copyCommand">
+                  <span class="truncate">{{ version.command }}</span>
+                  <span class="shrink-0 font-sans text-muted-foreground">{{ cmdCopied ? t('settings.version.copied') : t('settings.version.copy') }}</span>
+                </button>
+                <!-- One line can't cover restarting a service manager or Render's dashboard path. -->
+                <a :href="version.docs_url" target="_blank" rel="noopener" class="mt-2 inline-block text-xs text-muted-foreground underline-offset-2 hover:underline">{{ t('settings.version.fullProcedure') }} ↗</a>
+              </div>
+            </div>
+            <div class="mt-4 flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="text-sm font-medium">{{ t('settings.version.autoLabel') }}</div>
+                <p class="text-xs text-muted-foreground">{{ t('settings.version.autoHint') }}</p>
+              </div>
+              <Switch :model-value="!!version?.check_enabled" @update:model-value="toggleUpdateCheck" />
+            </div>
           </div>
         </section>
 
