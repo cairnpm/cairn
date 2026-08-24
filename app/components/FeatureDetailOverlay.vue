@@ -33,7 +33,7 @@ const open = computed({
           <ExternalLink class="size-4" />
           <span class="sr-only">Ouvrir la page</span>
         </NuxtLink>
-        <FeatureDetail :detail="detail" />
+        <FeatureDetail :detail="detail" compact />
       </template>
     </SheetContent>
   </Sheet>
@@ -49,7 +49,7 @@ const open = computed({
           <ExternalLink class="size-4" />
           <span class="sr-only">Ouvrir la page</span>
         </NuxtLink>
-        <FeatureDetail :detail="detail" />
+        <FeatureDetail :detail="detail" compact />
       </template>
     </DialogContent>
   </Dialog>

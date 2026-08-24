@@ -209,6 +209,31 @@ the roadmap context** (active cycles + features in progress). It asks to:
   do you correct?"). We measure the model's quality via `routing_log.corrected` (did the human
   change the agent's **first** proposal: different action or target).
 
+### 7.4 Feature-scoped intake ("Éditer") — qualification keyed on shaping state
+
+The chat can be opened **pinned to a feature** (the "Éditer" panel on a feature detail page):
+`turn.post` carries a `target_feature_id`, `intakeTurn` seeds `mode: refine` on it, and every turn
+edits THAT feature (no `detectIntent`, no triage — see §3). The key rule is how deeply it qualifies:
+
+- **Qualification keys on the feature's SHAPING STATE, not on the entry path.** `clarify`/`propose`
+  receive the pitch as `ExistingPitch` (`server/llm/provider.ts`), which now carries `maturity` +
+  `open_questions`. So:
+  - editing a **`shaped`** feature is **light** — the problem/solution/scope are settled, so `clarify`
+    replies `OK` unless the *new message itself* is vague (a fuzzy "revoir X", a change with no target);
+    it never re-asks what the pitch already answers;
+  - editing a **`shaping`** feature is **challenged against its exact `open_questions`** — `clarify`
+    pushes to resolve them (asks about the specific blocking question the message leaves open), and
+    `propose` promotes to `shaped` (clearing `open_questions`) only once the message actually resolves them.
+  This is why "same level of qualification everywhere" is the wrong goal: the *right* level is the one
+  set by the shaping state, and both the home and scoped chats now share that single criterion.
+- **Escape hatch (off-topic).** If the pinned message is clearly **not** about this feature, `propose`
+  returns `create_feature` (its `existingBlock` says so); the refine branch then **drops the pin and
+  re-runs `advance` as a plain `signal`**, so an off-topic message gets the *full* qualification + triage,
+  exactly like the home intake — it is never force-appended to the pinned feature.
+- **Persistence.** The client remembers a per-feature pointer (`cairn:intake:feature:{id}`, distinct from
+  the home `cairn:intake:active`), so closing and reopening the panel restores an in-progress conversation
+  until it is committed.
+
 ## 8. Merge & grouping (group)
 
 Two distinct notions:
@@ -307,3 +332,46 @@ archived, the other survives), **query** (question → answer, no write), **fixe
 > Real tests are **non-deterministic** by nature (the model decides): we use Sonnet
 > (more consistent routing than Haiku) and behavioral assertions. A real problem must
 > always be **captured** (create/append), never discarded — which is precisely what we verify.
+
+## 13. Known asymmetries & follow-ups (qualification depth)
+
+A deliberate audit of "is the qualification the same across the home intake, the feature-scoped
+"Éditer" chat, and every decision (amend / create / archive)?". The principle we settled on is that
+qualification depth should key on the **shaping state**, not on the entry path (§7.4) — that unifies the
+case that matters and is what the maturity-aware `clarify`/`propose` now implement. The following
+differences remain **known and intentional** (or deferred); none is a silent bug.
+
+1. **`refine → create` (supersede / frozen) is qualified as an edit, not as a fresh create.**
+   A `refine` targeting a `done`/`archived` feature (→ `create_feature` + `supersedes_id`) or a
+   `bet`/`building` one (→ new feature for a later cycle) produces a **brand-new feature**, but the
+   `clarify` that ran before `propose` used the *edit* prompt (it had the pinned feature's pitch as
+   `existing`), not the full shaping challenge. Only the off-topic **escape hatch** re-runs `advance`
+   as a plain `signal` and thus gets the full qualification.
+   *Why deferred:* it is a chicken-and-egg — `clarify` runs **before** `propose`, but "this turns into a
+   create" is only known **from** `propose`. Fixing it means re-running `clarify` after `propose` (extra
+   round-trip) on a **rare** path (editing shipped / in-cycle work), and the full generated pitch + the
+   mandatory human confirmation already backstop it. Low ROI; revisit if these paths prove under-shaped.
+
+2. **Batch (transcript) segments are qualified more shallowly than a lone signal.**
+   The single-signal path runs the multi-turn Socratic `clarify`; the decompose/batch path instead uses
+   the single `clarifying_question` that `propose` emits **per segment** (`advanceBatchClarify`). So the
+   *same* signal gets a deeper challenge alone than inside a transcript.
+   *Why intentional:* this is a **UX tradeoff, not a bug** — a transcript raising 8 signals cannot subject
+   each to a multi-turn dialogue without asking the user ~20 questions. One targeted question per unclear
+   segment is the right depth for batch; deepening it would make the batch flow unusable.
+
+3. **The edit policy lives in two `existingBlock` strings + a soft/strict tension inside `clarify`.**
+   The "you are editing, don't re-ask the pitch" policy is encoded once in `clarify` and once in `propose`
+   (`server/llm/anthropic.ts`); and within `clarify` the *system* prompt says "challenge hard, protect the
+   roadmap" while the appended edit block says "reply OK unless the addition is vague / resolve the open
+   questions". The model reconciles the two implicitly (the specific, last-position block wins).
+   *Why deferred:* it currently behaves correctly (verified live, turn by turn). Branching the *system*
+   prompt itself for edit mode is cleanup that risks regressing the freshly-tuned soft/strict calibration;
+   do it cold, behind tests, not as a drive-by.
+
+4. **"Archive / won't-do" is not an intake decision.** The `propose` action enum is
+   `create_feature | append | discard`; archiving only happens as a **side effect** of `merge` (absorbed
+   feature) or `supersede` (a new iteration over a `done`/`archived` target). Closing a feature as
+   "won't do" is the **soft-delete** on the detail page (`ResourceActionsMenu`), reversible, not a shaped
+   intake outcome. A first-class `wont_do` transition would touch the status enum across backlog filters /
+   betting eligibility / `stale` logic / i18n — deliberately out of scope here (see the Q3 plan).

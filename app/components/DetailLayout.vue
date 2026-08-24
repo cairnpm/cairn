@@ -12,8 +12,11 @@ defineProps<{ asideWidth?: number; compact?: boolean }>()
   <div class="flex h-full flex-col">
     <header class="flex flex-col gap-3 border-b px-6 py-4">
       <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0" :class="{ 'pr-24': compact }"><slot name="title" /></div>
-        <div class="flex items-center gap-2" :class="{ 'mr-24': compact }"><slot name="header-action" /></div>
+        <div class="min-w-0" :class="{ 'pr-16': compact }"><slot name="title" /></div>
+        <!-- compact = inside the quick-view overlay: reserve just enough room on the right for its
+             absolute corner buttons (close + open-page, ~64px), so the header-action sits next to them
+             rather than floating far to their left. -->
+        <div class="flex items-center gap-2" :class="{ 'mr-16': compact }"><slot name="header-action" /></div>
       </div>
       <div class="flex flex-wrap items-center gap-x-6 gap-y-2"><slot name="meta" /></div>
     </header>

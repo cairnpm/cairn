@@ -10,7 +10,7 @@ import type {
 } from '../domain/types'
 import { AMENDABLE_STATUSES, sqlIn } from '../domain/status'
 import { getLlm } from '../llm/provider'
-import type { AttachmentForLlm, LlmProvider } from '../llm/provider'
+import type { AttachmentForLlm, ExistingPitch, LlmProvider } from '../llm/provider'
 import { im } from './intakeMessages'
 import { grepPath, refreshIfStale } from '../utils/codeRepo'
 import { codeContextFor } from '../utils/codeSearch'
@@ -275,7 +275,7 @@ async function fullSourceText(message: string, ids: string[], llm: LlmProvider):
   return parts.join('\n\n')
 }
 
-export async function intakeTurn(sessionId: string | null, message: string, source = 'manual', capturedBy: string | null = null, attachmentIds: string[] = [], lang: UiLang = 'fr'): Promise<TurnResponse> {
+export async function intakeTurn(sessionId: string | null, message: string, source = 'manual', capturedBy: string | null = null, attachmentIds: string[] = [], lang: UiLang = 'fr', targetFeatureId: string | null = null): Promise<TurnResponse> {
   ensureSchema()
   const llm = await getLlm()
   let text = message.trim()
@@ -288,7 +288,16 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
       if (extracted) text = `${text}\n\n[Contexte des pièces jointes]\n${extracted}`
     }
     const id = newId()
-    const intent = await llm.detectIntent(text)
+    // Feature-scoped intake: the chat is pinned to a feature (opened from its detail page), so skip
+    // intent detection AND triage — every turn refines THAT feature. Reuses the `refine` mode/branch
+    // unchanged. Guard against a missing/deleted target so we never silently cold-create a new feature.
+    if (targetFeatureId) {
+      const tf = get<{ status: string }>('SELECT status FROM features WHERE id = ?', targetFeatureId)
+      if (!tf || tf.status === 'deleted') throw createError({ statusCode: 404, statusMessage: 'Feature introuvable' })
+    }
+    const intent = targetFeatureId
+      ? { intent: 'refine' as const, target: null, target2: null }
+      : await llm.detectIntent(text)
     const data: IntakeSessionData = {
       raw: text, source, captured_by: capturedBy,
       mode: intent.intent, target_feature_id: null, merge_from_id: null,
@@ -311,10 +320,15 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
     }
 
     // Refine a named feature → pin it as the target (fall back to a normal signal if unresolved).
+    // A feature-scoped turn already knows its target — pin it directly, no name search.
     if (intent.intent === 'refine') {
-      const hit = searchFeatures(intent.target || text, 1)[0]
-      if (hit) data.target_feature_id = hit.id
-      else data.mode = 'signal'
+      if (targetFeatureId) {
+        data.target_feature_id = targetFeatureId
+      } else {
+        const hit = searchFeatures(intent.target || text, 1)[0]
+        if (hit) data.target_feature_id = hit.id
+        else data.mode = 'signal'
+      }
     }
 
     // Merge two named features → resolve survivor (target2) + absorbed (target).
@@ -406,6 +420,18 @@ export async function intakeTurn(sessionId: string | null, message: string, sour
   return advance(sessionId, loaded.row.state, turns, data, llm)
 }
 
+/** The current pitch of a feature, for clarify/propose when editing it. Decodes `open_questions` and
+ *  derives `maturity` from status so qualification keys on the shaping state (see ExistingPitch). */
+function pitchOf(f: Feature): ExistingPitch {
+  let openQuestions: string[] = []
+  try { const p = JSON.parse(f.open_questions ?? '[]'); if (Array.isArray(p)) openQuestions = p.filter((s): s is string => typeof s === 'string') } catch { /* keep [] */ }
+  return {
+    title: f.title, problem: f.problem, solution: f.solution || '',
+    rabbit_holes: f.rabbit_holes || '', out_of_bounds: f.out_of_bounds || '', appetite: f.appetite || 'small',
+    maturity: f.status === 'shaping' ? 'shaping' : 'shaped', open_questions: openQuestions,
+  }
+}
+
 // State machine: clarify (bounded) → propose. Writing happens only at commit.
 async function advance(
   id: string, _prevState: string, turns: number, data: IntakeSessionData,
@@ -422,13 +448,21 @@ async function advance(
   const repo = codeRepo()
   const code = await codeGroundingFor(data.raw, llm, repo)
 
-  // A merge is an explicit human directive (the survivor/absorbed are already resolved) — skip the
-  // adaptive shaping loop and go straight to the consolidated-pitch proposal for confirmation.
+  // When editing a specific feature (refine), load its pitch up front so BOTH clarify and propose get it.
+  const refineTarget = (data.mode === 'refine' && data.target_feature_id)
+    ? get<Feature>('SELECT * FROM features WHERE id = ?', data.target_feature_id)
+    : null
+  const existingPitch = refineTarget ? pitchOf(refineTarget) : undefined
+
+  // A merge is an explicit human directive (survivor/absorbed resolved) → skip clarify, go straight to
+  // the consolidated pitch. Every other mode runs clarify — but in refine (the scoped "Éditer" chat) the
+  // agent gets the feature's pitch as `existing`, so it only asks when the NEW message is genuinely
+  // unclear, never the generic "what's the problem?" it already knows.
   const skipClarify = data.mode === 'merge'
 
   // Ask at most until the cap; once capped, force a proposal.
   if (!skipClarify && turns < MAX_TURNS) {
-    const question = await llm.clarify({ raw: data.raw, transcript: data.transcript, code, lang: data.lang })
+    const question = await llm.clarify({ raw: data.raw, transcript: data.transcript, code, lang: data.lang, existing: existingPitch })
     if (question) {
       data.transcript.push({ role: 'agent', text: question })
       saveSession(id, 'clarify', turns, data)
@@ -449,9 +483,7 @@ async function advance(
     proposal = await llm.propose({
       raw: mergeRaw, transcript: data.transcript, classification, roadmap, code, lang: data.lang,
       candidates: survivor ? [{ feature_id: survivor.id, title: survivor.title, similarity: 1 }] : candidates,
-      existing: survivor
-        ? { title: survivor.title, problem: survivor.problem, solution: survivor.solution || '', rabbit_holes: survivor.rabbit_holes || '', out_of_bounds: survivor.out_of_bounds || '', appetite: survivor.appetite || 'small' }
-        : undefined,
+      existing: survivor ? pitchOf(survivor) : undefined,
     })
     proposal.action = 'merge'
     proposal.target_feature_id = data.target_feature_id
@@ -459,14 +491,12 @@ async function advance(
     proposal.confidence = 1
     reflect = im.merge(data.lang, absorbed?.title ?? '', survivor?.title ?? '')
   } else if (data.mode === 'refine' && data.target_feature_id) {
-    // Explicit target: force append to it, and feed Claude the current pitch to merge into.
-    const target = get<Feature>('SELECT * FROM features WHERE id = ?', data.target_feature_id)
+    // Explicit target (loaded once above). Feed Claude the current pitch so it refines editorially.
+    const target = refineTarget
     proposal = await llm.propose({
       raw: data.raw, transcript: data.transcript, classification, roadmap, code, lang: data.lang,
       candidates: target ? [{ feature_id: target.id, title: target.title, similarity: 1 }] : candidates,
-      existing: target
-        ? { title: target.title, problem: target.problem, solution: target.solution || '', rabbit_holes: target.rabbit_holes || '', out_of_bounds: target.out_of_bounds || '', appetite: target.appetite || 'small' }
-        : undefined,
+      existing: existingPitch,
     })
     if (target && (target.status === 'done' || target.status === 'archived')) {
       // Don't reopen a shipped/archived solution — shape a NEW iteration linked to it.
@@ -479,10 +509,19 @@ async function advance(
       proposal.action = 'create_feature'
       proposal.target_feature_id = null
       reflect = im.frozen(data.lang, target.title, target.status, proposal.proposed_spec.title)
-    } else {
-      proposal.action = 'append'
+    } else if (proposal.action === 'append') {
+      // On-topic: the message refines the pinned feature → append to it, no qualification needed (the
+      // agent already has the pitch). This is the default in a scoped edit chat.
       proposal.target_feature_id = data.target_feature_id
       reflect = im.refineAppend(data.lang, proposal.proposed_spec.problem, proposal.proposed_spec.title, proposal.confidence * 100 | 0)
+    } else {
+      // Escape hatch: the agent judged the message ISN'T about this feature (see the propose prompt's
+      // existingBlock). Hand it to the NORMAL intake — drop the pin and re-run as a fresh signal so it
+      // goes through the full flow (qualification/clarify + triage + shaping), exactly like the home
+      // intake. The refine proposal above only served to detect off-topic; we discard it and re-route.
+      data.mode = 'signal'
+      data.target_feature_id = null
+      return advance(id, _prevState, turns, data, llm)
     }
   } else {
     proposal = await llm.propose({ raw: data.raw, transcript: data.transcript, candidates, classification, roadmap, code, lang: data.lang })

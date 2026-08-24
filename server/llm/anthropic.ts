@@ -260,11 +260,36 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       return stub.classify(content)
     },
 
-    clarify: async ({ raw, transcript, code, lang }) => {
+    clarify: async ({ raw, transcript, code, lang, existing }) => {
       const agentQuestions = transcript.filter(t => t.role === 'agent' && t.text.includes('?')).length
       if (agentQuestions >= MAX_CLARIFY) return null
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
       const codeBlock = code ? `\n\n${code}` : ''
+      // Editing a known feature — the qualification depth keys on its SHAPING STATE, not on the entry path.
+      // A `shaped` pitch is edited lightly (never re-shaped); a `shaping` one is challenged against the exact
+      // open questions that block it. Both know the pitch already, so neither re-asks "what's the problem?".
+      const pitchLines = existing
+        ? `\ntitle: ${existing.title}\nproblem: ${existing.problem}\nsolution: ${existing.solution}\nappetite: ${existing.appetite}`
+        : ''
+      const existingBlock = !existing
+        ? ''
+        : existing.maturity === 'shaping'
+          ? `\n\nYou are EDITING this feature, which is NOT yet shaped: it is CAPTURED but BLOCKED by open questions. `
+            + `You already know its problem and scope — never re-ask those. Your job here is to help RESOLVE the open `
+            + `questions so it can be shaped and bet on. Judge the NEW message against them: if it resolves (or lets you `
+            + `confidently resolve) at least one, reply "OK". If it leaves them open, or is too vague to close any, ask `
+            + `ONE targeted question about the SPECIFIC open question it fails to answer — never a generic re-framing.\n`
+            + `Open questions still blocking it:\n${existing.open_questions.map(q => `- ${q}`).join('\n') || '- (none recorded — treat as a light edit)'}`
+            + pitchLines
+          : `\n\nYou are EDITING this existing feature (its pitch below), which is already SHAPED. You ALREADY know its `
+            + `problem, solution and scope — NEVER re-ask those, and never make the user re-explain the feature. `
+            + `Decide from the NEW message alone:\n`
+            + `- If it states a clear decision / direction / concrete detail — even briefly ("on tranche pour X", `
+            + `"on garde Y", "finalement Z") — reply "OK". A decision is complete on its own; do NOT demand downstream detail.\n`
+            + `- Only ask when the NEW message opens a genuinely under-specified request: a fuzzy `
+            + `"revoir / revisiter / améliorer X" with no specifics, a change with no target, a claim needing a number. `
+            + `Then ask ONE targeted question about THAT gap — never about the feature you already understand.`
+            + pitchLines
       const text = await callClaude(
         `Product context:\n${productContext()}\n\n`
         + 'You are a SENIOR product manager doing Shape Up intake — NOT an order-taker. Do not accept the '
@@ -291,7 +316,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'some context comes from, whether something exists) — you can already see it. If the signal is ALREADY '
         + 'implemented there, do not interrogate it: reply ONLY "OK" immediately so routing can dedup it (it will flag '
         + 'the duplicate, citing the file). Use the code to skip the obvious and ask only about a genuinely OPEN gap.',
-        `Signal: ${raw}\n\nConversation so far:\n${convo}${codeBlock}`, 160, { temperature: 0 },
+        `Signal: ${raw}\n\nConversation so far:\n${convo}${codeBlock}${existingBlock}`, 160, { temperature: 0 },
       )
       if (text === null) return stub.clarify({ raw, transcript })
       const t = text.trim()
@@ -318,13 +343,24 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       const { raw, candidates, classification, transcript, existing, roadmap, code, lang } = input
       const candList = candidates.map(c => `- ${c.feature_id} | ${c.title} | sim=${c.similarity.toFixed(2)}`).join('\n') || '(none)'
       const convo = transcript.map(t => `${t.role}: ${t.text}`).join('\n')
+      // When the feature is still `shaping`, spell out the open questions blocking it: an append that resolves
+      // them is what promotes it (set maturity "shaped" + clear them); one that doesn't keeps it "shaping".
+      const shapingBlock = existing && existing.maturity === 'shaping'
+        ? `\nThis feature is NOT yet shaped — it is blocked by these open questions:\n`
+          + `${existing.open_questions.map(q => `- ${q}`).join('\n') || '- (none recorded)'}\n`
+          + `If the new signal RESOLVES them (the blocking decision is now made), set maturity "shaped" and clear `
+          + `open_questions; if some remain open, keep maturity "shaping" and list what still blocks it.`
+        : ''
       const existingBlock = existing
         ? `\n\nYou are REFINING this existing feature by MERGING the new signal into it. This is EDITORIAL, not append-only: `
           + `keep what still holds, and you MAY rewrite or CUT parts the new signal supersedes, contradicts or makes obsolete. `
           + `What is forbidden is WHOLESALE replacement — do NOT discard the existing pitch to keep only the new signal; every `
           + `cut must be justified by the new signal, not by inattention. The result must still cover the original feature's `
-          + `still-valid substance PLUS the addition:\n`
+          + `still-valid substance PLUS the addition. ESCAPE HATCH: if the new signal is clearly NOT about this feature (a `
+          + `different problem entirely), do NOT force-fit it — return action "create_feature" for the new topic instead of `
+          + `polluting this feature. Only "append" when the signal genuinely refines THIS feature:\n`
           + `title: ${existing.title}\nproblem: ${existing.problem}\nsolution: ${existing.solution}\nrabbit_holes: ${existing.rabbit_holes}\nout_of_bounds: ${existing.out_of_bounds}\nappetite: ${existing.appetite}`
+          + shapingBlock
         : ''
       const roadmapBlock = roadmap ? `\n\nRoadmap (READ-ONLY context):\n${roadmap}` : ''
       const codeBlock = code ? `\n\n${code}` : ''

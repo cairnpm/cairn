@@ -20,6 +20,10 @@ interface BatchSegment { id: string; signal: { title: string; problem: string; c
 interface TurnResponse { session_id: string; state: string; agent_message: string; proposal: Proposal | null; batch?: { session_id: string; segments: BatchSegment[] } }
 interface Msg { role: 'user' | 'agent'; text: string; attachments?: Att[] }
 
+// When mounted from a feature's detail page, the chat is pinned to that feature: every turn refines it
+// (update / reshape / promote a `shaping` feature) instead of cold-creating a new one.
+const props = defineProps<{ targetFeatureId?: string; targetTitle?: string }>()
+
 const { t } = useUiLang()
 const bike = useCairn()
 const { author } = bike
@@ -34,12 +38,13 @@ const committed = ref<{ action: string; feature_id: string | null } | null>(null
 const chatEl = ref<HTMLElement | null>(null)
 
 // Resume: the whole conversation is persisted server-side; we only need to remember WHICH session across
-// a refresh/navigation. Store the active (uncommitted) session id locally; wrapped in try/catch for
-// private mode. Cleared on commit and reset so a stale pointer never re-hydrates a finished session.
-const POINTER_KEY = 'cairn:intake:active'
+// a refresh / a closed edit panel. The home intake and each feature's edit chat keep SEPARATE pointers
+// (so they never cross-hydrate), and both resume the same way. Cleared on commit and reset so a stale
+// pointer never re-hydrates a finished session. Wrapped in try/catch for private mode.
+const pointerKey = computed(() => props.targetFeatureId ? `cairn:intake:feature:${props.targetFeatureId}` : 'cairn:intake:active')
 const resumed = ref(false)
-function rememberSession(id: string) { try { localStorage.setItem(POINTER_KEY, id) } catch { /* private mode */ } }
-function forgetSession() { try { localStorage.removeItem(POINTER_KEY) } catch { /* private mode */ } }
+function rememberSession(id: string) { try { localStorage.setItem(pointerKey.value, id) } catch { /* private mode */ } }
+function forgetSession() { try { localStorage.removeItem(pointerKey.value) } catch { /* private mode */ } }
 
 interface Att { id: string; filename: string; kind: string }
 const attachments = ref<Att[]>([])
@@ -102,10 +107,10 @@ async function send() {
   try {
     const r = await $fetch<TurnResponse>('/api/intake/turn', {
       method: 'POST',
-      body: { session_id: sessionId.value, message: text, captured_by: author.value, attachment_ids: atts.map(a => a.id) },
+      body: { session_id: sessionId.value, message: text, captured_by: author.value, attachment_ids: atts.map(a => a.id), target_feature_id: props.targetFeatureId ?? null },
     })
     sessionId.value = r.session_id
-    rememberSession(r.session_id) // so a refresh can resume this conversation
+    rememberSession(r.session_id) // home → global pointer; scoped edit → this feature's pointer
     proposal.value = r.proposal
     state.value = r.state
     messages.value.push({ role: 'agent', text: r.agent_message })
@@ -164,7 +169,7 @@ function reset() {
 interface ResumePayload { session_id: string; committed: boolean; state?: string; transcript?: { role: 'user' | 'agent'; text: string }[]; proposal?: Proposal | null; batch?: { session_id: string; segments: BatchSegment[] } | null }
 onMounted(async () => {
   let pid: string | null = null
-  try { pid = localStorage.getItem(POINTER_KEY) } catch { /* private mode */ }
+  try { pid = localStorage.getItem(pointerKey.value) } catch { /* private mode */ }
   if (!pid) return
   try {
     const r = await $fetch<ResumePayload>(`/api/intake/session/${pid}`)
@@ -214,8 +219,8 @@ const QUICK = computed(() => [
         <div class="mb-6 flex flex-col items-center gap-3 text-center">
           <CairnMark inverted class="h-14 w-auto" />
           <div>
-            <h1 class="text-xl font-semibold tracking-tight">{{ t('intake.heroTitle') }}</h1>
-            <p class="mt-1 text-sm text-muted-foreground">{{ t('intake.heroSubtitle') }}</p>
+            <h1 class="text-xl font-semibold tracking-tight">{{ props.targetFeatureId ? t('intake.scopedTitle', { title: props.targetTitle || '' }) : t('intake.heroTitle') }}</h1>
+            <p class="mt-1 text-sm text-muted-foreground">{{ props.targetFeatureId ? t('intake.scopedSubtitle') : t('intake.heroSubtitle') }}</p>
           </div>
         </div>
 
@@ -233,7 +238,7 @@ const QUICK = computed(() => [
           </CardContent>
         </Card>
 
-        <div class="mt-3 flex flex-wrap justify-center gap-2">
+        <div v-if="!props.targetFeatureId" class="mt-3 flex flex-wrap justify-center gap-2">
           <Button v-for="q in QUICK" :key="q" variant="outline" size="sm" class="text-muted-foreground" @click="draft = q">{{ q.trim() }}…</Button>
         </div>
       </div>

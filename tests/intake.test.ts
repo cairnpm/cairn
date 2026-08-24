@@ -170,6 +170,45 @@ describe('intake gateway — bout en bout', () => {
   })
 })
 
+describe('intake scopé sur une feature', () => {
+  beforeAll(() => ensureSchema())
+
+  // Helper: seed a `shaping` feature via the normal intake path.
+  async function seedShaping(): Promise<string> {
+    const seed = await converse('Modèle agence ou modèle outil ? On ne sait pas encore, en cours de réévaluation.')
+    const sc = await intakeCommit(seed.session_id, ACTOR)
+    expect(feature(sc.feature_id!).status).toBe('shaping')
+    return sc.feature_id!
+  }
+
+  it('un chat scopé rattache à la feature ciblée (append), sans créer de doublon', async () => {
+    const fid = await seedShaping()
+    const before = featureCount()
+
+    // A feature-scoped turn: 7th arg pins the target — skips intent detection, goes straight to refine.
+    let r = await intakeTurn(null, 'On avance : je précise le cadrage de cette feature.', 'manual', ACTOR, [], 'fr', fid)
+    let i = 0
+    while (r.state === 'clarify' && i++ < 8) r = await intakeTurn(r.session_id, SHAPING_ANSWER, 'manual', ACTOR)
+    expect(r.proposal!.action, 'scopé → rattachement').toBe('append')
+    expect(r.proposal!.target_feature_id, 'ciblé sur la feature ouverte').toBe(fid)
+
+    const commit = await intakeCommit(r.session_id, ACTOR)
+    expect(commit.action).toBe('append')
+    expect(featureCount(), 'aucune nouvelle feature créée').toBe(before)
+  })
+
+  it.runIf(REAL)('résoudre les questions ouvertes promeut la feature shaping → shaped', async () => {
+    const fid = await seedShaping()
+    let r = await intakeTurn(null, 'Décision prise : on part sur le modèle agence, Jemmo opère ses propres comptes. Le problème et le scope sont donc clairs maintenant.', 'manual', ACTOR, [], 'fr', fid)
+    let i = 0
+    while (r.state === 'clarify' && i++ < 8) r = await intakeTurn(r.session_id, SHAPING_ANSWER, 'manual', ACTOR)
+    await intakeCommit(r.session_id, ACTOR)
+    const f = feature(fid)
+    expect(f.status, 'promue en shaped').toBe('shaped')
+    expect(get<{ open_questions: string }>('SELECT open_questions FROM features WHERE id = ?', fid)!.open_questions).toBe('[]')
+  })
+})
+
 describe('intake — reprise & purge de sessions', () => {
   beforeAll(() => ensureSchema())
 

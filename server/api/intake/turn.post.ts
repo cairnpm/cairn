@@ -8,9 +8,12 @@ export default defineAuthedHandler(async (event, { actor }) => {
   const attachmentIds = Array.isArray(body?.attachment_ids) ? body.attachment_ids.filter((x: unknown) => typeof x === 'string') : []
   // A turn needs either text or at least one attachment (e.g. a transcript dropped without a note).
   if (!message.trim() && !attachmentIds.length) throw createError({ statusCode: 400, statusMessage: 'message or attachment required' })
+  // Feature-scoped intake: the chat is pinned to a feature (opened from its detail page). Only honoured
+  // on the FIRST turn of a session; ignored once the session exists.
+  const targetFeatureId = typeof body?.target_feature_id === 'string' ? body.target_feature_id : null
   // Output language follows the UI locale (cookie set by the client's language switcher; defaults to fr).
   const cookieLang = getCookie(event, 'bike-lang')
   const lang = cookieLang === 'en' || cookieLang === 'es' ? cookieLang : 'fr'
   // Attribution comes from the authenticated session, never the request body.
-  return intakeTurn(sessionId, message, source, actor, attachmentIds, lang)
+  return intakeTurn(sessionId, message, source, actor, attachmentIds, lang, targetFeatureId)
 })
