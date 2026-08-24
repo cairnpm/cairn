@@ -168,6 +168,9 @@ async function toggleIssueOnBet(v: boolean) {
 }
 onMounted(() => {
   const g = new URLSearchParams(window.location.search).get('github')
+  // GitHub redirects back here after the app-manifest / install flow. Land on the Intelligence tab —
+  // where the GitHub config and the toast's call-to-action ("Grant access") live — not the default one.
+  if (g) active.value = 'ia'
   if (g === 'connected') toast.success('Accès accordé — repo connecté.')
   else if (g === 'error') toast.error('Connexion GitHub échouée.')
   else if (g === 'app-created') toast.success('GitHub App créée — clique « Grant access » pour autoriser ton repo.')
