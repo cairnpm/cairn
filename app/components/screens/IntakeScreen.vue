@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ArrowDown, ArrowUp, FileText, Image as ImageIcon, Layers, Paperclip, X } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Card, CardContent } from '@/components/ui/card'
@@ -32,6 +32,14 @@ const draft = ref('')
 const pending = ref(false)
 const committed = ref<{ action: string; feature_id: string | null } | null>(null)
 const chatEl = ref<HTMLElement | null>(null)
+
+// Resume: the whole conversation is persisted server-side; we only need to remember WHICH session across
+// a refresh/navigation. Store the active (uncommitted) session id locally; wrapped in try/catch for
+// private mode. Cleared on commit and reset so a stale pointer never re-hydrates a finished session.
+const POINTER_KEY = 'cairn:intake:active'
+const resumed = ref(false)
+function rememberSession(id: string) { try { localStorage.setItem(POINTER_KEY, id) } catch { /* private mode */ } }
+function forgetSession() { try { localStorage.removeItem(POINTER_KEY) } catch { /* private mode */ } }
 
 interface Att { id: string; filename: string; kind: string }
 const attachments = ref<Att[]>([])
@@ -97,6 +105,7 @@ async function send() {
       body: { session_id: sessionId.value, message: text, captured_by: author.value, attachment_ids: atts.map(a => a.id) },
     })
     sessionId.value = r.session_id
+    rememberSession(r.session_id) // so a refresh can resume this conversation
     proposal.value = r.proposal
     state.value = r.state
     messages.value.push({ role: 'agent', text: r.agent_message })
@@ -114,6 +123,7 @@ async function accept() {
   try {
     const r = await $fetch<{ action: string; feature_id: string }>('/api/intake/commit', { method: 'POST', body: { session_id: sessionId.value } })
     committed.value = { action: r.action, feature_id: r.feature_id }
+    forgetSession() // committed → no longer resumable
     proposal.value = null
     // A commit creates/updates a feature → the backlog + counts must re-sync.
     await invalidate(qk.features, qk.featureDetail, qk.overview)
@@ -133,6 +143,7 @@ async function confirmBatch(selections: { id: string; action_override: string; t
   try {
     const r = await $fetch<{ created: number; updated: number; discarded: number }>('/api/intake/commit-batch', { method: 'POST', body: { session_id: batch.value.session_id, segments: selections } })
     batchRecap.value = { created: r.created, updated: r.updated, discarded: r.discarded }
+    forgetSession() // committed → no longer resumable
     batch.value = null; reviewOpen.value = false
     await invalidate(qk.features, qk.featureDetail, qk.overview)
     toast.success(t('intake.batch.recapToast', { created: r.created, updated: r.updated }))
@@ -141,10 +152,33 @@ async function confirmBatch(selections: { id: string; action_override: string; t
 function cancelBatch() { reviewOpen.value = false } // back to chat; reopen anytime
 
 function reset() {
+  forgetSession(); resumed.value = false
   sessionId.value = null; messages.value = []; proposal.value = null
   state.value = ''; committed.value = null; draft.value = ''; attachments.value = []
   batch.value = null; reviewOpen.value = false; batchRecap.value = null
 }
+
+// On mount, resume the pointed-at session if it's still open + owned; otherwise drop the stale pointer
+// and cold-start. Runs client-side only (onMounted). All rejections (404/403/committed) look the same:
+// clear the pointer, start fresh — no crash, no dangling banner.
+interface ResumePayload { session_id: string; committed: boolean; state?: string; transcript?: { role: 'user' | 'agent'; text: string }[]; proposal?: Proposal | null; batch?: { session_id: string; segments: BatchSegment[] } | null }
+onMounted(async () => {
+  let pid: string | null = null
+  try { pid = localStorage.getItem(POINTER_KEY) } catch { /* private mode */ }
+  if (!pid) return
+  try {
+    const r = await $fetch<ResumePayload>(`/api/intake/session/${pid}`)
+    if (r.committed || !r.transcript?.length) { forgetSession(); return }
+    sessionId.value = r.session_id
+    messages.value = r.transcript.map(m => ({ role: m.role, text: m.text }))
+    proposal.value = r.proposal ?? null
+    state.value = r.state ?? ''
+    // Only reopen the batch takeover for a routed review; a batch_clarify session resumes as plain chat
+    // (the next send() re-enters the guided flow server-side) — never strand the user in an empty takeover.
+    if (r.batch) { batch.value = r.batch; reviewOpen.value = r.state === 'batch_review' }
+    resumed.value = true
+  } catch { forgetSession() }
+})
 function onKey(e: KeyboardEvent) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }
 
 const ACTION_LABEL = computed<Record<string, string>>(() => ({
@@ -210,6 +244,10 @@ const QUICK = computed(() => [
       <div class="relative min-h-0 flex-1">
         <div ref="chatEl" class="h-full overflow-y-auto" @scroll="onScroll">
           <div class="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-6">
+          <div v-if="resumed" class="flex items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+            <span>{{ t('intake.resumed') }}</span>
+            <Button variant="ghost" size="sm" class="h-7" @click="reset">{{ t('intake.startFresh') }}</Button>
+          </div>
           <div v-for="(m, i) in messages" :key="i" class="flex gap-2.5" :class="m.role === 'user' ? 'justify-end' : ''">
             <CairnMark v-if="m.role === 'agent'" inverted class="mt-0.5 h-6 w-auto shrink-0" />
             <div class="max-w-[80%] rounded-lg px-3.5 py-2.5 text-sm leading-relaxed" :class="m.role === 'agent' ? 'bg-muted' : 'bg-primary text-primary-foreground'">

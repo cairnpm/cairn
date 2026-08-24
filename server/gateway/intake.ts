@@ -202,6 +202,30 @@ function saveSession(id: string, state: string, turns: number, data: IntakeSessi
   )
 }
 
+/**
+ * Read a session back so the client can RESUME it after a refresh/navigation (the whole conversation is
+ * persisted here; only the client forgets the id). Ownership is name-based like the rest of the attribution
+ * model — not a security boundary (auth is global), just so one member can't resurrect another's draft.
+ * A committed session is not an error: it returns `{committed:true}` so the client drops its stale pointer.
+ */
+export function getResumableSession(id: string, actor: string | null) {
+  const loaded = loadSession(id)
+  if (!loaded) throw createError({ statusCode: 404, statusMessage: 'Session introuvable' })
+  const { row, data } = loaded
+  if (data.captured_by !== actor) throw createError({ statusCode: 403, statusMessage: 'Session appartenant à un autre membre' })
+  if (row.committed) return { session_id: id, committed: true as const }
+  return {
+    session_id: id,
+    committed: false as const,
+    state: row.state,
+    transcript: data.transcript,
+    proposal: data.proposal,
+    batch: data.batch ?? null,
+    mode: data.mode,
+    target_feature_id: data.target_feature_id,
+  }
+}
+
 // ── Attachments → text ───────────────────────────────────────────────────────
 /** Extract plain text from a .docx buffer (Word file = zip; mammoth is pure-JS, no native dep). */
 async function extractDocxText(buf: Buffer): Promise<string> {
