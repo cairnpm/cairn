@@ -17,9 +17,23 @@ const productServer = fileURLToPath(new URL('../server', import.meta.url))
 export default defineNuxtConfig({
   extends: ['..'],
 
-  // SEO, site-only: the product is auth-gated and must never be indexed, so it doesn't load these.
+  // SEO, site-only: the product is auth-gated and must never be indexed, so it doesn't load this.
+  // The umbrella keeps robots / sitemap / schema-org / seo-utils on versions known to agree — they all
+  // sit on the same nuxt-site-config, and pinning them apart is how that silently drifts.
   // `nuxt-seo-utils` is what turns the relative og:image into an absolute URL and emits the canonical.
-  modules: ['@nuxtjs/robots', '@nuxtjs/sitemap', 'nuxt-schema-org', 'nuxt-seo-utils'],
+  modules: ['@nuxtjs/seo'],
+
+  // A hand-drawn og.png (public/og.svg is its source) beats anything a renderer would compose for a
+  // one-page site — so skip og-image and the headless-Chrome/wasm toolchain it drags into the build.
+  ogImage: { enabled: false },
+
+  // Build-time only. Every CTA here is a deep link into the GitHub repo (`blob/main/DEPLOY.md`…) which
+  // rots the moment a file is renamed, and those are remote URLs — off by default, so the checker would
+  // otherwise inspect the single internal link and call it a day.
+  //
+  // Warn, never block: this now depends on GitHub answering, and a rate-limit or a blip is no reason to
+  // fail a deploy. The dead link shows up in the build log.
+  linkChecker: { fetchRemoteUrls: true, failOnError: false },
 
   // Every absolute URL (canonical, og:url, sitemap, robots) derives from this. Override per-deploy with
   // NUXT_SITE_URL — e.g. a preview deployment — without touching the code.

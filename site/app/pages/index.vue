@@ -100,6 +100,14 @@ const FAQ = [
     a: 'One Node process and one embedded SQLite file — no external database. One click on Render, a docker run on any box with a volume, or Fly.io with the included fly.toml.',
   },
 ]
+
+// The accordion below IS the answer set, so it feeds the schema too — restating it in a second literal
+// is how the two drift apart. Promoting the page to FAQPage is the one rich result a single-page site
+// can realistically earn, and it's what makes these questions eligible to surface on the SERP itself.
+useSchemaOrg([
+  defineWebPage({ '@type': 'FAQPage' }),
+  ...FAQ.map(item => defineQuestion({ name: item.q, acceptedAnswer: item.a })),
+])
 </script>
 
 <template>
