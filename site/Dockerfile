@@ -18,10 +18,21 @@ COPY . .
 # domain has to be known HERE — it cannot be set at runtime.
 ARG NUXT_SITE_URL=https://cairnpm.com
 ENV NUXT_SITE_URL=$NUXT_SITE_URL
+# Analytics key, also baked in at prerender time. Empty by default and absent from this public repo, so
+# a fork that builds the site reports nothing; `pnpm site:deploy` passes the real one. See
+# site/docs/tracking.md.
+ARG NUXT_PUBLIC_POSTHOG_KEY=
+ENV NUXT_PUBLIC_POSTHOG_KEY=$NUXT_PUBLIC_POSTHOG_KEY
 RUN pnpm site:generate
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
 FROM nginx:1.27-alpine AS runtime
-COPY site/nginx.conf /etc/nginx/conf.d/default.conf
+# A template, not a conf: the entrypoint runs envsubst over it so the resolver can come from the
+# platform's /etc/resolv.conf at boot. See site/nginx.conf.template.
+#
+# Opt-in flag — without it the image's 15-local-resolvers script returns early, ${NGINX_LOCAL_RESOLVERS}
+# is never set, and nginx refuses to start on an unsubstituted `resolver` directive.
+ENV NGINX_ENTRYPOINT_LOCAL_RESOLVERS=1
+COPY site/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/site/.output/public /usr/share/nginx/html
 EXPOSE 80

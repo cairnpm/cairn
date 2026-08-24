@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { Button } from '@/components/ui/button'
 import { LINKS } from '../utils/site'
+import { useTracking } from '../composables/useTracking'
 
 const NAV = [
   { label: 'How it works', href: LINKS.intake },
   { label: 'Roadmap', href: LINKS.roadmap },
   { label: 'GitHub', href: LINKS.repo },
 ]
+
+const { ctaClicked } = useTracking()
 </script>
 
 <template>
@@ -15,12 +18,15 @@ const NAV = [
       <a href="/"><SiteWordmark /></a>
 
       <div class="flex items-center gap-6">
-        <SiteLink v-for="link in NAV" :key="link.label" :href="link.href" class="hidden sm:block">
+        <SiteLink v-for="link in NAV" :key="link.label" :href="link.href" surface="nav" class="hidden sm:block">
           {{ link.label }}
         </SiteLink>
 
         <Button as-child size="sm" class="rounded-none">
-          <a :href="LINKS.selfHost" target="_blank" rel="noopener noreferrer">Self-host</a>
+          <a
+            :href="LINKS.selfHost" target="_blank" rel="noopener noreferrer"
+            @click="ctaClicked(LINKS.selfHost, 'nav')"
+          >Self-host</a>
         </Button>
       </div>
     </nav>

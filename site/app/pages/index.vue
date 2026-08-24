@@ -3,6 +3,7 @@ import { ArrowUpRight } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { LINKS } from '../utils/site'
+import { useTracking } from '../composables/useTracking'
 
 const DOCKER = `docker run -d --name cairn \\
   -p 3000:3000 \\
@@ -100,6 +101,24 @@ const FAQ = [
     a: 'One Node process and one embedded SQLite file — no external database. One click on Render, a docker run on any box with a volume, or Fly.io with the included fly.toml.',
   },
 ]
+
+// The accordion below IS the answer set, so it feeds the schema too — restating it in a second literal
+// is how the two drift apart. Promoting the page to FAQPage is the one rich result a single-page site
+// can realistically earn, and it's what makes these questions eligible to surface on the SERP itself.
+useSchemaOrg([
+  defineWebPage({ '@type': 'FAQPage' }),
+  ...FAQ.map(item => defineQuestion({ name: item.q, acceptedAnswer: item.a })),
+])
+
+const { ctaClicked, faqOpened } = useTracking()
+
+// The accordion emits the newly open item's value, or '' when it collapses — a close answers nothing,
+// so only opens are reported. Which questions get opened is what says where the copy leaves a gap.
+function onFaqToggle(value: string | number | string[] | undefined) {
+  const index = Number(String(value).replace('faq-', ''))
+  const item = FAQ[index]
+  if (item) faqOpened(item.q)
+}
 </script>
 
 <template>
@@ -124,13 +143,19 @@ const FAQ = [
 
         <div class="mt-9 flex flex-wrap gap-3">
           <Button as-child class="rounded-none">
-            <a :href="LINKS.selfHost" target="_blank" rel="noopener noreferrer">
+            <a
+              :href="LINKS.selfHost" target="_blank" rel="noopener noreferrer"
+              @click="ctaClicked(LINKS.selfHost, 'hero')"
+            >
               Self-host Cairn
               <ArrowUpRight class="size-4" />
             </a>
           </Button>
           <Button as-child variant="outline" class="rounded-none">
-            <a :href="LINKS.intake" target="_blank" rel="noopener noreferrer">How the agent works</a>
+            <a
+              :href="LINKS.intake" target="_blank" rel="noopener noreferrer"
+              @click="ctaClicked(LINKS.intake, 'hero')"
+            >How the agent works</a>
           </Button>
         </div>
 
@@ -210,7 +235,11 @@ const FAQ = [
       </div>
 
       <div class="min-w-0 px-6 pb-14 lg:col-span-2 lg:border-l lg:px-12 lg:py-24">
-        <Accordion type="single" collapsible class="w-full">
+        <!-- Emits the open item's value, or '' on collapse — only opens are worth an event. -->
+        <Accordion
+          type="single" collapsible class="w-full"
+          @update:model-value="onFaqToggle"
+        >
           <AccordionItem v-for="(item, i) in FAQ" :key="item.q" :value="`faq-${i}`">
             <AccordionTrigger class="text-left text-[15px] font-medium hover:no-underline">
               {{ item.q }}

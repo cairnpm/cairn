@@ -33,7 +33,9 @@ const COLUMNS = [
 
       <div v-for="col in COLUMNS" :key="col.title" class="flex flex-col gap-3">
         <SiteBracket>{{ col.title }}</SiteBracket>
-        <SiteLink v-for="link in col.links" :key="link.label" :href="link.href">{{ link.label }}</SiteLink>
+        <SiteLink v-for="link in col.links" :key="link.label" :href="link.href" surface="footer">
+          {{ link.label }}
+        </SiteLink>
       </div>
     </div>
 
