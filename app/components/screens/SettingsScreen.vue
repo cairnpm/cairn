@@ -6,13 +6,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'vue-sonner'
 
 const { t } = useUiLang()
 
-interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; key_hint: string | null; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean; github_app_ready: boolean; github_app_slug: string; github_connected: boolean; product_context: string }
+interface SettingsView { workspace_name: string; workspace_logo: string | null; has_key: boolean; key_source: string; key_hint: string | null; model: string; models: string[]; code_repo: string; code_repo_source: string; has_code_token: boolean; github_app_ready: boolean; github_app_slug: string; github_connected: boolean; github_issue_on_bet: boolean; product_context: string }
 interface Profile { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 interface Member { id: string; name: string; email: string | null; role: string; avatar_url: string | null }
 
@@ -160,6 +161,10 @@ function createGithubApp() {
 async function resetGithubApp() {
   await mutate('/api/github/app', { method: 'DELETE', invalidates: [qk.settings], success: 'App GitHub supprimée — recrée-la en renseignant l\'org.' })
   ghOrg.value = ''
+}
+// Opt-in: auto-open a GitHub issue when a feature is bet. Requires the App's Issues:write permission.
+async function toggleIssueOnBet(v: boolean) {
+  await mutate('/api/settings', { body: { github_issue_on_bet: v }, invalidates: [qk.settings], success: v ? 'Issue GitHub à chaque bet activée.' : 'Ouverture auto désactivée.' })
 }
 onMounted(() => {
   const g = new URLSearchParams(window.location.search).get('github')
@@ -352,6 +357,13 @@ async function save() {
                     <Button variant="outline" size="sm" @click="connectGithub">Changer de repo</Button>
                     <Button variant="ghost" size="sm" class="text-muted-foreground hover:text-destructive" @click="resetGithubApp">Supprimer l'App</Button>
                   </div>
+                </div>
+                <div class="mt-4 flex items-start justify-between gap-3 border-t pt-4">
+                  <div class="min-w-0">
+                    <div class="text-sm font-medium">Ouvrir une issue à chaque bet</div>
+                    <p class="text-xs text-muted-foreground">Quand une feature est pariée, Cairn ouvre une issue GitHub depuis le pitch. Sinon, un bouton « Ouvrir une issue » reste dispo sur chaque feature pariée. Nécessite la permission <strong>Issues : write</strong> — les installs existantes doivent ré-approuver l'App.</p>
+                  </div>
+                  <Switch :model-value="!!cfg?.github_issue_on_bet" @update:model-value="toggleIssueOnBet" />
                 </div>
               </template>
               <template v-else>

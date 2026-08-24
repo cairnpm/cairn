@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ExternalLink } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { FeatureDetailData } from '~/types/feature'
 
 const props = defineProps<{ detail: FeatureDetailData }>()
@@ -33,6 +34,31 @@ async function assign(method: 'POST' | 'DELETE', role: 'shaper' | 'builder', use
     toast.success(method === 'POST' ? t('feature.assigned', { role: role === 'shaper' ? 'Shaper' : 'Builder' }) : t('feature.unassigned'))
   }
   catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || t('feature.actionFailed')) }
+}
+
+// GitHub issue: the bet materialised as an execution ticket. Owner/assignee-only server-side; the
+// button only shows when a GitHub repo is linked, the feature is bet, and no issue is open yet.
+type IssueLink = FeatureDetailData['issue_links'][number]
+const issueLinks = ref<IssueLink[]>([...(props.detail.issue_links ?? [])])
+watch(() => props.detail.issue_links, v => { issueLinks.value = [...(v ?? [])] })
+const canOpenIssue = computed(() =>
+  props.detail.github_ready
+  && ['bet', 'building'].includes(props.detail.feature.status)
+  && !issueLinks.value.some(i => i.status === 'open'))
+
+const openingIssue = ref(false)
+async function openIssue() {
+  if (openingIssue.value) return
+  openingIssue.value = true
+  try {
+    const res = await $fetch<{ issue: IssueLink | null, events: FeatureEvent[] }>(`/api/features/${props.detail.feature.id}/issue`, { method: 'POST' })
+    if (res.issue) issueLinks.value = [res.issue, ...issueLinks.value]
+    events.value = res.events
+    await invalidate(qk.featureDetail, qk.features)
+    toast.success(t('feature.issueOpened'))
+  }
+  catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || t('feature.actionFailed')) }
+  finally { openingIssue.value = false }
 }
 
 const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
@@ -96,6 +122,15 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
             <a v-for="p in detail.pr_links" :key="p.id" :href="p.pr_url" target="_blank" class="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground">
               <ExternalLink class="size-3" />{{ p.repo }}#{{ p.pr_number }} · {{ p.status }}
             </a>
+          </div>
+          <div v-if="issueLinks.length || canOpenIssue">
+            <SectionLabel class="mb-2">{{ t('feature.issueGithub') }}</SectionLabel>
+            <a v-for="i in issueLinks" :key="i.id" :href="i.issue_url" target="_blank" class="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground">
+              <ExternalLink class="size-3" />{{ i.repo }}#{{ i.issue_number }} · {{ i.status }}
+            </a>
+            <Button v-if="canOpenIssue" variant="outline" size="sm" class="mt-2" :disabled="openingIssue" @click="openIssue">
+              {{ openingIssue ? '…' : t('feature.openIssue') }}
+            </Button>
           </div>
     </div>
 

@@ -6,6 +6,8 @@ export interface FeatureDetailData {
   feedback: { id: string; content: string; source: string; classification: string; captured_by: string | null; created_at: string; attachments: { id: string; filename: string; kind: string }[] }[]
   decisions: { id: string; verdict: string; rationale: string; decided_by: string | null; decided_at: string }[]
   pr_links: { id: string; repo: string; pr_number: number; pr_url: string; status: string }[]
+  issue_links: { id: string; repo: string; issue_number: number; issue_url: string; status: string }[]
+  github_ready: boolean
   events: { seq: number; actor: string; action: string; summary: string; detail?: string | null; created_at: string }[]
   attachments: { id: string; filename: string; kind: string }[]
   assignees: { id: string; user_id: string; name: string; avatar_url: string | null; role: 'shaper' | 'builder' }[]
