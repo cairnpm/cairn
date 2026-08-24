@@ -43,6 +43,9 @@ FSL-licensed. UI copy is French; code/comments/commits are English.
 ## Security & self-host ethos
 
 - **Zero-egress by default** — no telemetry, no phone-home. The linked product repo is grepped locally.
+  The *only* self-initiated outbound call is the update check (`server/utils/updateCheck.ts`): an anonymous
+  `GET` of the latest GitHub release, at most every 6 h, sending no data and no identifier — on by default,
+  off with `update_check = 0`. Don't add a second one.
 - **Secrets** (Anthropic key, GitHub App private key, repo PAT) are **encrypted at rest**
   (`server/utils/secrets.ts` → `getSecret`/`setSecret`), **write-only** in the UI (never read back), and
   **never** logged or written to disk in plaintext (e.g. git tokens go inline to the fetch/clone command,

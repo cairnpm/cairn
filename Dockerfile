@@ -25,5 +25,7 @@ ENV PORT=3000
 # SQLite file + uploads on a persistent volume mounted at /data.
 ENV NUXT_DB_URL=file:/data/app.db
 COPY --from=build /app/.output ./.output
+# Operator scripts (bin/backup.mjs): zero-dep ESM run with `docker exec cairn node bin/backup.mjs`.
+COPY bin ./bin
 EXPOSE 3000
 CMD ["node", ".output/server/index.mjs"]

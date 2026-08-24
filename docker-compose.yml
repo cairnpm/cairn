@@ -2,6 +2,8 @@
 # Pulls the published image; to build from source instead, comment `image` and uncomment `build`.
 services:
   cairn:
+    # `:latest` = newest tagged release (what the in-app update check compares against).
+    # `:main` = HEAD of main, if you'd rather live on the edge.
     image: ghcr.io/cairnpm/cairn:latest
     # build: .
     restart: unless-stopped

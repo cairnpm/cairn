@@ -3,8 +3,12 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
-    "types": ["node"],
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "node"
+    ],
     "allowJs": true,
     "checkJs": true,
     "strict": true,
@@ -12,5 +16,8 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["cairn.mjs"]
+  "include": [
+    "cairn.mjs",
+    "backup.mjs"
+  ]
 }

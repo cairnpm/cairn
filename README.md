@@ -91,8 +91,13 @@ docker compose up -d        # → http://localhost:3000
 ```
 
 Also supported — **Fly.io**, plain **Docker**, backups and env vars: see
-**[DEPLOY.md](./DEPLOY.md)**. Prebuilt images are published to
-`ghcr.io/cairnpm/cairn`.
+**[DEPLOY.md](./DEPLOY.md)**. Prebuilt images are published to `ghcr.io/cairnpm/cairn`
+(`:latest` = newest tagged release, `:main` = HEAD of main).
+
+**Staying up to date.** Settings → Workspace → Version shows the version you run and whether a
+newer release exists, with the update command for your host — one anonymous `GET` to the GitHub
+releases API, nothing sent, switchable off. Commands per host: **[DEPLOY.md § Updating](./DEPLOY.md#updating)**.
+Back up first with `node bin/backup.mjs` — a consistent `VACUUM INTO` snapshot of the live database (**[§ Backups](./DEPLOY.md#backups)**).
 
 First boot creates a single owner account — `ceo@cairn.local` / `cairn` — change the
 password right away. The workspace starts **empty**; set `CAIRN_SEED_DEMO=1` to load a

@@ -12,6 +12,7 @@ export const qk = {
   overview: 'overview',
   settings: 'settings',
   profile: 'profile',
+  version: 'version',
 } as const
 
 export type QueryKey = typeof qk[keyof typeof qk]
