@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ExternalLink } from 'lucide-vue-next'
+import { ExternalLink, PanelRightClose, Pencil } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { FeatureDetailData } from '~/types/feature'
 
-const props = defineProps<{ detail: FeatureDetailData }>()
+// `compact` = rendered inside the quick-view overlay (reserves header room for its corner buttons). The
+// edit chat is an inline right column that pushes the detail left — not a floating drawer — so both read
+// side by side. From the overlay we don't stack a chat on a cramped quick-view: the Éditer button instead
+// opens the full feature page (with ?edit=1 to auto-open the chat there).
+const props = defineProps<{ detail: FeatureDetailData; compact?: boolean }>()
 const { t } = useUiLang()
+const route = useRoute()
+const chatOpen = ref(!props.compact && route.query.edit === '1')
 
 // Manually-assigned team (member-driven, never the intake agent). Local copy synced with the server.
 const { members } = useMembers()
@@ -65,7 +71,9 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
 </script>
 
 <template>
-  <DetailLayout :aside-width="360">
+  <div class="flex h-full min-h-0">
+    <div class="min-w-0 flex-1">
+  <DetailLayout :aside-width="360" :compact="compact">
     <template #title>
       <h2 class="pr-8 text-base font-semibold leading-snug">{{ detail.feature.title }}</h2>
     </template>
@@ -74,6 +82,14 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
       <MetaField :label="t('feature.meta.status')"><StatusBadge :status="detail.feature.status" /></MetaField>
       <MetaField :label="t('feature.meta.appetite')"><Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge></MetaField>
       <MetaField v-if="detail.feature.hill_name" label="Hill"><Badge variant="secondary">{{ detail.feature.hill_name }}</Badge></MetaField>
+      <!-- Édition: aligned bottom-right with the meta badges, clear of the overlay's top corner icons.
+           Overlay → open the full page (?edit=1); full page → toggle the inline chat panel. -->
+      <Button v-if="compact" as-child variant="outline" size="sm" class="ml-auto self-end">
+        <NuxtLink :to="`/features/${detail.feature.id}?edit=1`"><Pencil class="size-4" /> {{ t('intake.refine') }}</NuxtLink>
+      </Button>
+      <Button v-else-if="!chatOpen" variant="outline" size="sm" class="ml-auto self-end" @click="chatOpen = true">
+        <Pencil class="size-4" /> {{ t('intake.refine') }}
+      </Button>
     </template>
 
     <div class="flex flex-col gap-6 p-6 text-sm">
@@ -145,4 +161,19 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
       <ActivityTimeline :events="events" :title="t('feature.activity')" :empty-text="t('feature.noActivity')" scope="feature" />
     </template>
   </DetailLayout>
+    </div>
+
+    <!-- Edit chat: a real right column that pushes the detail left (not a floating drawer), so the
+         feature and the conversation read side by side. Commits invalidate qk.featureDetail → the page
+         re-syncs; the overlay re-fetches on next open. -->
+    <div v-if="chatOpen" class="flex w-full max-w-[440px] shrink-0 flex-col border-l bg-background">
+      <div class="flex h-14 shrink-0 items-center justify-between border-b px-4">
+        <span class="text-sm font-medium">{{ t('intake.refine') }}</span>
+        <Button variant="ghost" size="icon" class="size-8" :aria-label="t('common.close')" @click="chatOpen = false"><PanelRightClose class="size-4" /></Button>
+      </div>
+      <div class="min-h-0 flex-1">
+        <IntakeScreen :key="detail.feature.id" :target-feature-id="detail.feature.id" :target-title="detail.feature.title" />
+      </div>
+    </div>
+  </div>
 </template>

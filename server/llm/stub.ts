@@ -78,7 +78,10 @@ export function createStubProvider(): LlmProvider {
 
     classify: async (content: string) => heuristicClassify(content),
 
-    clarify: async ({ raw, transcript }) => {
+    clarify: async ({ raw, transcript, existing }) => {
+      // Editing a known feature: the stub can't judge whether the new message is unclear, so it never
+      // over-asks — go straight to the revision (the real LLM handles the smart, targeted clarify).
+      if (existing) return null
       // Shaping discipline (§4): force a real problem statement + appetite + out-of-bounds
       // rather than a reworded request. Ask at most twice, then converge to a proposal.
       const agentQuestions = transcript.filter(t => t.role === 'agent' && t.text.includes('?')).length

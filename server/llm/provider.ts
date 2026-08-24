@@ -1,5 +1,19 @@
 import type { Candidate, Classification, DecomposedSignal, Intent, Proposal, TranscriptEntry, Triage, UiLang } from '../domain/types'
 
+/** A known feature's current pitch, handed to clarify/propose when refining it. Carries `maturity` +
+ *  `open_questions` so qualification keys on the SHAPING STATE, not the entry path: a `shaped` pitch is
+ *  edited lightly (never re-shaped), a `shaping` one is challenged against the exact questions blocking it. */
+export interface ExistingPitch {
+  title: string
+  problem: string
+  solution: string
+  rabbit_holes: string
+  out_of_bounds: string
+  appetite: string
+  maturity: 'shaped' | 'shaping'
+  open_questions: string[]
+}
+
 export interface ProposeInput {
   raw: string
   transcript: TranscriptEntry[]
@@ -8,7 +22,7 @@ export interface ProposeInput {
   /** UI locale — the language the agent writes its user-facing output in (defaults to French). */
   lang?: UiLang
   /** Present when refining a known feature — its current pitch, to merge into. */
-  existing?: { title: string; problem: string; solution: string; rabbit_holes: string; out_of_bounds: string; appetite: string }
+  existing?: ExistingPitch
   /** Read-only roadmap context (active cycles + in-flight features) so the agent routes with the
    *  right picture — and never amends a feature whose scope is frozen in a validated cycle. */
   roadmap?: string
@@ -46,7 +60,7 @@ export interface LlmProvider {
   answerQuery: (question: string, context: string, lang?: UiLang) => Promise<string>
   classify: (content: string) => Promise<Classification>
   /** A single targeted question, or null when the spec is complete enough. */
-  clarify: (input: { raw: string; transcript: TranscriptEntry[]; code?: string; lang?: UiLang }) => Promise<string | null>
+  clarify: (input: { raw: string; transcript: TranscriptEntry[]; code?: string; lang?: UiLang; existing?: ExistingPitch }) => Promise<string | null>
   propose: (input: ProposeInput) => Promise<Proposal>
   /** Triage a raw input: one shapeable problem (single) or several (multi → offer decomposition). */
   triage: (input: { raw: string; lang?: UiLang }) => Promise<Triage>

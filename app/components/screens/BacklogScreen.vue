@@ -141,7 +141,7 @@ const open = computed({
       <StatusFilterTabs v-model="statusModel" :filters="FILTERS" />
       <div class="flex items-center gap-2">
         <Select v-model="userModel">
-          <SelectTrigger size="sm" class="w-40"><SelectValue :placeholder="t('backlog.filterUser')" /></SelectTrigger>
+          <SelectTrigger size="sm" class="w-48"><SelectValue :placeholder="t('backlog.filterUser')" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="__all">{{ t('backlog.allUsers') }}</SelectItem>
             <SelectItem v-for="m in members" :key="m.id" :value="m.name">{{ m.name }}</SelectItem>
@@ -230,7 +230,7 @@ const open = computed({
       :title="detail?.feature.title ?? ''" :open-page-to="`/features/${detail?.feature.id}`"
       :open-page-title="t('backlog.openFeaturePage')" :open-page-label="t('backlog.openPage')"
     >
-      <FeatureDetail v-if="detail" :detail="detail" />
+      <FeatureDetail v-if="detail" :detail="detail" compact />
     </DetailSheet>
 
     <!-- Delete confirmation -->
