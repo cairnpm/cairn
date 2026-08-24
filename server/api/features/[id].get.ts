@@ -1,6 +1,8 @@
 import { all, get } from '~~/server/db/client'
 import { listAssignees } from '~~/server/db/assignees'
 import { listFeatureEvents } from '~~/server/db/events'
+import { getSetting } from '~~/server/db/settings'
+import { parseSpec } from '~~/server/utils/codeRepo'
 
 // Read-only feature detail: shape + signals (feedback) + decisions + PR links + routing audit.
 export default defineEventHandler((event) => {
@@ -27,6 +29,9 @@ export default defineEventHandler((event) => {
     feedback,
     decisions: all('SELECT id, verdict, appetite, rationale, decided_by, hill_id, decided_at FROM decisions WHERE feature_id = ? ORDER BY decided_at DESC', id),
     pr_links: all('SELECT id, repo, pr_number, pr_url, status, auto_close, linked_at, closed_at FROM pr_links WHERE feature_id = ? ORDER BY linked_at DESC', id),
+    issue_links: all('SELECT id, repo, issue_number, issue_url, status, opened_at, closed_at FROM issue_links WHERE feature_id = ? ORDER BY opened_at DESC', id),
+    // True when a GitHub repo is linked → the "open an issue" action is available for a bet feature.
+    github_ready: parseSpec(getSetting('code_repo') ?? process.env.CAIRN_CODE_REPO ?? '').mode === 'github',
     events: listFeatureEvents(id),
     routing_log: all('SELECT id, action, confidence, rationale, model, created_at FROM routing_log WHERE target_feature_id = ? ORDER BY created_at DESC', id),
     // Only feature-level orphans (not tied to a specific signal) remain in the standalone block.

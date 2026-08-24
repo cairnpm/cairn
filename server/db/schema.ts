@@ -81,6 +81,19 @@ export function ensureSchema(): void {
       closed_at   TEXT
     );
 
+    -- GitHub issue links: the bet materialised as an execution ticket (shape → bet → issue → PR → done).
+    CREATE TABLE IF NOT EXISTS issue_links (
+      id           TEXT PRIMARY KEY,
+      feature_id   TEXT NOT NULL REFERENCES features(id),
+      repo         TEXT NOT NULL,
+      issue_number INTEGER NOT NULL,
+      issue_url    TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'open',      -- open | closed
+      opened_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      closed_at    TEXT
+    );
+    CREATE INDEX IF NOT EXISTS issue_links_by_feature ON issue_links (feature_id);
+
     -- Gateway audit (each routing decision)
     CREATE TABLE IF NOT EXISTS routing_log (
       id                TEXT PRIMARY KEY,

@@ -82,7 +82,7 @@ export function hardDeleteFeature(id: string): boolean {
   d.exec('PRAGMA foreign_keys = OFF')
   try {
     run('DELETE FROM betting_votes WHERE candidate_id IN (SELECT id FROM betting_candidates WHERE feature_id = ?)', id)
-    for (const t of ['betting_candidates', 'feature_events', 'feature_assignees', 'decisions', 'pr_links', 'feedback']) {
+    for (const t of ['betting_candidates', 'feature_events', 'feature_assignees', 'decisions', 'pr_links', 'issue_links', 'feedback']) {
       run(`DELETE FROM ${t} WHERE feature_id = ?`, id)
     }
     run('DELETE FROM routing_log WHERE target_feature_id = ?', id)

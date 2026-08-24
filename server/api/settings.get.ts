@@ -27,6 +27,8 @@ export default defineEventHandler(() => {
     github_app_ready: githubAppReady(),
     github_app_slug: getSetting('github_app_slug') ?? process.env.GITHUB_APP_SLUG ?? 'cairn-pm',
     github_connected: !!getSetting('github_installation_id'),
+    // Opt-in: auto-open a GitHub issue when a feature is bet (the manual button is always available).
+    github_issue_on_bet: getSetting('github_issue_on_bet') === '1',
     // Workspace product framing (injected into shaping/answer prompts); empty → generic default.
     product_context: getSetting('product_context') ?? '',
   }

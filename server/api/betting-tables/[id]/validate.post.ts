@@ -1,6 +1,7 @@
 import { all, get, run, tx } from '~~/server/db/client'
 import { getBettingTable, logBettingEvent } from '~~/server/db/betting'
 import { recordDecision } from '~~/server/domain/bet'
+import { autoOpenIssuesOnBet } from '~~/server/utils/githubIssues'
 import { newId } from '~~/server/utils/id'
 
 // Owner validates a table → creates a hill (cycle) and bets the selected, still-shaped features.
@@ -28,6 +29,7 @@ export default defineAuthedHandler(async (event, { user, actor }) => {
 
   const hillId = newId()
   const bet: string[] = []
+  const betIds: string[] = []
   const skipped: { title: string, status: string }[] = []
 
   tx(() => {
@@ -41,6 +43,7 @@ export default defineAuthedHandler(async (event, { user, actor }) => {
       if (f?.status === 'shaped') {
         recordDecision({ featureId: c.feature_id, verdict: 'bet', hillId, rationale: rationale || `Parié via la betting table « ${table.title} »`, decidedBy: actor })
         bet.push(c.title_snap)
+        betIds.push(c.feature_id)
       } else {
         skipped.push({ title: c.title_snap, status: f?.status ?? 'introuvable' })
       }
@@ -51,6 +54,9 @@ export default defineAuthedHandler(async (event, { user, actor }) => {
     )
     logBettingEvent(id, actor, 'validated', `Validée par ${actor} → hill « ${hillName} » · ${bet.length} pari(s)`, { hill_id: hillId, hill_name: hillName, bet, skipped })
   })
+
+  // Post-commit, opt-in: open a GitHub issue for each newly bet feature. Best-effort, never blocks.
+  await autoOpenIssuesOnBet(betIds, actor)
 
   return { ok: true, hill_id: hillId, bet, skipped }
 })
