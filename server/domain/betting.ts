@@ -1,5 +1,6 @@
 import { all, get } from '../db/client'
 import type { Feature } from './types'
+import { BETTABLE_STATUSES, sqlIn } from './status'
 import { cosine, decodeEmbedding } from '../utils/embedding'
 
 const CLUSTER_THRESHOLD = 0.4
@@ -18,7 +19,7 @@ export interface MenuCandidate {
 // Score + thematically cluster the shaped backlog into a ranked betting menu. Shared by the
 // live preview and the persisted table snapshot (so both rank identically).
 export function computeMenu(now = Date.now()): MenuCandidate[] {
-  const features = all<Feature>(`SELECT * FROM features WHERE status = 'shaped'`)
+  const features = all<Feature>(`SELECT * FROM features WHERE status IN (${sqlIn(BETTABLE_STATUSES)})`)
 
   const scored = features.map((f) => {
     const ageDays = (now - Date.parse(f.updated_at)) / 86_400_000

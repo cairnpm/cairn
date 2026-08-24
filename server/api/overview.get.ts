@@ -3,9 +3,9 @@ import { getSetting } from '~~/server/db/settings'
 
 // Sidebar overview: nav counts, recent activity feed, and the live model — one cheap call.
 export default defineEventHandler(() => {
-  const counts = get<{ total: number, shaped: number, bet: number, building: number, done: number }>(
+  const counts = get<{ total: number, shaping: number, shaped: number, bet: number, building: number, done: number }>(
     `SELECT COUNT(*) AS total,
-            SUM(status='shaped') AS shaped, SUM(status='bet') AS bet,
+            SUM(status='shaping') AS shaping, SUM(status='shaped') AS shaped, SUM(status='bet') AS bet,
             SUM(status='building') AS building, SUM(status='done') AS done
      FROM features WHERE status NOT IN ('archived', 'deleted')`,
   )
@@ -20,7 +20,7 @@ export default defineEventHandler(() => {
 
   return {
     features_total: counts?.total ?? 0,
-    by_status: { shaped: counts?.shaped ?? 0, bet: counts?.bet ?? 0, building: counts?.building ?? 0, done: counts?.done ?? 0 },
+    by_status: { shaping: counts?.shaping ?? 0, shaped: counts?.shaped ?? 0, bet: counts?.bet ?? 0, building: counts?.building ?? 0, done: counts?.done ?? 0 },
     hills_active: hillsActive,
     betting_total: bettingTotal,
     workspace_name: getSetting('workspace_name') ?? 'Cairn',

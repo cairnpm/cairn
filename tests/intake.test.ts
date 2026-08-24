@@ -3,6 +3,7 @@ import { intakeCommit, intakeTurn } from '../server/gateway/intake'
 import { ensureSchema } from '../server/db/schema'
 import { all, get, run } from '../server/db/client'
 import { getLlm } from '../server/llm/provider'
+import { computeMenu } from '../server/domain/betting'
 import type { TurnResponse } from '../server/domain/types'
 
 // End-to-end intake tests. Run REAL (against the Anthropic API, key from .env) by default, or set
@@ -55,6 +56,25 @@ describe('intake gateway — bout en bout', () => {
     const f = feature(commit.feature_id!)
     expect(f.status).toBe('shaped')
     expect(f.signal_count).toBe(1)
+  })
+
+  it('capture (pas discard) : un signal réel mais non-shapeable devient une feature « shaping », non-bettable', async () => {
+    // Décision stratégique non tranchée : réel et dans le périmètre, mais aucun pitch shapeable.
+    // Avant, l'agent n'avait que discard → perdu. Désormais : capturé en `shaping`.
+    const before = featureCount()
+    const res = await converse('Modèle agence ou modèle outil ? La décision n\'est pas encore tranchée, c\'est en cours de réévaluation par l\'équipe.')
+    expect(res.proposal, 'un tour doit aboutir').toBeTruthy()
+    expect(res.proposal!.action, 'un signal réel n\'est jamais écarté').not.toBe('discard')
+
+    const commit = await intakeCommit(res.session_id, ACTOR)
+    expect(commit.feature_id, 'le signal doit être capturé, pas jeté').toBeTruthy()
+    if (commit.action === 'create_feature') expect(featureCount()).toBe(before + 1)
+
+    const f = feature(commit.feature_id!)
+    expect(f.status, 'capturée en shaping, pas shaped').toBe('shaping')
+    // Non-bettable : absente du menu de la betting table.
+    const menuIds = computeMenu().map(c => c.feature_id)
+    expect(menuIds, 'une feature shaping n\'entre jamais dans le menu de paris').not.toContain(f.id)
   })
 
   it('un bug est capturé (jamais écarté comme « hors-scope » ou renvoyé vers Jira)', async () => {

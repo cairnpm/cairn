@@ -3,7 +3,7 @@
 export type UiLang = 'fr' | 'en' | 'es'
 export type Classification = 'musing' | 'explore' | 'directive'
 export type FeedbackStatus = 'new' | 'routed' | 'pending_review' | 'archived'
-export type FeatureStatus = 'raw' | 'shaped' | 'bet' | 'building' | 'done' | 'archived'
+export type FeatureStatus = 'shaping' | 'shaped' | 'bet' | 'building' | 'done' | 'archived'
 export type Appetite = 'small' | 'big'
 export type HillStatus = 'planned' | 'active' | 'closed'
 export type Verdict = 'bet' | 'pass' | 'defer'
@@ -34,6 +34,9 @@ export interface Feature {
   stale: number
   hill_id: string | null
   signal_count: number
+  // JSON array of the unresolved questions that keep a `shaping` feature from being shaped (empty/null
+  // once shaped). Stored raw as TEXT; decoded to string[] at the API boundary.
+  open_questions: string | null
   embedding: string | null
   created_at: string
   updated_at: string
@@ -107,6 +110,13 @@ export interface Proposal {
   target_feature_id: string | null
   merge_from_feature_id?: string | null   // for action='merge': the absorbed feature
   supersedes_id?: string | null           // new iteration of a shipped/archived feature
+  // Shape Up maturity of a `create_feature` (or the promoted state of an `append`): a rough-but-solved-
+  // and-bounded pitch is `shaped` (bettable); a real signal whose core problem is unresolved / a decision
+  // is pending / it is too embryonic is `shaping` (captured, non-bettable). Optional so in-flight session
+  // JSON from before this field still parses. Defaults to 'shaped' at commit.
+  maturity?: 'shaped' | 'shaping'
+  // The specific unresolved questions behind a `shaping` maturity — the seeds of future decisions.
+  open_questions?: string[]
   classification: Classification
   confidence: number
   rationale: string

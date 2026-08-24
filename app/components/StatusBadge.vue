@@ -10,6 +10,7 @@ const VARIANT: Record<string, 'default' | 'secondary' | 'outline' | 'destructive
   building: 'secondary',
   validated: 'default',
   open: 'secondary',
+  shaping: 'outline',
   shaped: 'outline',
   planned: 'outline',
   active: 'secondary',

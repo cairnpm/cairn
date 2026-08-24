@@ -71,12 +71,16 @@ const PROPOSE_SCHEMA = {
       },
       required: ['title', 'problem', 'appetite', 'solution', 'rabbit_holes', 'out_of_bounds'],
     },
+    // maturity + open_questions sit right after proposed_spec (before confidence/rationale) for the same
+    // ordering reason: they generate before a verbose rationale can truncate them under max_tokens.
+    maturity: { type: 'string', enum: ['shaped', 'shaping'] },
+    open_questions: { type: 'array', items: { type: 'string' } },
     signal_summary: { type: 'string' },
     confidence: { type: 'number' },
     rationale: { type: 'string' },
     clarifying_question: nullableString,
   },
-  required: ['action', 'target_feature_id', 'proposed_spec', 'signal_summary', 'confidence', 'rationale', 'clarifying_question'],
+  required: ['action', 'target_feature_id', 'proposed_spec', 'maturity', 'open_questions', 'signal_summary', 'confidence', 'rationale', 'clarifying_question'],
 }
 
 const TRIAGE_SCHEMA = {
@@ -350,6 +354,15 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + 'Do NOT discard a legitimate problem because it looks low-priority or "not now": shaping a feature is NOT a '
         + 'commitment to build it — prioritisation and timing are decided later at the betting table. '
         + 'Default strongly to CAPTURING real problems (append to the right feature, or create a new one). '
+        + 'MATURITY — set "maturity" on every create_feature/append. "shaped" = a rough-but-SOLVED-and-BOUNDED '
+        + 'pitch you could bet on: a real problem, an appetite, a sketched solution, its rabbit holes and no-gos. '
+        + '"shaping" = the signal is REAL and on-product but NOT yet shapeable: its core problem is unresolved, it '
+        + 'names a strategic decision the team has not made (competing options, "en cours de réévaluation"), or it '
+        + 'is too embryonic ("on ne sait pas encore", "à définir"). A "shaping" feature is CAPTURED, not discarded '
+        + '— never send a real signal to discard just because it cannot be shaped yet; that is exactly what shaping '
+        + 'is for. When maturity is "shaping", fill "open_questions" with the specific unresolved questions/decisions '
+        + 'that block shaping (these become the roadmap\'s open decisions); when "shaped", "open_questions" is []. '
+        + 'maturity is ORTHOGONAL to classification (musing/explore/directive) and to clarifying_question. '
         + 'ROADMAP CONTEXT is read-only: features already committed to a cycle have a FROZEN scope — NEVER append to them; '
         + 'a signal about one of them is a NEW feature for a later cycle (create_feature), or a discard if it adds nothing. '
         + 'In the rationale, reason like a PM: state your key ASSUMPTIONS and any MISSING context the human should confirm, '
@@ -388,6 +401,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       return {
         action: parsed.action,
         target_feature_id: parsed.action === 'create_feature' ? null : (parsed.target_feature_id ?? candidates[0]?.feature_id ?? null),
+        maturity: parsed.maturity === 'shaping' ? 'shaping' : 'shaped',
+        open_questions: Array.isArray(parsed.open_questions) ? parsed.open_questions.filter((s): s is string => typeof s === 'string' && s.trim().length > 0) : [],
         classification,
         confidence: typeof parsed.confidence === 'number' ? parsed.confidence : (candidates[0]?.similarity ?? 0.5),
         rationale: parsed.rationale || 'Routing proposé par le modèle.',
