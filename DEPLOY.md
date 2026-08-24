@@ -160,14 +160,53 @@ is a **foreground** preview server: fine to eyeball a build, wrong for a running
 
 ## Backups
 
-Everything lives in `/data`. Back it up by copying the volume, or snapshot it on
-your host:
+Two things to keep: the **SQLite database** and the **uploads**. They need different treatment.
+
+**The database is being written to.** `cp`/`tar` on a live `app.db` can capture a torn file — the WAL
+moves between the two reads and you don't find out until the day you restore. SQLite's own answer is
+`VACUUM INTO`, which takes a read lock and emits one self-contained, already-checkpointed file.
+That's what `bin/backup.mjs` does, over a **read-only** connection, so a backup can never write to or
+lock out the running instance:
 
 ```bash
-# Docker
-docker run --rm -v cairn_data:/data -v "$PWD":/backup alpine \
-  tar czf /backup/cairn-$(date +%F).tgz -C /data .
+docker compose exec cairn node bin/backup.mjs          # Docker / Compose
+fly ssh console -C "node bin/backup.mjs"               # Fly.io
+node bin/backup.mjs                                    # from source
 ```
+
+It prints the path it wrote — `/data/backups/cairn-2026-08-24T21-30-05.db` by default. Flags:
+`--out <path>` to place it yourself, `--keep <n>` to delete all but the newest *n* (an unrotated cron
+fills the volume, which is the outage a backup was meant to prevent).
+
+**The uploads are write-once**, so `tar` is safe on them live — nothing rewrites a file after it lands.
+
+Put together — a nightly script that leaves one portable archive on the host:
+
+```bash
+#!/bin/sh
+# /usr/local/bin/cairn-backup   ·   cron: 0 3 * * * /usr/local/bin/cairn-backup
+set -e
+COMPOSE="docker compose -f /path/to/docker-compose.yml"
+DAY=$(date +%F)
+# mkdir: uploads/ only exists once someone has attached a file — without it tar aborts on a fresh install.
+$COMPOSE exec -T cairn sh -c "mkdir -p /data/uploads && node bin/backup.mjs --out /data/backups/cairn-$DAY.db --keep 7" >/dev/null
+$COMPOSE exec -T cairn tar czf - -C /data "backups/cairn-$DAY.db" uploads > "/backups/cairn-$DAY.tgz"
+```
+
+Ship that archive **off the machine** — a snapshot on the same volume dies with the volume.
+
+**Restore:** stop the container, unpack, and put the snapshot in place as `app.db`.
+
+```bash
+tar xzf cairn-2026-08-24.tgz -C /tmp/restore
+mv /tmp/restore/backups/cairn-2026-08-24.db /tmp/restore/app.db   # the snapshot IS the database
+# copy /tmp/restore/app.db and /tmp/restore/uploads into the volume, then start the container
+```
+
+There are no `-wal`/`-shm` sidecars to carry: `VACUUM INTO` folded them in.
+
+> Copying the whole volume also works, but **only with the app stopped**
+> (`docker compose down`, `fly machine stop`). Live volume copies carry the torn-file risk above.
 
 ## Environment variables
 
