@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { intakeCommit, intakeTurn } from '../server/gateway/intake'
+import { intakeCommit, intakeTurn, getResumableSession } from '../server/gateway/intake'
 import { ensureSchema } from '../server/db/schema'
 import { all, get, run } from '../server/db/client'
 import { getLlm } from '../server/llm/provider'
 import { computeMenu } from '../server/domain/betting'
+import { purgeIntakeSessions } from '../server/db/purgeIntake'
 import type { TurnResponse } from '../server/domain/types'
 
 // End-to-end intake tests. Run REAL (against the Anthropic API, key from .env) by default, or set
@@ -166,5 +167,35 @@ describe('intake gateway — bout en bout', () => {
     const dup = await converse('Encore une demande de dashboard analytics produit, avec cycle time et vélocité par hill.')
     expect(dup.proposal!.target_feature_id, 'ne doit jamais cibler une feature en cycle').not.toBe(fid)
     expect(feature(fid).signal_count, 'la feature en cycle reste inchangée').toBe(sigBefore)
+  })
+})
+
+describe('intake — reprise & purge de sessions', () => {
+  beforeAll(() => ensureSchema())
+
+  it('reprise : le propriétaire relit le transcript, un autre membre est rejeté', async () => {
+    const res = await intakeTurn(null, 'Un signal de test pour vérifier la reprise de session.', 'manual', ACTOR)
+    const resumed = getResumableSession(res.session_id, ACTOR)
+    expect(resumed.committed, 'session encore ouverte').toBe(false)
+    if (!resumed.committed) expect(resumed.transcript.length, 'le transcript est relu').toBeGreaterThan(0)
+    // Attribution par nom : un autre membre ne peut pas reprendre le brouillon.
+    expect(() => getResumableSession(res.session_id, 'Quelqu\'un d\'autre')).toThrow()
+  })
+
+  it('purge : supprime committées >2j et abandonnées >14j, garde les fraîches', () => {
+    const old = '2020-01-01T00:00:00.000Z'
+    const now = new Date().toISOString()
+    const ins = (id: string, committed: number, updated: string) =>
+      run('INSERT INTO intake_session (id, state, turns, data, committed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', id, 'gather', 0, '{}', committed, updated, updated)
+    ins('purge-committed-old', 1, old)
+    ins('purge-uncommitted-old', 0, old)
+    ins('purge-fresh', 0, now)
+
+    purgeIntakeSessions(true) // force: bypass the 6h throttle
+
+    const alive = (id: string) => !!get('SELECT id FROM intake_session WHERE id = ?', id)
+    expect(alive('purge-committed-old'), 'committée >2j supprimée').toBe(false)
+    expect(alive('purge-uncommitted-old'), 'abandonnée >14j supprimée').toBe(false)
+    expect(alive('purge-fresh'), 'session fraîche conservée').toBe(true)
   })
 })
