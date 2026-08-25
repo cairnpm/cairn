@@ -11,6 +11,7 @@ function productContext(): string {
 }
 import type { LlmProvider, ProposeInput } from './provider'
 import { createStubProvider, DEDUP_STRONG } from './stub'
+import { recordUsage } from './usage'
 
 /**
  * Anthropic-backed provider (Messages API via raw fetch — no SDK dependency).
@@ -20,6 +21,32 @@ import { createStubProvider, DEDUP_STRONG } from './stub'
  */
 const API_URL = 'https://api.anthropic.com/v1/messages'
 const MAX_CLARIFY = 8
+const MAX_ATTEMPTS = 4
+const REQUEST_TIMEOUT_MS = 120_000
+// Matches what the official SDKs retry: rate limit, conflict, request timeout, overloaded, and 5xx.
+const RETRYABLE = new Set([408, 409, 429, 529])
+// A server asking us to wait minutes is not worth blocking an interactive turn for: past this we give
+// up immediately and let the caller fall back to the stub. Clamping instead would be worse than the
+// blind backoff it replaced — three capped sleeps against a server that asked for 300s is a guaranteed
+// -premature retry AND a much longer stall.
+const MAX_RETRY_AFTER_MS = 30_000
+
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
+
+/** Exponential backoff with jitter, so a batch's retries don't re-collide in lockstep. */
+function backoffMs(attempt: number): number {
+  return 400 * 2 ** attempt + Math.floor(Math.random() * 250)
+}
+
+/** `retry-after` in seconds (what the API sends) or as an HTTP date; null when absent or unusable. */
+function retryAfterMs(headers: Headers): number | null {
+  const raw = headers.get('retry-after')
+  if (!raw) return null
+  const seconds = Number(raw)
+  const ms = Number.isFinite(seconds) ? seconds * 1000 : new Date(raw).getTime() - Date.now()
+  if (!Number.isFinite(ms) || ms <= 0) return null
+  return ms
+}
 
 interface CallOpts { temperature?: number, schema?: object }
 
@@ -120,15 +147,27 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
   const { apiKey, model } = cfg
   // Opus 4.x / Fable / Mythos reject `temperature`; everything else (Haiku/Sonnet) accepts it.
   const acceptsTemperature = !/(opus-4|fable|mythos)/i.test(model)
+  // Latched per provider instance (reset with the provider when the model/key changes).
+  let schemaUnsupported = false
 
   async function callClaude(system: string, user: string, maxTokens = 512, opts: CallOpts = {}): Promise<string | null> {
     const base: Record<string, unknown> = {
-      model, max_tokens: maxTokens, system,
+      model, max_tokens: maxTokens,
+      // Prompt caching. Each operation's system prompt is LARGE and STATIC (propose alone is ~4.6k
+      // tokens of instructions) while everything volatile — signal, conversation, candidates, code
+      // grep — lives in the user message. That's the prefix shape caching rewards: reads cost ~0.1x
+      // input, the write costs 1.25x, so it pays from the second identical call on. The intake
+      // reuses these prompts constantly: clarify loops re-run detectIntent/propose, and decomposing
+      // a transcript runs one `propose` PER SIGNAL.
+      // Marking unconditionally is safe: a prompt below the model's minimum cacheable prefix
+      // (1024 tokens on Sonnet 4.6 / Opus 4.8) silently mints nothing — no error, and no write
+      // premium either. `triage` and `decompose` are simply too short to ever cache.
+      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: user }],
     }
     if (opts.temperature !== undefined && acceptsTemperature) base.temperature = opts.temperature
 
-    const attempt = async (withSchema: boolean): Promise<{ ok: true, text: string | null } | { ok: false, status: number }> => {
+    const attempt = async (withSchema: boolean): Promise<{ ok: true, text: string | null } | { ok: false, status: number, retryAfterMs: number | null }> => {
       const body = withSchema && opts.schema
         ? { ...base, output_config: { format: { type: 'json_schema', schema: opts.schema } } }
         : base
@@ -140,27 +179,48 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
           'content-type': 'application/json',
         },
         body: JSON.stringify(body),
+        // Without a deadline a stalled connection hangs the user's intake turn indefinitely. Sized for
+        // the slowest call (propose/decompose, ~2.6k output tokens); a timeout throws and is retried.
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
-      if (!res.ok) return { ok: false, status: res.status }
-      const data = await res.json() as { content?: { type: string, text?: string }[] }
+      if (!res.ok) return { ok: false, status: res.status, retryAfterMs: retryAfterMs(res.headers) }
+      const data = await res.json() as { content?: { type: string, text?: string }[], usage?: Parameters<typeof recordUsage>[0] }
+      recordUsage(data.usage)
       return { ok: true, text: data.content?.find(b => b.type === 'text')?.text ?? null }
     }
 
-    // Bounded retry with backoff on TRANSIENT failures (rate limit / overload / 5xx). Without this,
-    // a single 429/529 silently degrades routing to the deterministic stub — which is why a rapid
-    // batch (decompose → N propose calls) loses the smart dedup judge. 400 = schema unsupported →
-    // degrade to plain JSON-in-text once (not retried). Other 4xx (auth) → give up → caller stubs.
-    const MAX_ATTEMPTS = 4
+    // Bounded retry on TRANSIENT failures (rate limit / overload / timeout / 5xx). Without this, a
+    // single 429/529 silently degrades routing to the deterministic stub — which is why a rapid batch
+    // (decompose → N propose calls) loses the smart dedup judge. Other 4xx (auth) → give up → stub.
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       try {
-        let r = await attempt(true)
-        if (!r.ok && r.status === 400 && opts.schema) { console.warn(`[llm] schema request 400 → retry without schema (attempt ${i})`); r = await attempt(false) }
+        // Once a model has rejected structured output we stop offering it: re-probing on every call
+        // buys nothing and costs a wasted round-trip on the user's turn each time.
+        let r = await attempt(!schemaUnsupported)
+        if (!r.ok && r.status === 400 && opts.schema && !schemaUnsupported) {
+          // A 400 is NOT proof the schema is at fault — an over-long input 400s too, and `propose` /
+          // `decompose` can send very large user messages. Only latch when dropping the schema
+          // actually fixes it; otherwise this one oversized request would silently disable
+          // structured output for every later call in the process.
+          r = await attempt(false)
+          if (r.ok) {
+            console.warn('[llm] schema request 400, schemaless retry succeeded → degrading this provider')
+            schemaUnsupported = true
+          }
+        }
         if (r.ok) return r.text
         console.warn(`[llm] callClaude non-ok status=${r.status} schema=${!!opts.schema} attempt=${i}`)
-        const retryable = r.status === 429 || r.status === 529 || r.status >= 500
-        if (!retryable) return null
+        if (!RETRYABLE.has(r.status) && r.status < 500) return null
+        // Honour the server's own backpressure signal when it sends one — guessing an interval either
+        // burns an attempt on a premature retry or stalls the turn longer than asked. When it asks for
+        // longer than we're willing to hold an interactive turn, stop now rather than sleep it out.
+        if (r.retryAfterMs !== null && r.retryAfterMs > MAX_RETRY_AFTER_MS) {
+          console.warn(`[llm] retry-after ${Math.round(r.retryAfterMs / 1000)}s exceeds budget → stub`)
+          return null
+        }
+        if (i < MAX_ATTEMPTS - 1) { await sleep(r.retryAfterMs ?? backoffMs(i)); continue }
       } catch (e) { console.warn(`[llm] callClaude threw (attempt ${i}, schema=${!!opts.schema}): ${String(e)}`) }
-      if (i < MAX_ATTEMPTS - 1) await new Promise(res => setTimeout(res, 400 * 2 ** i + Math.floor(Math.random() * 250)))
+      if (i < MAX_ATTEMPTS - 1) await sleep(backoffMs(i))
     }
     console.warn(`[llm] callClaude exhausted → null (caller will stub) schema=${!!opts.schema}`)
     return null
@@ -171,6 +231,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        // Same deadline as callClaude: this runs on the interactive intake path too (extractAttachments).
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         body: JSON.stringify({
           model, max_tokens: 300,
           messages: [{
@@ -183,7 +245,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         }),
       })
       if (!res.ok) return null
-      const data = await res.json() as { content?: { type: string, text?: string }[] }
+      const data = await res.json() as { content?: { type: string, text?: string }[], usage?: Parameters<typeof recordUsage>[0] }
+      recordUsage(data.usage)
       return data.content?.find(b => b.type === 'text')?.text ?? null
     } catch { return null }
   }
@@ -492,9 +555,14 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + `Do NOT invent problems that are not genuinely raised. Write every field in ${langName(lang)}. `
         + 'When an "Existing code" block is present, treat it as GROUND TRUTH of what is already BUILT: do NOT extract an '
         + 'already-shipped capability as a NEW signal, and when a signal overlaps existing code, REFLECT that in the problem '
-        + 'statement itself (e.g. "X existe déjà (fichier Y) ; le besoin porte sur Z").'
-        + roadmapBlock,
-        `Source:\n${raw.slice(0, 120000)}${codeBlock}`,
+        + 'statement itself (e.g. "X existe déjà (fichier Y) ; le besoin porte sur Z"). '
+        + 'A "Roadmap (READ-ONLY context)" block is CONTEXT, never source material: it tells you what is '
+        + 'already planned or in flight so you do not re-extract it. NEVER emit a roadmap entry as a signal — '
+        + 'signals come from the Source block ALONE.',
+        // The roadmap belongs with the other volatile context, NOT in the cached system prefix: it
+        // moves whenever a feature or hill does, and anything in the prefix that moves invalidates
+        // the whole entry. `propose` already places it here — this keeps the rule uniform.
+        `Source:\n${raw.slice(0, 120000)}${roadmapBlock}${codeBlock}`,
         2600, { temperature: 0, schema: DECOMPOSE_SCHEMA },
       )
       const parsed = parseJson<{ signals?: DecomposedSignal[] }>(text)
