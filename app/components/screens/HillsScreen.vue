@@ -66,47 +66,44 @@ const { table, vis, hideableCols } = useDataTable({
     </div>
 
     <!-- Table -->
-    <div class="flex-1 overflow-auto rounded-lg border">
-      <Table>
-        <TableHeader class="bg-muted/50 sticky top-0">
-          <TableRow>
-            <TableHead class="w-10"><SelectAllCheckbox :table="table" :label="t('hill.selectAll')" /></TableHead>
-            <TableHead><SortHeaderButton :table="table" column="name" label="Hill" /></TableHead>
-            <TableHead v-if="vis('status')" class="w-28"><SortHeaderButton :table="table" column="status" :label="t('hill.col.status')" /></TableHead>
-            <TableHead v-if="vis('progress')" class="w-48"><SortHeaderButton :table="table" column="progress" :label="t('hill.col.progress')" /></TableHead>
-            <TableHead v-if="vis('period')" class="w-44"><SortHeaderButton :table="table" column="period" :label="t('hill.col.period')" /></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
-            <TableCell @click.stop><SelectRowCheckbox :row="row" :label="t('hill.selectRow')" /></TableCell>
-            <TableCell>
-              <span class="mr-2 font-mono text-xs text-muted-foreground">{{ shortId(row.original.id) }}</span>
-              <span class="font-medium">{{ row.original.name }}</span>
-            </TableCell>
-            <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
-            <TableCell v-if="vis('progress')">
-              <div class="flex items-center gap-2">
-                <div class="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: pct(row.original) + '%' }" /></div>
-                <span class="text-xs text-muted-foreground tabular-nums">{{ row.original.done }}/{{ row.original.total }}</span>
-              </div>
-            </TableCell>
-            <TableCell v-if="vis('period')" class="text-xs text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.starts_at, locale) }} → {{ formatDate(row.original.ends_at, locale) }}</TableCell>
-          </TableRow>
-          <TableRow v-if="!table.getRowModel().rows.length">
-            <TableCell :colspan="5" class="h-24 text-center text-muted-foreground">{{ t('hill.emptyList') }}</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+    <div class="flex-1 min-h-0 overflow-hidden rounded-lg border">
+      <ScrollArea class="h-full">
+        <Table container-class="overflow-visible">
+          <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:bg-muted/50">
+            <TableRow>
+              <TableHead class="w-10"><SelectAllCheckbox :table="table" :label="t('hill.selectAll')" /></TableHead>
+              <TableHead><SortHeaderButton :table="table" column="name" label="Hill" /></TableHead>
+              <TableHead v-if="vis('status')" class="w-28"><SortHeaderButton :table="table" column="status" :label="t('hill.col.status')" /></TableHead>
+              <TableHead v-if="vis('progress')" class="w-48"><SortHeaderButton :table="table" column="progress" :label="t('hill.col.progress')" /></TableHead>
+              <TableHead v-if="vis('period')" class="w-44"><SortHeaderButton :table="table" column="period" :label="t('hill.col.period')" /></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
+              <TableCell @click.stop><SelectRowCheckbox :row="row" :label="t('hill.selectRow')" /></TableCell>
+              <TableCell>
+                <span class="mr-2 font-mono text-xs text-muted-foreground">{{ shortId(row.original.id) }}</span>
+                <span class="font-medium">{{ row.original.name }}</span>
+              </TableCell>
+              <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
+              <TableCell v-if="vis('progress')">
+                <div class="flex items-center gap-2">
+                  <div class="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: pct(row.original) + '%' }" /></div>
+                  <span class="text-xs text-muted-foreground tabular-nums">{{ row.original.done }}/{{ row.original.total }}</span>
+                </div>
+              </TableCell>
+              <TableCell v-if="vis('period')" class="text-xs text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.starts_at, locale) }} → {{ formatDate(row.original.ends_at, locale) }}</TableCell>
+            </TableRow>
+            <TableRow v-if="!table.getRowModel().rows.length">
+              <TableCell :colspan="5" class="h-24 text-center text-muted-foreground">{{ t('hill.emptyList') }}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </ScrollArea>
     </div>
 
     <!-- Footer / pagination -->
-    <DataTablePagination
-      :table="table"
-      :selected-label="t('hill.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })"
-      :rows-per-page-label="t('hill.rowsPerPage')"
-      :page-label="t('hill.pageOf', { n: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) })"
-    />
+    <DataTableFooter :selected-label="t('hill.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })" />
 
     <!-- Quick-view Sheet -->
     <DetailSheet

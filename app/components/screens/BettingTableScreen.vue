@@ -62,8 +62,8 @@ const isOpen = computed(() => data.value?.table.status === 'open')
     <ValidateTableDialog v-model:open="showValidate" :table-id="id ?? ''" :candidates="data.candidates" @validated="onValidated" />
 
     <!-- Delete confirmation -->
-    <ConfirmDeleteDialog
-      v-model:open="confirmOpen" :deleting="deleting"
+    <ConfirmDialog destructive
+      v-model:open="confirmOpen" :busy="deleting"
       :title="t('betting.deleteDialog.title')"
       :description="t('betting.deleteDialog.description', { title: data.table.title })"
       :cancel-label="t('betting.cancel')" :confirm-label="deleting ? t('betting.deleting') : t('betting.delete')"

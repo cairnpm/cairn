@@ -158,66 +158,63 @@ const { table, vis, hideableCols } = useDataTable({
     </div>
 
     <!-- Table -->
-    <div class="flex-1 overflow-auto rounded-lg border">
-      <Table>
-        <TableHeader class="bg-muted/50 sticky top-0">
-          <TableRow>
-            <TableHead class="w-10"><SelectAllCheckbox :table="table" :label="t('betting.selectAll')" /></TableHead>
-            <TableHead><SortHeaderButton :table="table" column="title" :label="t('betting.col.title')" /></TableHead>
-            <TableHead v-if="vis('status')" class="w-32"><SortHeaderButton :table="table" column="status" :label="t('betting.col.status')" /></TableHead>
-            <TableHead v-if="vis('candidate_count')" class="w-28 text-right"><SortHeaderButton :table="table" column="candidate_count" :label="t('betting.col.candidates')" /></TableHead>
-            <TableHead v-if="vis('vote_count')" class="w-24 text-right"><SortHeaderButton :table="table" column="vote_count" :label="t('betting.col.votes')" /></TableHead>
-            <TableHead v-if="vis('owner')" class="w-32">{{ t('betting.col.owner') }}</TableHead>
-            <TableHead v-if="vis('generated_at')" class="w-28 text-right"><SortHeaderButton :table="table" column="generated_at" :label="t('betting.col.created')" /></TableHead>
-            <TableHead class="w-10" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
-            <TableCell @click.stop><SelectRowCheckbox :row="row" :label="t('betting.selectRow')" /></TableCell>
-            <TableCell>
-              <div class="flex items-center gap-2 font-medium">
-                {{ row.original.title }}
-                <NuxtLink
-                  v-if="row.original.hill_id"
-                  :to="`/hills/${row.original.hill_id}`"
-                  class="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-foreground hover:underline"
-                  @click.stop
-                >
-                  {{ row.original.hill_name || t('betting.cycle') }}
-                  <ExternalLink class="size-3" />
-                </NuxtLink>
-              </div>
-            </TableCell>
-            <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
-            <TableCell v-if="vis('candidate_count')" class="text-right tabular-nums">{{ row.original.candidate_count }}</TableCell>
-            <TableCell v-if="vis('vote_count')" class="text-right tabular-nums">{{ row.original.vote_count }}</TableCell>
-            <TableCell v-if="vis('owner')">
-              <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.owner_name" :src="row.original.owner_avatar" /><span class="truncate text-muted-foreground">{{ row.original.owner_name || '—' }}</span></div>
-            </TableCell>
-            <TableCell v-if="vis('generated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.generated_at, locale) }}</TableCell>
-            <TableCell class="pr-4" @click.stop>
-              <ResourceActionsMenu
-                :is-deleted="row.original.status === 'deleted'" :restoring="restoring"
-                :actions-label="t('betting.actions')" :restore-label="t('betting.restore')" :delete-label="t('betting.delete')" :purge-label="t('betting.purge')"
-                @restore="restore(row.original.id)" @delete="askDelete({ id: row.original.id, title: row.original.title })" @purge="askPurge({ id: row.original.id, title: row.original.title })"
-              />
-            </TableCell>
-          </TableRow>
-          <TableRow v-if="!table.getRowModel().rows.length">
-            <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">{{ t('betting.empty') }}</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+    <div class="flex-1 min-h-0 overflow-hidden rounded-lg border">
+      <ScrollArea class="h-full">
+        <Table container-class="overflow-visible">
+          <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:bg-muted/50">
+            <TableRow>
+              <TableHead class="w-10"><SelectAllCheckbox :table="table" :label="t('betting.selectAll')" /></TableHead>
+              <TableHead><SortHeaderButton :table="table" column="title" :label="t('betting.col.title')" /></TableHead>
+              <TableHead v-if="vis('status')" class="w-32"><SortHeaderButton :table="table" column="status" :label="t('betting.col.status')" /></TableHead>
+              <TableHead v-if="vis('candidate_count')" class="w-28 text-right"><SortHeaderButton :table="table" column="candidate_count" :label="t('betting.col.candidates')" /></TableHead>
+              <TableHead v-if="vis('vote_count')" class="w-24 text-right"><SortHeaderButton :table="table" column="vote_count" :label="t('betting.col.votes')" /></TableHead>
+              <TableHead v-if="vis('owner')" class="w-32">{{ t('betting.col.owner') }}</TableHead>
+              <TableHead v-if="vis('generated_at')" class="w-28 text-right"><SortHeaderButton :table="table" column="generated_at" :label="t('betting.col.created')" /></TableHead>
+              <TableHead class="w-10" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="row in table.getRowModel().rows" :key="row.id" :data-state="row.getIsSelected() ? 'selected' : undefined" class="cursor-pointer" @click="selectedId = row.original.id">
+              <TableCell @click.stop><SelectRowCheckbox :row="row" :label="t('betting.selectRow')" /></TableCell>
+              <TableCell>
+                <div class="flex items-center gap-2 font-medium">
+                  {{ row.original.title }}
+                  <NuxtLink
+                    v-if="row.original.hill_id"
+                    :to="`/hills/${row.original.hill_id}`"
+                    class="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-foreground hover:underline"
+                    @click.stop
+                  >
+                    {{ row.original.hill_name || t('betting.cycle') }}
+                    <ExternalLink class="size-3" />
+                  </NuxtLink>
+                </div>
+              </TableCell>
+              <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
+              <TableCell v-if="vis('candidate_count')" class="text-right tabular-nums">{{ row.original.candidate_count }}</TableCell>
+              <TableCell v-if="vis('vote_count')" class="text-right tabular-nums">{{ row.original.vote_count }}</TableCell>
+              <TableCell v-if="vis('owner')">
+                <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.owner_name" :src="row.original.owner_avatar" /><span class="truncate text-muted-foreground">{{ row.original.owner_name || '—' }}</span></div>
+              </TableCell>
+              <TableCell v-if="vis('generated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.generated_at, locale) }}</TableCell>
+              <TableCell class="pr-4" @click.stop>
+                <ResourceActionsMenu
+                  :is-deleted="row.original.status === 'deleted'" :restoring="restoring"
+                  :actions-label="t('betting.actions')" :restore-label="t('betting.restore')" :delete-label="t('betting.delete')" :purge-label="t('betting.purge')"
+                  @restore="restore(row.original.id)" @delete="askDelete({ id: row.original.id, title: row.original.title })" @purge="askPurge({ id: row.original.id, title: row.original.title })"
+                />
+              </TableCell>
+            </TableRow>
+            <TableRow v-if="!table.getRowModel().rows.length">
+              <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">{{ t('betting.empty') }}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </ScrollArea>
     </div>
 
     <!-- Footer / pagination -->
-    <DataTablePagination
-      :table="table"
-      :selected-label="t('betting.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })"
-      :rows-per-page-label="t('betting.rowsPerPage')"
-      :page-label="t('betting.page', { page: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) })"
-    />
+    <DataTableFooter :selected-label="t('betting.selectedCount', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })" />
 
     <p v-if="role !== 'owner'" class="text-xs text-muted-foreground">{{ t('betting.voterHint') }}</p>
 
@@ -262,8 +259,8 @@ const { table, vis, hideableCols } = useDataTable({
     <FeatureDetailOverlay v-model:feature-id="featPeek" mode="dialog" />
 
     <!-- Delete confirmation -->
-    <ConfirmDeleteDialog
-      v-model:open="confirmOpen" :deleting="deleting"
+    <ConfirmDialog destructive
+      v-model:open="confirmOpen" :busy="deleting"
       :title="t('betting.deleteDialog.title')"
       :description="t('betting.deleteDialog.description', { title: toDelete?.title ?? '' })"
       :cancel-label="t('betting.cancel')" :confirm-label="deleting ? t('betting.deleting') : t('betting.delete')"
@@ -271,8 +268,8 @@ const { table, vis, hideableCols } = useDataTable({
     />
 
     <!-- Permanent delete confirmation (irreversible) -->
-    <ConfirmDeleteDialog
-      v-model:open="purgeOpen" :deleting="purging"
+    <ConfirmDialog destructive
+      v-model:open="purgeOpen" :busy="purging"
       :title="t('betting.purgeDialog.title')"
       :description="t('betting.purgeDialog.description', { title: toPurge?.title ?? '' })"
       :cancel-label="t('betting.cancel')" :confirm-label="purging ? t('betting.deleting') : t('betting.purge')"
