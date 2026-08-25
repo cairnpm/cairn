@@ -22,20 +22,37 @@ function systemBlock(i: number): { type: string, text: string, cache_control?: {
   return block as { type: string, text: string, cache_control?: { type: string } }
 }
 
-function stubFetch(usage?: Record<string, number>) {
+interface StubReply { status?: number, headers?: Record<string, string>, usage?: Record<string, number> }
+
+let signals: (AbortSignal | undefined)[]
+
+/**
+ * Stub `fetch` with a scripted sequence of replies; the last one repeats once the script runs out,
+ * so a test only has to describe the failures it cares about.
+ */
+function stubFetch(...script: StubReply[]) {
   sent = []
-  globalThis.fetch = (async (_url: string, init: { body: string }) => {
+  signals = []
+  const replies = script.length ? script : [{}]
+  globalThis.fetch = (async (_url: string, init: { body: string, signal?: AbortSignal }) => {
+    const reply = replies[Math.min(sent.length, replies.length - 1)] ?? {}
     sent.push(JSON.parse(init.body))
+    signals.push(init.signal)
+    const status = reply.status ?? 200
+    const headers = new Headers(reply.headers ?? {})
     return {
-      ok: true,
-      status: 200,
+      ok: status >= 200 && status < 300,
+      status,
+      headers,
       async json() {
-        return { content: [{ type: 'text', text: '{"intent":"signal","target":null}' }], ...(usage ? { usage } : {}) }
+        return { content: [{ type: 'text', text: '{"intent":"signal","target":null}' }], ...(reply.usage ? { usage: reply.usage } : {}) }
       },
     }
     // @ts-expect-error — a minimal Response stand-in, like tests/cli.test.ts (library-shape boundary).
   })
 }
+
+const provider = () => createAnthropicProvider({ apiKey: 'sk-test', model: 'claude-sonnet-4-6' })
 
 // `productContext()` reads the settings table, so the schema has to exist (same as the other suites).
 beforeAll(() => ensureSchema())
@@ -94,7 +111,7 @@ describe('prompt caching', () => {
 
 describe('usage counters', () => {
   it('accumulates what the API reports, cache fields included', async () => {
-    stubFetch({ input_tokens: 120, output_tokens: 40, cache_read_input_tokens: 4500, cache_creation_input_tokens: 0 })
+    stubFetch({ usage: { input_tokens: 120, output_tokens: 40, cache_read_input_tokens: 4500, cache_creation_input_tokens: 0 } })
     const llm = createAnthropicProvider({ apiKey: 'sk-test', model: 'claude-sonnet-4-6' })
     await llm.detectIntent('a')
     await llm.detectIntent('b')
@@ -117,5 +134,46 @@ describe('usage counters', () => {
   it('ignores a response with no usage block', () => {
     recordUsage(undefined)
     expect(llmUsage().calls).toBe(0)
+  })
+})
+
+describe('transient-failure handling', () => {
+  it('retries an overloaded server, then succeeds', async () => {
+    stubFetch({ status: 529 }, { status: 200 })
+    await provider().detectIntent('x')
+    expect(sent).toHaveLength(2)
+  })
+
+  it('does not retry a non-transient failure — an auth error is not going to fix itself', async () => {
+    stubFetch({ status: 401 })
+    await provider().detectIntent('x')
+    expect(sent).toHaveLength(1)
+  })
+
+  it('waits as long as the server asked on a 429', async () => {
+    stubFetch({ status: 429, headers: { 'retry-after': '1' } }, { status: 200 })
+    const started = Date.now()
+    await provider().detectIntent('x')
+    // Blind backoff would have retried after ~400ms, burning an attempt against a server that told
+    // us exactly how long to hold off.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(900)
+    expect(sent).toHaveLength(2)
+  })
+
+  it('probes structured output once, then stops offering it to a model that rejected it', async () => {
+    stubFetch({ status: 400 }, { status: 200 })
+    const llm = provider()
+    await llm.detectIntent('un signal')   // 400 with schema → degrade → succeed without it
+    await llm.detectIntent('un autre')    // must go straight out, no second probe
+    expect(sent).toHaveLength(3)
+    expect(sent[0]).toHaveProperty('output_config')
+    expect(sent[1]).not.toHaveProperty('output_config')
+    expect(sent[2]).not.toHaveProperty('output_config')
+  })
+
+  it('gives every request a deadline so a stalled call cannot hang the intake turn', async () => {
+    stubFetch()
+    await provider().detectIntent('x')
+    expect(signals[0]).toBeInstanceOf(AbortSignal)
   })
 })

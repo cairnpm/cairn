@@ -21,6 +21,30 @@ import { recordUsage } from './usage'
  */
 const API_URL = 'https://api.anthropic.com/v1/messages'
 const MAX_CLARIFY = 8
+const MAX_ATTEMPTS = 4
+const REQUEST_TIMEOUT_MS = 120_000
+// Matches what the official SDKs retry: rate limit, conflict, request timeout, overloaded, and 5xx.
+const RETRYABLE = new Set([408, 409, 429, 529])
+// A server asking us to wait minutes is not worth blocking an interactive turn for — fall back to the
+// stub instead. The cap keeps `retry-after` a hint we honour, not a lever that stalls the request.
+const MAX_RETRY_AFTER_MS = 30_000
+
+const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
+
+/** Exponential backoff with jitter, so a batch's retries don't re-collide in lockstep. */
+function backoffMs(attempt: number): number {
+  return 400 * 2 ** attempt + Math.floor(Math.random() * 250)
+}
+
+/** `retry-after` in seconds (what the API sends) or as an HTTP date; null when absent or unusable. */
+function retryAfterMs(headers: Headers): number | null {
+  const raw = headers.get('retry-after')
+  if (!raw) return null
+  const seconds = Number(raw)
+  const ms = Number.isFinite(seconds) ? seconds * 1000 : new Date(raw).getTime() - Date.now()
+  if (!Number.isFinite(ms) || ms <= 0) return null
+  return Math.min(ms, MAX_RETRY_AFTER_MS)
+}
 
 interface CallOpts { temperature?: number, schema?: object }
 
@@ -121,6 +145,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
   const { apiKey, model } = cfg
   // Opus 4.x / Fable / Mythos reject `temperature`; everything else (Haiku/Sonnet) accepts it.
   const acceptsTemperature = !/(opus-4|fable|mythos)/i.test(model)
+  // Latched per provider instance (reset with the provider when the model/key changes).
+  let schemaUnsupported = false
 
   async function callClaude(system: string, user: string, maxTokens = 512, opts: CallOpts = {}): Promise<string | null> {
     const base: Record<string, unknown> = {
@@ -139,7 +165,7 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
     }
     if (opts.temperature !== undefined && acceptsTemperature) base.temperature = opts.temperature
 
-    const attempt = async (withSchema: boolean): Promise<{ ok: true, text: string | null } | { ok: false, status: number }> => {
+    const attempt = async (withSchema: boolean): Promise<{ ok: true, text: string | null } | { ok: false, status: number, retryAfterMs: number | null }> => {
       const body = withSchema && opts.schema
         ? { ...base, output_config: { format: { type: 'json_schema', schema: opts.schema } } }
         : base
@@ -151,28 +177,37 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
           'content-type': 'application/json',
         },
         body: JSON.stringify(body),
+        // Without a deadline a stalled connection hangs the user's intake turn indefinitely. Sized for
+        // the slowest call (propose/decompose, ~2.6k output tokens); a timeout throws and is retried.
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       })
-      if (!res.ok) return { ok: false, status: res.status }
+      if (!res.ok) return { ok: false, status: res.status, retryAfterMs: retryAfterMs(res.headers) }
       const data = await res.json() as { content?: { type: string, text?: string }[], usage?: Parameters<typeof recordUsage>[0] }
       recordUsage(data.usage)
       return { ok: true, text: data.content?.find(b => b.type === 'text')?.text ?? null }
     }
 
-    // Bounded retry with backoff on TRANSIENT failures (rate limit / overload / 5xx). Without this,
-    // a single 429/529 silently degrades routing to the deterministic stub — which is why a rapid
-    // batch (decompose → N propose calls) loses the smart dedup judge. 400 = schema unsupported →
-    // degrade to plain JSON-in-text once (not retried). Other 4xx (auth) → give up → caller stubs.
-    const MAX_ATTEMPTS = 4
+    // Bounded retry on TRANSIENT failures (rate limit / overload / timeout / 5xx). Without this, a
+    // single 429/529 silently degrades routing to the deterministic stub — which is why a rapid batch
+    // (decompose → N propose calls) loses the smart dedup judge. Other 4xx (auth) → give up → stub.
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
       try {
-        let r = await attempt(true)
-        if (!r.ok && r.status === 400 && opts.schema) { console.warn(`[llm] schema request 400 → retry without schema (attempt ${i})`); r = await attempt(false) }
+        // Once a model has rejected structured output we stop offering it: re-probing on every call
+        // buys nothing and costs a wasted round-trip on the user's turn each time.
+        let r = await attempt(!schemaUnsupported)
+        if (!r.ok && r.status === 400 && opts.schema && !schemaUnsupported) {
+          console.warn('[llm] schema request 400 → structured output unsupported, degrading for this provider')
+          schemaUnsupported = true
+          r = await attempt(false)
+        }
         if (r.ok) return r.text
         console.warn(`[llm] callClaude non-ok status=${r.status} schema=${!!opts.schema} attempt=${i}`)
-        const retryable = r.status === 429 || r.status === 529 || r.status >= 500
-        if (!retryable) return null
+        if (!RETRYABLE.has(r.status) && r.status < 500) return null
+        // Honour the server's own backpressure signal when it sends one — guessing an interval either
+        // burns an attempt on a premature retry or stalls the turn longer than asked.
+        if (i < MAX_ATTEMPTS - 1) { await sleep(r.retryAfterMs ?? backoffMs(i)); continue }
       } catch (e) { console.warn(`[llm] callClaude threw (attempt ${i}, schema=${!!opts.schema}): ${String(e)}`) }
-      if (i < MAX_ATTEMPTS - 1) await new Promise(res => setTimeout(res, 400 * 2 ** i + Math.floor(Math.random() * 250)))
+      if (i < MAX_ATTEMPTS - 1) await sleep(backoffMs(i))
     }
     console.warn(`[llm] callClaude exhausted → null (caller will stub) schema=${!!opts.schema}`)
     return null
