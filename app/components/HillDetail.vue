@@ -27,9 +27,12 @@ const pct = computed(() => total.value ? Math.round((done.value / total.value) *
     <template #meta>
       <MetaField :label="t('hill.status')"><StatusBadge :status="data.hill.status" /></MetaField>
       <MetaField :label="t('hill.progress')">
+        <!-- Count left, bar, percentage right: the two numbers frame the bar instead of stacking
+             behind it, so each reads against the thing it describes. -->
         <div class="flex items-center gap-2">
+          <span class="tabular-nums text-muted-foreground">{{ done }}/{{ total }}</span>
           <div class="h-1.5 w-24 overflow-hidden rounded-full bg-muted"><div class="h-full rounded-full bg-primary" :style="{ width: pct + '%' }" /></div>
-          <span class="tabular-nums">{{ pct }}% · {{ done }}/{{ total }}</span>
+          <span class="tabular-nums">{{ pct }}%</span>
         </div>
       </MetaField>
       <MetaField :label="t('hill.features')"><span class="tabular-nums">{{ total }}</span></MetaField>

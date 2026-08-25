@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { CheckCircle2, ChevronDown, CircleSlash, PanelRightClose, Pencil, Play, Undo2 } from 'lucide-vue-next'
+import { CheckCircle2, ChevronDown, CircleSlash, ExternalLink, PanelRightClose, Pencil, Play, Undo2 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -131,7 +131,14 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
     <template #meta>
       <MetaField :label="t('feature.meta.status')"><StatusBadge :status="detail.feature.status" /></MetaField>
       <MetaField :label="t('feature.meta.appetite')"><Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge></MetaField>
-      <MetaField v-if="detail.feature.hill_name" label="Hill"><Badge variant="secondary">{{ detail.feature.hill_name }}</Badge></MetaField>
+      <!-- Same shape as the hill link in BettingTableDetail: the cycle is reachable from anything
+           that belongs to it, in one click, without going back through the Hills list. -->
+      <MetaField v-if="detail.feature.hill_id" label="Hill">
+        <NuxtLink :to="`/hills/${detail.feature.hill_id}`" class="inline-flex items-center gap-1 hover:underline">
+          {{ detail.feature.hill_name || t('betting.cycle') }}
+          <ExternalLink class="size-3.5 opacity-60" />
+        </NuxtLink>
+      </MetaField>
       <MetaField v-if="liveIssue" label="GitHub">
         <GithubRefBadge :url="liveIssue.issue_url" :repo="liveIssue.repo" :number="liveIssue.issue_number" :status="liveIssue.status" compact />
       </MetaField>
