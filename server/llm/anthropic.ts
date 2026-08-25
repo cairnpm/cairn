@@ -11,6 +11,7 @@ function productContext(): string {
 }
 import type { LlmProvider, ProposeInput } from './provider'
 import { createStubProvider, DEDUP_STRONG } from './stub'
+import { recordUsage } from './usage'
 
 /**
  * Anthropic-backed provider (Messages API via raw fetch — no SDK dependency).
@@ -123,7 +124,17 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
 
   async function callClaude(system: string, user: string, maxTokens = 512, opts: CallOpts = {}): Promise<string | null> {
     const base: Record<string, unknown> = {
-      model, max_tokens: maxTokens, system,
+      model, max_tokens: maxTokens,
+      // Prompt caching. Each operation's system prompt is LARGE and STATIC (propose alone is ~4.6k
+      // tokens of instructions) while everything volatile — signal, conversation, candidates, code
+      // grep — lives in the user message. That's the prefix shape caching rewards: reads cost ~0.1x
+      // input, the write costs 1.25x, so it pays from the second identical call on. The intake
+      // reuses these prompts constantly: clarify loops re-run detectIntent/propose, and decomposing
+      // a transcript runs one `propose` PER SIGNAL.
+      // Marking unconditionally is safe: a prompt below the model's minimum cacheable prefix
+      // (1024 tokens on Sonnet 4.6 / Opus 4.8) silently mints nothing — no error, and no write
+      // premium either. `triage` and `decompose` are simply too short to ever cache.
+      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: user }],
     }
     if (opts.temperature !== undefined && acceptsTemperature) base.temperature = opts.temperature
@@ -142,7 +153,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         body: JSON.stringify(body),
       })
       if (!res.ok) return { ok: false, status: res.status }
-      const data = await res.json() as { content?: { type: string, text?: string }[] }
+      const data = await res.json() as { content?: { type: string, text?: string }[], usage?: Parameters<typeof recordUsage>[0] }
+      recordUsage(data.usage)
       return { ok: true, text: data.content?.find(b => b.type === 'text')?.text ?? null }
     }
 
@@ -183,7 +195,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         }),
       })
       if (!res.ok) return null
-      const data = await res.json() as { content?: { type: string, text?: string }[] }
+      const data = await res.json() as { content?: { type: string, text?: string }[], usage?: Parameters<typeof recordUsage>[0] }
+      recordUsage(data.usage)
       return data.content?.find(b => b.type === 'text')?.text ?? null
     } catch { return null }
   }

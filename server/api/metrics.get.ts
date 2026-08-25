@@ -1,4 +1,5 @@
 import { all, get } from '~~/server/db/client'
+import { llmUsage } from '~~/server/llm/usage'
 
 // Agent quality metric (brief agent §6): rate of routing decisions the human corrected.
 // Built from routing_log — the free eval dataset.
@@ -16,5 +17,8 @@ export default defineEventHandler(() => {
     corrected,
     correction_rate: total ? Number((corrected / total).toFixed(3)) : 0,
     by_action: byAction,
+    // Token spend since boot. `cache_hit_rate` is the one to watch: stuck at 0 across repeated
+    // calls means the prompt cache isn't minting (see server/llm/usage.ts).
+    llm: llmUsage(),
   }
 })
