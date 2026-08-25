@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ExternalLink, PanelRightClose, Pencil } from 'lucide-vue-next'
+import { CheckCircle2, ChevronDown, CircleSlash, PanelRightClose, Pencil, Play, Undo2 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import type { FeatureDetailData } from '~/types/feature'
 
 // `compact` = rendered inside the quick-view overlay (reserves header room for its corner buttons). The
@@ -52,6 +53,9 @@ const canOpenIssue = computed(() =>
   && ['bet', 'building'].includes(props.detail.feature.status)
   && !issueLinks.value.some(i => i.status === 'open'))
 
+// The header only carries an issue while it's OPEN — once closed it belongs to the history below.
+const liveIssue = computed(() => issueLinks.value.find(i => i.status === 'open'))
+
 const openingIssue = ref(false)
 async function openIssue() {
   if (openingIssue.value) return
@@ -65,6 +69,52 @@ async function openIssue() {
   }
   catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || t('feature.actionFailed')) }
   finally { openingIssue.value = false }
+}
+
+// Execution progress: bet ⇄ building → done. Owner/assignee-only server-side (mirrored here only to
+// hide the controls). Shipping is confirmed — it's the one step this product refuses to walk back.
+const NEXT: Record<string, 'building' | 'done'> = { bet: 'building', building: 'done' }
+const nextStatus = computed(() => NEXT[props.detail.feature.status] ?? null)
+const canStepBack = computed(() => props.detail.feature.status === 'building')
+const inCycle = computed(() => ['bet', 'building'].includes(props.detail.feature.status))
+const { role } = useCairn()
+// Anything that isn't "move forward": pause, or pull the bet out of the cycle.
+const secondaryActions = computed(() => canStepBack.value || (inCycle.value && role.value === 'owner'))
+const moving = ref(false)
+const confirmDoneOpen = ref(false)
+const dropOpen = ref(false)
+
+async function move(direction: 'forward' | 'back' = 'forward') {
+  if (moving.value) return
+  moving.value = true
+  try {
+    const res = await $fetch<{ status: string, events: FeatureEvent[] }>(`/api/features/${props.detail.feature.id}/status`, {
+      method: 'POST', body: { from: props.detail.feature.status, direction },
+    })
+    events.value = res.events
+    confirmDoneOpen.value = false
+    await invalidate(qk.featureDetail, qk.features, qk.hills, qk.hillDetail)
+    toast.success(t('feature.statusAdvanced', { status: t(`common.status.${res.status}`) }))
+  }
+  catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || t('feature.actionFailed')) }
+  finally { moving.value = false }
+}
+
+// Circuit breaker: the bet is off, the feature returns to the pool and must be re-defended.
+async function drop(rationale: string) {
+  if (moving.value) return
+  moving.value = true
+  try {
+    const res = await $fetch<{ events: FeatureEvent[] }>(`/api/features/${props.detail.feature.id}/drop`, {
+      method: 'POST', body: { rationale },
+    })
+    events.value = res.events
+    dropOpen.value = false
+    await invalidate(qk.featureDetail, qk.features, qk.hills, qk.hillDetail)
+    toast.success(t('feature.drop.done'))
+  }
+  catch (e: unknown) { toast.error((e as { statusMessage?: string })?.statusMessage || t('feature.actionFailed')) }
+  finally { moving.value = false }
 }
 
 const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
@@ -82,14 +132,45 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
       <MetaField :label="t('feature.meta.status')"><StatusBadge :status="detail.feature.status" /></MetaField>
       <MetaField :label="t('feature.meta.appetite')"><Badge variant="outline">{{ detail.feature.appetite || '—' }}</Badge></MetaField>
       <MetaField v-if="detail.feature.hill_name" label="Hill"><Badge variant="secondary">{{ detail.feature.hill_name }}</Badge></MetaField>
+      <MetaField v-if="liveIssue" label="GitHub">
+        <GithubRefBadge :url="liveIssue.issue_url" :repo="liveIssue.repo" :number="liveIssue.issue_number" :status="liveIssue.status" compact />
+      </MetaField>
       <!-- Édition: aligned bottom-right with the meta badges, clear of the overlay's top corner icons.
            Overlay → open the full page (?edit=1); full page → toggle the inline chat panel. -->
-      <Button v-if="compact" as-child variant="outline" size="sm" class="ml-auto self-end">
-        <NuxtLink :to="`/features/${detail.feature.id}?edit=1`"><Pencil class="size-4" /> {{ t('intake.refine') }}</NuxtLink>
-      </Button>
-      <Button v-else-if="!chatOpen" variant="outline" size="sm" class="ml-auto self-end" @click="chatOpen = true">
-        <Pencil class="size-4" /> {{ t('intake.refine') }}
-      </Button>
+      <div class="ml-auto flex items-center gap-2 self-end">
+        <Button v-if="compact" as-child variant="outline" size="sm">
+          <NuxtLink :to="`/features/${detail.feature.id}?edit=1`"><Pencil class="size-4" /> {{ t('intake.refine') }}</NuxtLink>
+        </Button>
+        <Button v-else-if="!chatOpen" variant="outline" size="sm" @click="chatOpen = true">
+          <Pencil class="size-4" /> {{ t('intake.refine') }}
+        </Button>
+        <!-- Split button: the step forward is the primary action, the ways to NOT go forward (pause,
+             leave the cycle) live under the chevron so they can't be hit by accident. -->
+        <div v-if="nextStatus" class="flex items-center">
+          <Button
+            size="sm" :class="secondaryActions ? 'rounded-r-none' : ''" :disabled="moving"
+            @click="nextStatus === 'done' ? (confirmDoneOpen = true) : move()"
+          >
+            <component :is="nextStatus === 'done' ? CheckCircle2 : Play" class="size-4" />
+            {{ nextStatus === 'done' ? t('feature.markDone') : t('feature.startBuilding') }}
+          </Button>
+          <DropdownMenu v-if="secondaryActions">
+            <DropdownMenuTrigger as-child>
+              <Button size="sm" class="rounded-l-none border-l border-background/25 px-2" :disabled="moving">
+                <ChevronDown class="size-4" /><span class="sr-only">{{ t('feature.moreActions') }}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem v-if="canStepBack" @click="move('back')">
+                <Undo2 /> {{ t('feature.stopBuilding') }}
+              </DropdownMenuItem>
+              <DropdownMenuItem v-if="inCycle && role === 'owner'" variant="destructive" @click="dropOpen = true">
+                <CircleSlash /> {{ t('feature.drop.action') }}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
     </template>
 
     <div class="flex flex-col gap-6 p-6 text-sm">
@@ -142,15 +223,21 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
           </div>
           <div v-if="detail.pr_links.length">
             <SectionLabel class="mb-2">{{ t('feature.prGithub') }}</SectionLabel>
-            <a v-for="p in detail.pr_links" :key="p.id" :href="p.pr_url" target="_blank" class="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground">
-              <ExternalLink class="size-3" />{{ p.repo }}#{{ p.pr_number }} · {{ p.status }}
-            </a>
+            <div class="flex flex-wrap gap-1.5">
+              <GithubRefBadge
+                v-for="p in detail.pr_links" :key="p.id"
+                :url="p.pr_url" :repo="p.repo" :number="p.pr_number" :status="p.status"
+              />
+            </div>
           </div>
           <div v-if="issueLinks.length || canOpenIssue">
             <SectionLabel class="mb-2">{{ t('feature.issueGithub') }}</SectionLabel>
-            <a v-for="i in issueLinks" :key="i.id" :href="i.issue_url" target="_blank" class="flex items-center gap-1.5 font-mono text-xs text-muted-foreground hover:text-foreground">
-              <ExternalLink class="size-3" />{{ i.repo }}#{{ i.issue_number }} · {{ i.status }}
-            </a>
+            <div class="flex flex-wrap gap-1.5">
+              <GithubRefBadge
+                v-for="i in issueLinks" :key="i.id"
+                :url="i.issue_url" :repo="i.repo" :number="i.issue_number" :status="i.status"
+              />
+            </div>
             <Button v-if="canOpenIssue" variant="outline" size="sm" class="mt-2" :disabled="openingIssue" @click="openIssue">
               {{ openingIssue ? '…' : t('feature.openIssue') }}
             </Button>
@@ -175,5 +262,14 @@ const PITCH = ['problem', 'solution', 'rabbit_holes', 'out_of_bounds'] as const
         <IntakeScreen :key="detail.feature.id" :target-feature-id="detail.feature.id" :target-title="detail.feature.title" />
       </div>
     </div>
+
+    <ConfirmDialog
+      v-model:open="confirmDoneOpen" :busy="moving"
+      :title="t('feature.doneTitle')" :description="t('feature.doneDesc', { title: detail.feature.title })"
+      :cancel-label="t('backlog.cancel')" :confirm-label="t('feature.doneConfirm')"
+      @confirm="move('forward')"
+    />
+
+    <DropFromCycleDialog v-model:open="dropOpen" :title="detail.feature.title" :busy="moving" @confirm="drop" />
   </div>
 </template>

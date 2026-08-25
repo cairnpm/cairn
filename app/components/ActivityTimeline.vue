@@ -30,7 +30,7 @@ function fields(changes: unknown): string {
 
 function render(e: Ev): string {
   const d = parseDetail(e.detail)
-  const actor = e.actor
+  const actor = actorLabel(e.actor)
   switch (e.action) {
     case 'created': return t('activity.created', { actor })
     case 'signal_added': {
@@ -49,6 +49,10 @@ function render(e: Ev): string {
           : e.summary
     case 'pr_merged': return d.repo ? t('activity.prMerged', { repo: str(d.repo), pr: str(d.pr_number) }) : e.summary
     case 'pr_linked': return d.repo ? t('activity.prLinked', { repo: str(d.repo), pr: str(d.pr_number) }) : e.summary
+    case 'status_changed': return d.to ? t('activity.statusChanged', { actor, status: t(`common.status.${str(d.to)}`) }) : e.summary
+    case 'dropped': return d.rationale ? t('activity.dropped', { actor, rationale: str(d.rationale) }) : e.summary
+    case 'issue_opened': return d.repo ? t('activity.issueOpened', { actor, repo: str(d.repo), issue: str(d.issue_number) }) : e.summary
+    case 'issue_closed': return d.repo ? t('activity.issueClosed', { repo: str(d.repo), issue: str(d.issue_number) }) : e.summary
     case 'discarded': return t('activity.discarded', { actor })
     case 'stale': return d.days != null ? t('activity.stale', { days: str(d.days) }) : e.summary
     case 'deleted': return t(props.scope === 'betting' ? 'activity.bettingDeleted' : 'activity.deleted', { actor })

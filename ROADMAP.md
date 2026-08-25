@@ -8,7 +8,8 @@ this is direction, not commitment. Have an opinion? Open a
 
 - **Intake agent** — triage, clarify, propose, commit; transcript → N features;
   `.docx` and image attachments; deduplication; full attribution.
-- **Shape Up loop** — backlog, betting tables (vote → validate), hills, frozen scope.
+- **Shape Up loop** — backlog, betting tables (vote → validate), hills, frozen scope,
+  execution progress (`bet ⇄ building → done`) and the circuit breaker.
 - **Workspace** — email/password auth, token invitations, roles, soft-remove,
   avatars, audit trail.
 - **Self-hosting** — single container, embedded SQLite, Fly.io config, BYO key.
