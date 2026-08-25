@@ -25,6 +25,15 @@ export function actorInitial(name: string | null | undefined): string {
   return (name || '?').trim()[0]?.toUpperCase() || '?'
 }
 
+/** What the product writes under its own name: the staleness sweep, the GitHub webhook, a roadmap
+ *  import. Stored as 'system' (an actor, not a member); shown as the product, mark included. */
+export function isSystemActor(name: string | null | undefined): boolean {
+  return (name || '').trim().toLowerCase() === 'system'
+}
+export function actorLabel(name: string | null | undefined): string {
+  return isSystemActor(name) ? 'Cairn' : (name || '')
+}
+
 export function useCairn() {
   const route = useRoute()
   const { t } = useUiLang()
