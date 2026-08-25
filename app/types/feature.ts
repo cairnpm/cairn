@@ -1,6 +1,6 @@
 export interface FeatureDetailData {
   feature: {
-    id: string; title: string; status: string; appetite: string | null; hill_name: string | null
+    id: string; title: string; status: string; appetite: string | null; hill_id: string | null; hill_name: string | null
     problem: string; solution: string | null; rabbit_holes: string | null; out_of_bounds: string | null
     open_questions: string[]
   }
