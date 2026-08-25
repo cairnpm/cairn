@@ -6,7 +6,7 @@ export function listFeatureEvents(featureId: string) {
   return listActivity(FEATURE_EVENTS, featureId)
 }
 
-export type EventAction = 'created' | 'signal_added' | 'field_updated' | 'shaped' | 'bet' | 'pass' | 'defer' | 'pr_linked' | 'pr_merged' | 'issue_opened' | 'issue_closed' | 'stale' | 'merged' | 'discarded' | 'deleted' | 'restored' | 'assigned' | 'unassigned'
+export type EventAction = 'created' | 'signal_added' | 'field_updated' | 'shaped' | 'bet' | 'pass' | 'defer' | 'pr_linked' | 'pr_merged' | 'status_changed' | 'dropped' | 'issue_opened' | 'issue_closed' | 'stale' | 'merged' | 'discarded' | 'deleted' | 'restored' | 'assigned' | 'unassigned'
 export type ActorType = 'user' | 'agent' | 'system'
 
 /**

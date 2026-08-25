@@ -1,18 +1,21 @@
 import { ref, type Ref } from 'vue'
 import {
   type ColumnDef, type ColumnFiltersState, type SortingState, type VisibilityState,
-  getCoreRowModel, getFilteredRowModel, getPaginationRowModel, getSortedRowModel, useVueTable,
+  getCoreRowModel, getFilteredRowModel, getSortedRowModel, useVueTable,
 } from '@tanstack/vue-table'
 
 // Shared @tanstack/vue-table wiring for the list screens (Backlog / Betting / Hills): state refs,
 // the table config, the status-filter watch, and the vis()/hideableCols helpers. Columns, row cells
 // and the column.filterFn stay per-screen — only the boilerplate is here.
+//
+// Deliberately NOT paginated: a working list belongs in one scroll container that fills the screen
+// (the screens bound it with flex-1 + overflow-auto and a sticky header). Page numbers would split a
+// small backlog for nothing, and their boundaries are meaningless once the viewport changes size.
 export function useDataTable<T>(opts: {
   data: Ref<T[]>
   columns: ColumnDef<T>[]
   getRowId?: (row: T) => string
   initialSort?: SortingState
-  pageSize?: number
   // Wire a status-filter ref to the 'status' column. `mapValue` lets a screen send a different value
   // to the column than the tab key (Hills sends undefined for 'all'; Backlog/Betting handle it in filterFn).
   statusFilter?: Ref<string>
@@ -45,8 +48,6 @@ export function useDataTable<T>(opts: {
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: { pagination: { pageSize: opts.pageSize ?? 10 } },
   })
 
   if (opts.statusFilter) {

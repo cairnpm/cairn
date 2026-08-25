@@ -16,7 +16,7 @@ export interface User {
   created_at: string
 }
 
-// Denormalized attribution columns that store a person's display NAME (point-in-time audit).
+// Denormalized attribution columns that store a person's display NAME (no FK to follow on a rename).
 const ATTRIBUTION_NAME_COLUMNS: ReadonlyArray<readonly [string, string]> = [
   ['feature_events', 'actor'], ['decisions', 'decided_by'], ['feedback', 'captured_by'],
   ['attachments', 'uploaded_by'], ['settings', 'updated_by'],
@@ -24,9 +24,9 @@ const ATTRIBUTION_NAME_COLUMNS: ReadonlyArray<readonly [string, string]> = [
   ['betting_events', 'actor'], ['betting_votes', 'voter_name'],
 ]
 
-// Rewrite a person's denormalized name across all audit/attribution columns (used for the one-time
-// 'CEO' placeholder reconciliation). Votes dedup by name, so drop a stale-name vote that would
-// collide with an existing new-name vote on the same candidate (same person, two names) first.
+// Rewrite a person's denormalized name across all audit/attribution columns — on every rename, and
+// for the one-time 'CEO' placeholder reconciliation. Votes dedup by name, so drop a stale-name vote
+// that would collide with an existing new-name vote on the same candidate (same person, two names) first.
 export function propagateRename(oldName: string, newName: string): void {
   if (!oldName || !newName || oldName === newName) return
   tx(() => {
@@ -165,8 +165,14 @@ export function updateUserProfile(id: string, fields: { name?: string, email?: s
   const email = fields.email === undefined ? u.email : ((fields.email ?? '').trim() || null)
   const avatarUrl = fields.avatar_url === undefined ? u.avatar_url : ((fields.avatar_url ?? '').trim() || null)
   run('UPDATE users SET name = ?, email = ?, avatar_init = ?, avatar_url = ? WHERE id = ?', name, email, name[0]?.toUpperCase() ?? u.avatar_init, avatarUrl, id)
-  // On rename, keep the audit text frozen (point-in-time) but remember the old name so the avatar
-  // still resolves from past records attributed to it.
-  if (name !== u.name) recordFormerName(id, u.name)
+  // A rename follows the person everywhere: betting tables already resolve the owner LIVE via the FK,
+  // so leaving a frozen name next to a live avatar reads as a bug, not as an audit trail. Skipped when
+  // another member still answers to the old name — we'd be rewriting THEIR history. The former name is
+  // kept either way (avatar fallback for rows a homonym blocked us from rewriting).
+  if (name !== u.name) {
+    recordFormerName(id, u.name)
+    const homonym = get<{ n: number }>('SELECT COUNT(*) AS n FROM users WHERE name = ? AND id != ?', u.name, id)
+    if (!homonym?.n) propagateRename(u.name, name)
+  }
   return getUserById(id)
 }

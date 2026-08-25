@@ -12,7 +12,7 @@ interface Assignee { user_id: string; name: string; avatar_url: string | null }
 interface Feature {
   id: string; title: string; problem: string; appetite: string | null
   status: string; stale: number; hill_id: string | null; hill_name: string | null
-  signal_count: number; updated_at: string; last_actor: string | null
+  signal_count: number; updated_at: string; author: string | null
   shapers: Assignee[]; builders: Assignee[]
 }
 
@@ -22,7 +22,7 @@ const { statusFilter, selectedFeatureId } = bike
 const { data: features } = await useApiData<Feature[]>(qk.features, '/api/features', { default: () => [] })
 const { mutate } = useApiMutation()
 
-// Filter the backlog by a member across roles: matches when they are the (last) author, a shaper, or a
+// Filter the backlog by a member across roles: matches when they are the author, a shaper, or a
 // builder. '__all' (the default) shows everything. Applied UPSTREAM of the status tabs + table.
 const { members } = useMembers()
 const userFilter = ref<string | null>(null)
@@ -31,7 +31,7 @@ const userModel = computed({
   set: (v: string) => { userFilter.value = v === '__all' ? null : v },
 })
 function matchesUser(f: Feature, name: string) {
-  return f.last_actor === name || f.shapers.some(s => s.name === name) || f.builders.some(b => b.name === name)
+  return f.author === name || f.shapers.some(s => s.name === name) || f.builders.some(b => b.name === name)
 }
 const shownFeatures = computed(() => userFilter.value ? features.value.filter(f => matchesUser(f, userFilter.value!)) : features.value)
 
@@ -111,7 +111,7 @@ const columns: ColumnDef<Feature>[] = [
   { id: 'shapers', accessorFn: r => r.shapers?.length ?? 0, enableSorting: false },
   { id: 'hill', accessorFn: r => r.hill_name || '' },
   { id: 'updated_at', accessorKey: 'updated_at' },
-  { id: 'actor', accessorFn: r => r.last_actor || '', enableSorting: false },
+  { id: 'actor', accessorFn: r => r.author || '', enableSorting: false },
 ]
 
 // Backlog's filterFn handles the 'all'/'deleted' tabs itself, so the raw value is forwarded as-is.
@@ -152,77 +152,74 @@ const open = computed({
     </div>
 
     <!-- Table -->
-    <div class="flex-1 overflow-auto rounded-lg border">
-      <Table class="table-fixed">
-        <TableHeader class="bg-muted/50 sticky top-0">
-          <TableRow>
-            <TableHead class="w-10"><SelectAllCheckbox :table="table" :label="t('backlog.selectAll')" /></TableHead>
-            <TableHead><SortHeaderButton :table="table" column="title" :label="t('backlog.col.title')" /></TableHead>
-            <TableHead v-if="vis('status')" class="w-28"><SortHeaderButton :table="table" column="status" :label="t('backlog.col.status')" /></TableHead>
-            <TableHead v-if="vis('signal_count')" class="w-24 text-right"><SortHeaderButton :table="table" column="signal_count" :label="t('backlog.col.signals')" /></TableHead>
-            <TableHead v-if="vis('shapers')" class="w-28">Shapers</TableHead>
-            <TableHead v-if="vis('hill')" class="w-44"><SortHeaderButton :table="table" column="hill" label="Hill" /></TableHead>
-            <TableHead v-if="vis('updated_at')" class="w-28 text-right"><SortHeaderButton :table="table" column="updated_at" :label="t('backlog.col.updated')" /></TableHead>
-            <TableHead v-if="vis('actor')" class="w-32">{{ t('backlog.col.actor') }}</TableHead>
-            <TableHead class="w-14" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <TableRow
-            v-for="row in table.getRowModel().rows" :key="row.id"
-            :data-state="row.getIsSelected() ? 'selected' : undefined"
-            class="cursor-pointer"
-            @click="bike.selectFeature(row.original.id)"
-          >
-            <TableCell @click.stop><SelectRowCheckbox :row="row" :label="t('backlog.selectRow')" /></TableCell>
-            <TableCell>
-              <div class="flex items-center gap-2 font-medium">
-                <span class="truncate">{{ row.original.title }}</span>
-                <Badge v-if="row.original.stale" variant="outline" class="shrink-0 text-destructive border-destructive/30">{{ t('backlog.stale') }}</Badge>
-              </div>
-              <div class="truncate text-xs text-muted-foreground">{{ row.original.problem }}</div>
-            </TableCell>
-            <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
-            <TableCell v-if="vis('signal_count')" class="text-right tabular-nums">{{ row.original.signal_count }}</TableCell>
-            <TableCell v-if="vis('shapers')">
-              <div v-if="row.original.shapers?.length" class="flex items-center">
-                <UserAvatar v-for="s in row.original.shapers" :key="s.user_id" :name="s.name" :src="s.avatar_url" class="-mr-1.5 size-6 ring-2 ring-background" />
-              </div>
-              <span v-else class="text-muted-foreground">—</span>
-            </TableCell>
-            <TableCell v-if="vis('hill')" @click.stop>
-              <NuxtLink v-if="row.original.hill_id" :to="`/hills/${row.original.hill_id}`" class="flex items-center gap-1 text-muted-foreground hover:text-foreground">
-                <span class="truncate hover:underline">{{ row.original.hill_name }}</span>
-                <ExternalLink class="size-3.5 shrink-0 opacity-60" />
-              </NuxtLink>
-              <span v-else class="text-muted-foreground">—</span>
-            </TableCell>
-            <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.updated_at, locale) }}</TableCell>
-            <TableCell v-if="vis('actor')">
-              <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.last_actor" /><span class="truncate text-muted-foreground">{{ row.original.last_actor || '—' }}</span></div>
-            </TableCell>
-            <TableCell class="pr-4" @click.stop>
-              <ResourceActionsMenu
-                :is-deleted="row.original.status === 'deleted'" :restoring="restoring"
-                :actions-label="t('backlog.actions')" :restore-label="t('backlog.restore')" :delete-label="t('backlog.delete')" :purge-label="t('backlog.purge')"
-                @restore="restore(row.original.id)" @delete="askDelete(row.original)" @purge="askPurge(row.original)"
-              />
-            </TableCell>
-          </TableRow>
-          <TableRow v-if="!table.getRowModel().rows.length">
-            <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">{{ t('backlog.empty') }}</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
+    <div class="flex-1 min-h-0 overflow-hidden rounded-lg border">
+      <ScrollArea class="h-full">
+        <Table container-class="overflow-visible" class="table-fixed">
+          <TableHeader class="sticky top-0 z-10 bg-background [&_tr]:bg-muted/50">
+            <TableRow>
+              <TableHead class="w-10"><SelectAllCheckbox :table="table" :label="t('backlog.selectAll')" /></TableHead>
+              <TableHead><SortHeaderButton :table="table" column="title" :label="t('backlog.col.title')" /></TableHead>
+              <TableHead v-if="vis('status')" class="w-28"><SortHeaderButton :table="table" column="status" :label="t('backlog.col.status')" /></TableHead>
+              <TableHead v-if="vis('signal_count')" class="w-24 text-right"><SortHeaderButton :table="table" column="signal_count" :label="t('backlog.col.signals')" /></TableHead>
+              <TableHead v-if="vis('shapers')" class="w-28">Shapers</TableHead>
+              <TableHead v-if="vis('hill')" class="w-44"><SortHeaderButton :table="table" column="hill" label="Hill" /></TableHead>
+              <TableHead v-if="vis('updated_at')" class="w-28 text-right"><SortHeaderButton :table="table" column="updated_at" :label="t('backlog.col.updated')" /></TableHead>
+              <TableHead v-if="vis('actor')" class="w-32">{{ t('backlog.col.actor') }}</TableHead>
+              <TableHead class="w-14" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow
+              v-for="row in table.getRowModel().rows" :key="row.id"
+              :data-state="row.getIsSelected() ? 'selected' : undefined"
+              class="cursor-pointer"
+              @click="bike.selectFeature(row.original.id)"
+            >
+              <TableCell @click.stop><SelectRowCheckbox :row="row" :label="t('backlog.selectRow')" /></TableCell>
+              <TableCell>
+                <div class="flex items-center gap-2 font-medium">
+                  <span class="truncate">{{ row.original.title }}</span>
+                  <Badge v-if="row.original.stale" variant="outline" class="shrink-0 text-destructive border-destructive/30">{{ t('backlog.stale') }}</Badge>
+                </div>
+                <div class="truncate text-xs text-muted-foreground">{{ row.original.problem }}</div>
+              </TableCell>
+              <TableCell v-if="vis('status')"><StatusBadge :status="row.original.status" /></TableCell>
+              <TableCell v-if="vis('signal_count')" class="text-right tabular-nums">{{ row.original.signal_count }}</TableCell>
+              <TableCell v-if="vis('shapers')">
+                <div v-if="row.original.shapers?.length" class="flex items-center">
+                  <UserAvatar v-for="s in row.original.shapers" :key="s.user_id" :name="s.name" :src="s.avatar_url" class="-mr-1.5 size-6 ring-2 ring-background" />
+                </div>
+                <span v-else class="text-muted-foreground">—</span>
+              </TableCell>
+              <TableCell v-if="vis('hill')" @click.stop>
+                <NuxtLink v-if="row.original.hill_id" :to="`/hills/${row.original.hill_id}`" class="flex items-center gap-1 text-muted-foreground hover:text-foreground">
+                  <span class="truncate hover:underline">{{ row.original.hill_name }}</span>
+                  <ExternalLink class="size-3.5 shrink-0 opacity-60" />
+                </NuxtLink>
+                <span v-else class="text-muted-foreground">—</span>
+              </TableCell>
+              <TableCell v-if="vis('updated_at')" class="text-right text-muted-foreground whitespace-nowrap">{{ formatDate(row.original.updated_at, locale) }}</TableCell>
+              <TableCell v-if="vis('actor')">
+                <div class="flex items-center gap-1.5 text-sm"><UserAvatar :name="row.original.author" /><span class="truncate text-muted-foreground">{{ row.original.author || '—' }}</span></div>
+              </TableCell>
+              <TableCell class="pr-4" @click.stop>
+                <ResourceActionsMenu
+                  :is-deleted="row.original.status === 'deleted'" :restoring="restoring"
+                  :actions-label="t('backlog.actions')" :restore-label="t('backlog.restore')" :delete-label="t('backlog.delete')" :purge-label="t('backlog.purge')"
+                  @restore="restore(row.original.id)" @delete="askDelete(row.original)" @purge="askPurge(row.original)"
+                />
+              </TableCell>
+            </TableRow>
+            <TableRow v-if="!table.getRowModel().rows.length">
+              <TableCell :colspan="8" class="h-24 text-center text-muted-foreground">{{ t('backlog.empty') }}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </ScrollArea>
     </div>
 
     <!-- Footer / pagination -->
-    <DataTablePagination
-      :table="table"
-      :selected-label="t('backlog.rowsSelected', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })"
-      :rows-per-page-label="t('backlog.rowsPerPage')"
-      :page-label="t('backlog.page', { current: table.getState().pagination.pageIndex + 1, total: Math.max(1, table.getPageCount()) })"
-    />
+    <DataTableFooter :selected-label="t('backlog.rowsSelected', { n: table.getFilteredSelectedRowModel().rows.length, total: table.getFilteredRowModel().rows.length })" />
 
     <!-- Detail Sheet -->
     <DetailSheet
@@ -234,8 +231,8 @@ const open = computed({
     </DetailSheet>
 
     <!-- Delete confirmation -->
-    <ConfirmDeleteDialog
-      v-model:open="confirmOpen" :deleting="deleting"
+    <ConfirmDialog destructive
+      v-model:open="confirmOpen" :busy="deleting"
       :title="t('backlog.deleteTitle')"
       :description="t('backlog.deleteDesc', { title: toDelete?.title ?? '' })"
       :cancel-label="t('backlog.cancel')" :confirm-label="deleting ? t('backlog.deleting') : t('backlog.delete')"
@@ -243,8 +240,8 @@ const open = computed({
     />
 
     <!-- Permanent delete confirmation (irreversible) -->
-    <ConfirmDeleteDialog
-      v-model:open="purgeOpen" :deleting="purging"
+    <ConfirmDialog destructive
+      v-model:open="purgeOpen" :busy="purging"
       :title="t('backlog.purgeTitle')"
       :description="t('backlog.purgeDesc', { title: toPurge?.title ?? '' })"
       :cancel-label="t('backlog.cancel')" :confirm-label="purging ? t('backlog.deleting') : t('backlog.purge')"

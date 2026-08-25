@@ -20,7 +20,7 @@ const available = computed(() => props.members.filter(m => !props.assignees.some
     <SectionLabel class="mb-1.5">{{ label }}</SectionLabel>
     <div class="flex flex-wrap items-center gap-1.5">
       <span v-for="a in assignees" :key="a.user_id" class="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 py-0.5 pl-0.5 pr-2 text-sm">
-        <UserAvatar :name="a.name" :src="a.avatar_url" class="size-5" />
+        <UserAvatar :name="a.name" :src="a.avatar_url" class="size-5 rounded-full" />
         {{ a.name }}
         <button type="button" class="text-muted-foreground hover:text-foreground" :title="t('common.remove', { name: a.name })" @click="emit('remove', a.user_id)"><X class="size-3" /></button>
       </span>

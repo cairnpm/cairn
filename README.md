@@ -50,7 +50,9 @@ goes to the decision, not the pile.
   Zero-egress: the repo is grepped locally, never sent anywhere.
 - **🧗 Shape Up, natively.** Pitches with a real problem and an appetite, a betting
   table to choose what's worth doing, hills to track in-flight work, frozen scope
-  once a bet is placed. The method is the product, not a template.
+  once a bet is placed, and a circuit breaker when a bet doesn't ship — it goes back
+  to the pool to be re-defended, never silently extended. The method is the product,
+  not a template.
 - **🧹 Anti feature-factory.** No artificial caps, no vanity metrics. The backlog is
   meant to stay *small*: duplicates get merged, noise gets discarded, shaping is a
   discipline — not a place where requests go to die.
@@ -70,6 +72,7 @@ goes to the decision, not the pile.
 | **Backlog** | Shaped features with problem · appetite · solution · rabbit holes · no-gos. Manually-assigned shapers. |
 | **Betting table** | Collaborative deliberation: members vote, the owner validates → it bets features and opens a hill. |
 | **Hills** | In-flight cycles with builders, periods and frozen scope. |
+| **Execution** | Progress reported by hand (`bet ⇄ building → done`) or by a merged PR, plus Shape Up's circuit breaker: a bet that didn't ship leaves the cycle and must be re-defended. |
 | **Workspace** | Email + password auth, token invitations, roles, avatars, full attribution/audit trail. |
 
 ## Get started (self-host)

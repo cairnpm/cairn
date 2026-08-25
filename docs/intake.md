@@ -2,7 +2,8 @@
 
 > Source of truth: `server/gateway/intake.ts` (state machine + commit),
 > `server/llm/anthropic.ts` (agent prompts), `server/domain/betting.ts` +
-> `server/domain/bet.ts` (betting menu + bets), `server/db/stale.ts` (anti-backlog).
+> `server/domain/bet.ts` (betting menu + bets), `server/domain/execution.ts` (progress +
+> circuit breaker), `server/db/stale.ts` (anti-backlog).
 > This document describes the actual behavior of the code, not an intention.
 
 ## 1. Philosophy — Shape Up, bottom-up
@@ -24,10 +25,12 @@ raw signal ──intake──▶ feature (shaped) ──scored menu──▶ bet
    owner validates ──▶ Hill (active cycle) + bet features (bet → building → done)
 ```
 
-**Intake is the only write door** into the domain. `intakeCommit()` is the sole
-path that INSERTs/UPDATEs `features` / `feedback`. The views (Backlog, Betting, Hills) are
-read-only; the only other writes are **decisions** (bet/pass/defer) and
-the **validation** of a betting table — both going through `recordDecision()`.
+**Intake is the only write door** for the *pitch*: `intakeCommit()` is the sole path that
+INSERTs/UPDATEs the shaped content of `features` / `feedback`. The views (Backlog, Betting, Hills) are
+read-only. Exactly two other paths write, and neither can touch a pitch:
+**decisions** (bet/pass/defer + betting-table validation) through `recordDecision()`, and
+**execution progress** (`bet ⇄ building → done`, plus the circuit breaker) through
+`server/domain/execution.ts` — see §6bis.
 
 ## 2. The lifecycle (statuses)
 
@@ -43,6 +46,9 @@ and `deleted` (reversible soft-delete). Transitions:
 | `shaping` → `shaped` | intake `append` whose proposal returns `maturity: shaped` — a later signal resolves the open questions (real LLM only) → `open_questions` cleared |
 | `shaped`/`shaping` → same (enriched) | intake `append` (attaches a signal + refines the pitch, `signal_count+1`, `stale=0`) |
 | `shaped` → `bet` | `recordDecision('bet')` (validation of a betting table or manual decision) → `hill_id` set. Only `shaped` is bettable — never `shaping` |
+| `bet` ⇄ `building` | `moveFeatureStatus()` (`POST /api/features/:id/status`) — the team reports progress. Both directions: stepping back changes neither the bet, the hill nor the scope |
+| `building` → `done` | `moveFeatureStatus()` forward (confirmed in the UI), or the GitHub webhook on a merged PR. One-way — there is no reopening |
+| `bet`/`building` → `shaped` | **circuit breaker** — `dropFeatureFromCycle()` (`POST /api/features/:id/drop`, owner-only, rationale mandatory): the bet is off, `hill_id` cleared, back in the pool to be re-defended |
 | `shaped`/`shaping` → same (stale) | not bet on for `NUXT_STALE_DAYS` (14d) → `stale=1`, to be re-defended (a `shaping` parking lot can't become a graveyard) |
 | `*` → `archived` | feature absorbed by a `merge` |
 | `done`/`archived` → **new iteration** | intake `refine` on a delivered feature → `create_feature` with `supersedes_id` |
@@ -160,6 +166,29 @@ reopen delivered work. **Only the pre-bet statuses are amendable** (`shaped` and
 4. **Roadmap context + decisions guardrail**: features in a cycle are injected as read-only context
    ("frozen scope — do not amend"); and a `bet`/`pass`/`defer` verdict on a
    `done`/`archived` feature is rejected (409) on the `decisions.post.ts` side.
+
+## 6bis. Execution — who moves the work (and why it isn't the agent)
+
+Shaping owns the **pitch**; execution owns the **state of the work**. They are different write paths on
+purpose: the agent has no business declaring that something shipped. So `server/domain/execution.ts`
+sits next to `recordDecision`, outside the intake, and is the only place a feature's status moves once
+it is in a cycle.
+
+```
+bet ⇄ building ──▶ done          (POST /api/features/:id/status — owner or an assignee)
+ └──────┴──────▶ shaped          (POST /api/features/:id/drop  — owner only, rationale required)
+```
+
+- **`bet` ⇄ `building`** — free in both directions. Neither touches the bet, the hill or the scope; going
+  back only says "nobody is on it right now" (and undoes a mis-click).
+- **`building` → `done`** — one-way, and confirmed in the UI. A delivered solution is superseded by a new
+  iteration (§6), never walked back. The GitHub webhook reaches the same state when a linked PR merges.
+- **`bet`/`building` → `shaped`** — the **circuit breaker**. The cycle ended and the work didn't ship: the
+  bet is off, the feature leaves the hill and returns to the pool, where it has to win a betting table
+  again. It undoes a collective commitment, so it is owner-only, the rationale is mandatory, and the
+  staleness clock restarts (it gets a fair window, not a feature that comes back already flagged).
+- **Never** exposed: `shaped` → `bet` (that's a decision, §2), any transition out of `done`, and any jump
+  that skips a step (the caller sends the status it saw; a stale UI gets a 409).
 
 ## 7. How the agent challenges the context-gathering (to route correctly)
 

@@ -38,8 +38,8 @@ const { isDeleted, confirmOpen, deleting, restoring, confirmDelete, restore } = 
       </template>
     </FeatureDetail>
 
-    <ConfirmDeleteDialog
-      v-model:open="confirmOpen" :deleting="deleting"
+    <ConfirmDialog destructive
+      v-model:open="confirmOpen" :busy="deleting"
       :title="t('feature.deleteDialog.title')"
       :description="t('feature.deleteDialog.description', { title: detail?.feature.title ?? '' })"
       :cancel-label="t('feature.cancel')" :confirm-label="deleting ? t('feature.deleting') : t('feature.delete')"
