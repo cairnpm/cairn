@@ -12,10 +12,19 @@ export const ACTOR = 'Tester'
 /** Assertions that depend on real model judgment run only against the API, never the stub. */
 export const REAL = !!process.env.ANTHROPIC_API_KEY
 
-/** A generic reply that hands the agent enough to converge (real problem + appetite + a no-go). */
+/**
+ * A generic reply that hands the agent enough to converge (real problem + appetite + a no-go).
+ *
+ * It must NOT assert a specific appetite. A fixed "small (quelques jours)" contradicts the agent on
+ * any substantial signal — it correctly refuses to shape a pitch whose appetite it believes is wrong,
+ * says so, and re-asks until the clarify cap forces a `shaping` proposal. That reads as an agent bug
+ * and is a fixture bug: the same signal shapes cleanly once the appetite is left to the agent's
+ * judgment. Delegating it keeps this answer usable for every case in every suite.
+ */
 export const SHAPING_ANSWER
   = "Oui : c'est concret et ça casse aujourd'hui pour les utilisateurs, ça compte maintenant. "
-  + "Appétit : small (quelques jours). Hors-périmètre : rien de plus pour l'instant. Tu peux proposer."
+  + "Pour l'appétit, juge toi-même d'après le périmètre, et prends les hypothèses raisonnables en "
+  + "les notant en rabbit holes. Hors-périmètre : rien de plus pour l'instant. Tu peux proposer."
 
 export function featureCount(): number {
   return get<{ n: number }>('SELECT COUNT(*) AS n FROM features')!.n
