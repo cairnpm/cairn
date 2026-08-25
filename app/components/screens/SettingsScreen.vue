@@ -106,10 +106,13 @@ async function copyInvite() {
   try { await navigator.clipboard.writeText(inviteUrl.value); copied.value = true; toast.success(t('settings.toast.linkCopied')); setTimeout(() => copied.value = false, 1500) } catch { /* clipboard blocked */ }
 }
 // Irreversible actions get a confirmation, and say what is actually lost — see removeMember and
-// resetGithubApp below. `pending*` holds the target while its dialog is open.
+// resetGithubApp below. The ref drives the dialog; the target is ALSO held outside it, because closing
+// the dialog clears the ref and the confirm handler would otherwise read a null it just nulled itself.
 const pendingInvite = ref<{ id: string, email: string } | null>(null)
+let inviteTarget: { id: string, email: string } | null = null
+function askRevokeInvite(i: { id: string, email: string }) { inviteTarget = i; pendingInvite.value = i }
 async function revokeInvite() {
-  const inv = pendingInvite.value
+  const inv = inviteTarget
   if (!inv) return
   pendingInvite.value = null
   try { await mutate(`/api/members/invites/${inv.id}`, { method: 'DELETE', success: t('settings.toast.inviteRevoked') }); await loadInvites() } catch { /* toast shown */ }
@@ -121,8 +124,10 @@ async function setMemberRole(id: string, role: string) {
 // Removal is a soft-disable server-side, but nothing re-enables a member today: from here it is a
 // one-way door, and the dialog says so rather than implying it can be undone.
 const pendingMember = ref<Member | null>(null)
+let memberTarget: Member | null = null
+function askRemoveMember(m: Member) { memberTarget = m; pendingMember.value = m }
 async function removeMember() {
-  const m = pendingMember.value
+  const m = memberTarget
   if (!m) return
   pendingMember.value = null
   try { await mutate(`/api/members/${m.id}`, { method: 'DELETE', invalidates: [qk.members], success: t('settings.memberRemoved', { name: m.name }) }) } catch { /* toast shown */ }
@@ -552,7 +557,7 @@ async function save() {
             <div v-for="i in invites" :key="i.id" class="flex items-center gap-3 py-1.5">
               <div class="min-w-0 flex-1 truncate text-sm text-muted-foreground">{{ i.email }}</div>
               <Badge variant="secondary" class="capitalize">{{ i.role === 'owner' ? 'Owner' : t('settings.role.member') }}</Badge>
-              <button type="button" class="text-xs text-muted-foreground hover:text-destructive" @click="pendingInvite = { id: i.id, email: i.email }">{{ t('settings.revoke') }}</button>
+              <button type="button" class="text-xs text-muted-foreground hover:text-destructive" @click="askRevokeInvite({ id: i.id, email: i.email })">{{ t('settings.revoke') }}</button>
             </div>
           </div>
 
@@ -573,7 +578,7 @@ async function save() {
                     <SelectItem value="owner">Owner</SelectItem>
                   </SelectContent>
                 </Select>
-                <button type="button" class="text-muted-foreground transition-colors hover:text-destructive" :title="t('settings.removeMember')" @click="pendingMember = m"><Trash2 class="size-4" /></button>
+                <button type="button" class="text-muted-foreground transition-colors hover:text-destructive" :title="t('settings.removeMember')" @click="askRemoveMember(m)"><Trash2 class="size-4" /></button>
               </template>
               <Badge v-else :variant="m.role === 'owner' ? 'default' : 'secondary'" class="capitalize">{{ m.role === 'owner' ? 'Owner' : t('settings.role.member') }}</Badge>
             </div>
