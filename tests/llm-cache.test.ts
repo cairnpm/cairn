@@ -197,6 +197,14 @@ describe('transient-failure handling', () => {
     await provider().detectIntent('x')
     expect(signals[0]).toBeInstanceOf(AbortSignal)
   })
+
+  it('bounds the vision call too — it runs on the same interactive path', async () => {
+    stubFetch()
+    // extractAttachments → describeImage during intake; a stalled vision call hangs the turn just
+    // as hard as a stalled completion.
+    await provider().extractAttachments!([{ kind: 'image', mime: 'image/png', filename: 'capture.png', base64: 'aGk=' }])
+    expect(signals[0]).toBeInstanceOf(AbortSignal)
+  })
 })
 
 describe('decompose prompt', () => {
