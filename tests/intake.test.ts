@@ -5,7 +5,7 @@ import { all, get, run } from '../server/db/client'
 import { getLlm } from '../server/llm/provider'
 import { computeMenu } from '../server/domain/betting'
 import { purgeIntakeSessions } from '../server/db/purgeIntake'
-import type { TurnResponse } from '../server/domain/types'
+import { ACTOR, converse, feature, featureCount, REAL, SHAPING_ANSWER } from './helpers/intake'
 
 // End-to-end intake tests. Run REAL (against the Anthropic API, key from .env) by default, or set
 // INTAKE_TEST_STUB=1 to run the deterministic offline stub. The whole product flow is exercised
@@ -14,27 +14,7 @@ import type { TurnResponse } from '../server/domain/types'
 //   pnpm test:intake            # realistic (real LLM)
 //   INTAKE_TEST_STUB=1 pnpm test:intake   # deterministic, offline
 
-const ACTOR = 'Tester'
-// Some assertions depend on real LLM judgment (e.g. enriching a feature with a NEW detail → append,
-// which the crude threshold-based stub can't replicate). Those run only against the real API.
-const REAL = !!process.env.ANTHROPIC_API_KEY
-// A generic reply that hands the agent enough to converge (real problem + appetite + a no-go).
-const SHAPING_ANSWER
-  = "Oui : c'est concret et ça casse aujourd'hui pour les utilisateurs, ça compte maintenant. "
-  + "Appétit : small (quelques jours). Hors-périmètre : rien de plus pour l'instant. Tu peux proposer."
-
-function featureCount(): number { return get<{ n: number }>('SELECT COUNT(*) AS n FROM features')!.n }
-function feature(id: string) { return get<{ id: string, title: string, status: string, signal_count: number }>('SELECT * FROM features WHERE id = ?', id)! }
-
-/** Open a session and answer clarifying questions until the agent proposes (or answers a query). */
-async function converse(message: string, maxTurns = 10): Promise<TurnResponse> {
-  let res = await intakeTurn(null, message, 'manual', ACTOR)
-  let i = 0
-  while (res.state === 'clarify' && i++ < maxTurns) {
-    res = await intakeTurn(res.session_id, SHAPING_ANSWER, 'manual', ACTOR)
-  }
-  return res
-}
+// Fixtures shared with tests/maturity.test.ts — see tests/helpers/intake.ts.
 
 beforeAll(async () => {
   ensureSchema()
