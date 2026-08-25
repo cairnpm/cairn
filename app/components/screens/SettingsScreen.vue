@@ -105,15 +105,26 @@ async function sendInvite() {
 async function copyInvite() {
   try { await navigator.clipboard.writeText(inviteUrl.value); copied.value = true; toast.success(t('settings.toast.linkCopied')); setTimeout(() => copied.value = false, 1500) } catch { /* clipboard blocked */ }
 }
-async function revokeInvite(id: string) {
-  try { await mutate(`/api/members/invites/${id}`, { method: 'DELETE', success: t('settings.toast.inviteRevoked') }); await loadInvites() } catch { /* toast shown */ }
+// Irreversible actions get a confirmation, and say what is actually lost — see removeMember and
+// resetGithubApp below. `pending*` holds the target while its dialog is open.
+const pendingInvite = ref<{ id: string, email: string } | null>(null)
+async function revokeInvite() {
+  const inv = pendingInvite.value
+  if (!inv) return
+  pendingInvite.value = null
+  try { await mutate(`/api/members/invites/${inv.id}`, { method: 'DELETE', success: t('settings.toast.inviteRevoked') }); await loadInvites() } catch { /* toast shown */ }
 }
 async function setMemberRole(id: string, role: string) {
   try { await mutate(`/api/members/${id}/role`, { body: { role }, invalidates: [qk.members], success: t('settings.toast.roleUpdated') }) }
   catch { await invalidate(qk.members) } // revert the optimistic Select value
 }
-async function removeMember(m: Member) {
-  if (!confirm(t('settings.removeConfirm', { name: m.name }))) return
+// Removal is a soft-disable server-side, but nothing re-enables a member today: from here it is a
+// one-way door, and the dialog says so rather than implying it can be undone.
+const pendingMember = ref<Member | null>(null)
+async function removeMember() {
+  const m = pendingMember.value
+  if (!m) return
+  pendingMember.value = null
   try { await mutate(`/api/members/${m.id}`, { method: 'DELETE', invalidates: [qk.members], success: t('settings.memberRemoved', { name: m.name }) }) } catch { /* toast shown */ }
 }
 
@@ -160,8 +171,12 @@ function createGithubApp() {
   navigateTo(`/api/github/manifest${q}`, { external: true })
 }
 // Start over — e.g. the App was created under the wrong account/org so the install can't see the repo.
+// This erases the encrypted private key: nothing can bring it back, the App has to be recreated. Hence
+// the confirmation, right next to "Changer de repo" where a mis-click would otherwise cost the access.
+const confirmResetGithub = ref(false)
 async function resetGithubApp() {
-  await mutate('/api/github/app', { method: 'DELETE', invalidates: [qk.settings], success: 'App GitHub supprimée — recrée-la en renseignant l\'org.' })
+  confirmResetGithub.value = false
+  await mutate('/api/github/app', { method: 'DELETE', invalidates: [qk.settings], success: t('settings.github.resetDone') })
   ghOrg.value = ''
 }
 // Opt-in: auto-open a GitHub issue when a feature is bet. Requires the App's Issues:write permission.
@@ -427,7 +442,7 @@ async function save() {
                   </div>
                   <div class="flex items-center gap-2">
                     <Button variant="outline" size="sm" @click="connectGithub">Changer de repo</Button>
-                    <Button variant="ghost" size="sm" class="text-muted-foreground hover:text-destructive" @click="resetGithubApp">Supprimer l'App</Button>
+                    <Button variant="ghost" size="sm" class="text-muted-foreground hover:text-destructive" @click="confirmResetGithub = true">Supprimer l'App</Button>
                   </div>
                 </div>
                 <div class="mt-4 flex items-start justify-between gap-3 border-t pt-4">
@@ -443,7 +458,7 @@ async function save() {
                 <div v-if="cfg?.github_app_ready" class="space-y-2">
                   <div class="flex items-center gap-2">
                     <Button @click="connectGithub">Grant access</Button>
-                    <Button variant="ghost" size="sm" class="text-muted-foreground hover:text-destructive" @click="resetGithubApp">Supprimer l'App</Button>
+                    <Button variant="ghost" size="sm" class="text-muted-foreground hover:text-destructive" @click="confirmResetGithub = true">Supprimer l'App</Button>
                   </div>
                   <p class="text-xs text-muted-foreground">L'install ne montre pas ton repo (ex. un repo d'organisation) ? L'App a été créée sous le mauvais compte — supprime-la et recrée-la en renseignant l'org.</p>
                 </div>
@@ -537,7 +552,7 @@ async function save() {
             <div v-for="i in invites" :key="i.id" class="flex items-center gap-3 py-1.5">
               <div class="min-w-0 flex-1 truncate text-sm text-muted-foreground">{{ i.email }}</div>
               <Badge variant="secondary" class="capitalize">{{ i.role === 'owner' ? 'Owner' : t('settings.role.member') }}</Badge>
-              <button type="button" class="text-xs text-muted-foreground hover:text-destructive" @click="revokeInvite(i.id)">{{ t('settings.revoke') }}</button>
+              <button type="button" class="text-xs text-muted-foreground hover:text-destructive" @click="pendingInvite = { id: i.id, email: i.email }">{{ t('settings.revoke') }}</button>
             </div>
           </div>
 
@@ -558,7 +573,7 @@ async function save() {
                     <SelectItem value="owner">Owner</SelectItem>
                   </SelectContent>
                 </Select>
-                <button type="button" class="text-muted-foreground transition-colors hover:text-destructive" :title="t('settings.removeMember')" @click="removeMember(m)"><Trash2 class="size-4" /></button>
+                <button type="button" class="text-muted-foreground transition-colors hover:text-destructive" :title="t('settings.removeMember')" @click="pendingMember = m"><Trash2 class="size-4" /></button>
               </template>
               <Badge v-else :variant="m.role === 'owner' ? 'default' : 'secondary'" class="capitalize">{{ m.role === 'owner' ? 'Owner' : t('settings.role.member') }}</Badge>
             </div>
@@ -566,5 +581,26 @@ async function save() {
         </section>
       </div>
     </div>
+
+    <ConfirmDialog
+      destructive :open="!!pendingMember" :title="t('settings.removeConfirm', { name: pendingMember?.name ?? '' })"
+      :description="t('settings.removeConfirmDesc')"
+      :cancel-label="t('backlog.cancel')" :confirm-label="t('settings.removeMember')"
+      @update:open="v => { if (!v) pendingMember = null }" @confirm="removeMember"
+    />
+
+    <ConfirmDialog
+      destructive :open="!!pendingInvite" :title="t('settings.revokeConfirm')"
+      :description="t('settings.revokeConfirmDesc', { email: pendingInvite?.email ?? '' })"
+      :cancel-label="t('backlog.cancel')" :confirm-label="t('settings.revoke')"
+      @update:open="v => { if (!v) pendingInvite = null }" @confirm="revokeInvite"
+    />
+
+    <ConfirmDialog
+      v-model:open="confirmResetGithub" destructive
+      :title="t('settings.github.resetTitle')" :description="t('settings.github.resetDesc')"
+      :cancel-label="t('backlog.cancel')" :confirm-label="t('settings.github.resetConfirm')"
+      @confirm="resetGithubApp"
+    />
   </div>
 </template>
