@@ -25,8 +25,10 @@ const MAX_ATTEMPTS = 4
 const REQUEST_TIMEOUT_MS = 120_000
 // Matches what the official SDKs retry: rate limit, conflict, request timeout, overloaded, and 5xx.
 const RETRYABLE = new Set([408, 409, 429, 529])
-// A server asking us to wait minutes is not worth blocking an interactive turn for — fall back to the
-// stub instead. The cap keeps `retry-after` a hint we honour, not a lever that stalls the request.
+// A server asking us to wait minutes is not worth blocking an interactive turn for: past this we give
+// up immediately and let the caller fall back to the stub. Clamping instead would be worse than the
+// blind backoff it replaced — three capped sleeps against a server that asked for 300s is a guaranteed
+// -premature retry AND a much longer stall.
 const MAX_RETRY_AFTER_MS = 30_000
 
 const sleep = (ms: number) => new Promise(res => setTimeout(res, ms))
@@ -43,7 +45,7 @@ function retryAfterMs(headers: Headers): number | null {
   const seconds = Number(raw)
   const ms = Number.isFinite(seconds) ? seconds * 1000 : new Date(raw).getTime() - Date.now()
   if (!Number.isFinite(ms) || ms <= 0) return null
-  return Math.min(ms, MAX_RETRY_AFTER_MS)
+  return ms
 }
 
 interface CallOpts { temperature?: number, schema?: object }
@@ -196,15 +198,26 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         // buys nothing and costs a wasted round-trip on the user's turn each time.
         let r = await attempt(!schemaUnsupported)
         if (!r.ok && r.status === 400 && opts.schema && !schemaUnsupported) {
-          console.warn('[llm] schema request 400 → structured output unsupported, degrading for this provider')
-          schemaUnsupported = true
+          // A 400 is NOT proof the schema is at fault — an over-long input 400s too, and `propose` /
+          // `decompose` can send very large user messages. Only latch when dropping the schema
+          // actually fixes it; otherwise this one oversized request would silently disable
+          // structured output for every later call in the process.
           r = await attempt(false)
+          if (r.ok) {
+            console.warn('[llm] schema request 400, schemaless retry succeeded → degrading this provider')
+            schemaUnsupported = true
+          }
         }
         if (r.ok) return r.text
         console.warn(`[llm] callClaude non-ok status=${r.status} schema=${!!opts.schema} attempt=${i}`)
         if (!RETRYABLE.has(r.status) && r.status < 500) return null
         // Honour the server's own backpressure signal when it sends one — guessing an interval either
-        // burns an attempt on a premature retry or stalls the turn longer than asked.
+        // burns an attempt on a premature retry or stalls the turn longer than asked. When it asks for
+        // longer than we're willing to hold an interactive turn, stop now rather than sleep it out.
+        if (r.retryAfterMs !== null && r.retryAfterMs > MAX_RETRY_AFTER_MS) {
+          console.warn(`[llm] retry-after ${Math.round(r.retryAfterMs / 1000)}s exceeds budget → stub`)
+          return null
+        }
         if (i < MAX_ATTEMPTS - 1) { await sleep(r.retryAfterMs ?? backoffMs(i)); continue }
       } catch (e) { console.warn(`[llm] callClaude threw (attempt ${i}, schema=${!!opts.schema}): ${String(e)}`) }
       if (i < MAX_ATTEMPTS - 1) await sleep(backoffMs(i))
@@ -218,6 +231,8 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        // Same deadline as callClaude: this runs on the interactive intake path too (extractAttachments).
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         body: JSON.stringify({
           model, max_tokens: 300,
           messages: [{
@@ -540,7 +555,10 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + `Do NOT invent problems that are not genuinely raised. Write every field in ${langName(lang)}. `
         + 'When an "Existing code" block is present, treat it as GROUND TRUTH of what is already BUILT: do NOT extract an '
         + 'already-shipped capability as a NEW signal, and when a signal overlaps existing code, REFLECT that in the problem '
-        + 'statement itself (e.g. "X existe déjà (fichier Y) ; le besoin porte sur Z").',
+        + 'statement itself (e.g. "X existe déjà (fichier Y) ; le besoin porte sur Z"). '
+        + 'A "Roadmap (READ-ONLY context)" block is CONTEXT, never source material: it tells you what is '
+        + 'already planned or in flight so you do not re-extract it. NEVER emit a roadmap entry as a signal — '
+        + 'signals come from the Source block ALONE.',
         // The roadmap belongs with the other volatile context, NOT in the cached system prefix: it
         // moves whenever a feature or hill does, and anything in the prefix that moves invalidates
         // the whole entry. `propose` already places it here — this keeps the rule uniform.

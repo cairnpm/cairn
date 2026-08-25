@@ -171,9 +171,51 @@ describe('transient-failure handling', () => {
     expect(sent[2]).not.toHaveProperty('output_config')
   })
 
+  it('gives up instead of sleeping out a retry-after longer than an interactive turn can wait', async () => {
+    stubFetch({ status: 429, headers: { 'retry-after': '300' } })
+    const started = Date.now()
+    await provider().detectIntent('x')
+    // Clamping to a 30s cap and retrying would stall ~90s AND retry prematurely — worse on both
+    // counts than the blind backoff it replaced.
+    expect(Date.now() - started).toBeLessThan(1000)
+    expect(sent).toHaveLength(1)
+  })
+
+  it('does not latch structured output off when the schemaless retry fails too', async () => {
+    // An over-long input 400s whatever the schema. Latching on that would silently disable
+    // structured output for every later call in the process.
+    stubFetch({ status: 400 }, { status: 400 }, { status: 200 })
+    const llm = provider()
+    await llm.detectIntent('un signal démesuré')
+    sent = []
+    await llm.detectIntent('un signal normal')
+    expect(sent[0]).toHaveProperty('output_config')
+  })
+
   it('gives every request a deadline so a stalled call cannot hang the intake turn', async () => {
     stubFetch()
     await provider().detectIntent('x')
     expect(signals[0]).toBeInstanceOf(AbortSignal)
+  })
+})
+
+describe('decompose prompt', () => {
+  it('tells the model the roadmap is context, not source material', async () => {
+    stubFetch()
+    await provider().decompose({ raw: 'compte-rendu', roadmap: 'R', code: '', lang: 'fr' })
+    // The block now sits next to the text the model is told to extract signals from, so the rule
+    // that keeps planned features from being re-emitted has to be stated. It is static, so it
+    // stays inside the cached prefix.
+    expect(systemBlock(0).text).toContain('never source material')
+  })
+})
+
+describe('cache hit rate', () => {
+  it('counts write tokens in the denominator — they are prompt tokens too', () => {
+    // 5 mints + 5 reads: half the prompt spend went to the 1.25x write premium.
+    recordUsage({ cache_creation_input_tokens: 4600, input_tokens: 200 })
+    recordUsage({ cache_read_input_tokens: 4600, input_tokens: 200 })
+    // Excluding writes would report 0.92 and hide it.
+    expect(llmUsage().cache_hit_rate).toBeCloseTo(0.479, 2)
   })
 })
