@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createAnthropicProvider } from '../server/llm/anthropic'
 import { llmUsage, recordUsage, resetUsage } from '../server/llm/usage'
+import { ensureSchema } from '../server/db/schema'
 
 // Zero network: global fetch is stubbed and restored. These assert the REQUEST SHAPE — that the
 // cache breakpoint actually leaves the process — because a missing `cache_control` fails silently
@@ -36,6 +37,8 @@ function stubFetch(usage?: Record<string, number>) {
   })
 }
 
+// `productContext()` reads the settings table, so the schema has to exist (same as the other suites).
+beforeAll(() => ensureSchema())
 beforeEach(() => resetUsage())
 afterEach(() => { globalThis.fetch = realFetch })
 
@@ -57,6 +60,25 @@ describe('prompt caching', () => {
     // The prefix must not move between calls, or every request pays the write premium and reads nothing.
     expect(systemBlock(0).text).not.toContain('un signal bien particulier')
     expect(JSON.stringify(sent[0]?.messages)).toContain('un signal bien particulier')
+  })
+
+  it('keeps the roadmap out of the decompose prefix — it moves whenever a feature does', async () => {
+    stubFetch()
+    const llm = createAnthropicProvider({ apiKey: 'sk-test', model: 'claude-sonnet-4-6' })
+    await llm.decompose({ raw: 'compte-rendu', roadmap: 'ROADMAP-MARKER-42', code: '', lang: 'fr' })
+
+    expect(systemBlock(0).text).not.toContain('ROADMAP-MARKER-42')
+    expect(JSON.stringify(sent[0]?.messages)).toContain('ROADMAP-MARKER-42')
+  })
+
+  it('holds the prefix steady while the volatile context changes underneath', async () => {
+    stubFetch()
+    const llm = createAnthropicProvider({ apiKey: 'sk-test', model: 'claude-sonnet-4-6' })
+    await llm.decompose({ raw: 'a', roadmap: 'roadmap v1', code: '', lang: 'fr' })
+    await llm.decompose({ raw: 'b', roadmap: 'roadmap v2 — une feature a bougé', code: 'src/x.ts:1', lang: 'fr' })
+
+    // Same prefix despite a different roadmap and code block → the second call reads the cache.
+    expect(JSON.stringify(systemBlock(0))).toBe(JSON.stringify(systemBlock(1)))
   })
 
   it('sends a byte-identical system prefix across calls', async () => {

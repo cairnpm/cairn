@@ -505,9 +505,11 @@ export function createAnthropicProvider(cfg: AnthropicConfig): LlmProvider {
         + `Do NOT invent problems that are not genuinely raised. Write every field in ${langName(lang)}. `
         + 'When an "Existing code" block is present, treat it as GROUND TRUTH of what is already BUILT: do NOT extract an '
         + 'already-shipped capability as a NEW signal, and when a signal overlaps existing code, REFLECT that in the problem '
-        + 'statement itself (e.g. "X existe déjà (fichier Y) ; le besoin porte sur Z").'
-        + roadmapBlock,
-        `Source:\n${raw.slice(0, 120000)}${codeBlock}`,
+        + 'statement itself (e.g. "X existe déjà (fichier Y) ; le besoin porte sur Z").',
+        // The roadmap belongs with the other volatile context, NOT in the cached system prefix: it
+        // moves whenever a feature or hill does, and anything in the prefix that moves invalidates
+        // the whole entry. `propose` already places it here — this keeps the rule uniform.
+        `Source:\n${raw.slice(0, 120000)}${roadmapBlock}${codeBlock}`,
         2600, { temperature: 0, schema: DECOMPOSE_SCHEMA },
       )
       const parsed = parseJson<{ signals?: DecomposedSignal[] }>(text)
