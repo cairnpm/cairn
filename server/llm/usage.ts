@@ -38,7 +38,10 @@ export function recordUsage(u: ApiUsage | undefined): void {
  * prompt. That's the whole reason these counters exist.
  */
 export function llmUsage(): UsageTotals & { cache_hit_rate: number } {
-  const prompt = totals.input + totals.cache_read
+  // Every prompt token is billed exactly once, as one of these three. Leaving `cache_write` out of the
+  // denominator would flatter the rate: a workload idle enough that entries expire between calls pays
+  // the 1.25x write over and over, and would still report a near-perfect hit rate.
+  const prompt = totals.input + totals.cache_read + totals.cache_write
   return { ...totals, cache_hit_rate: prompt ? Number((totals.cache_read / prompt).toFixed(3)) : 0 }
 }
 
