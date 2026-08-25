@@ -26,11 +26,18 @@ const CASES: { name: string, raw: string, want: Outcome, why: string, known?: tr
     // whether accounts already exist, or are provisioned on the fly, changes the scope entirely, and an
     // agent that asks instead of guessing is doing its job. What must hold is that a signal a human HAS
     // specified gets shaped and reaches the betting table.
-    // KNOWN FAILING (#11): the agent files implementation unknowns ("is the auth layer abstracted?",
-    // "who configures the IdP?") as open_questions, which force `shaping`, instead of as rabbit_holes,
-    // which are compatible with `shaped`. It writes "le périmètre minimal est clair" in the same
-    // rationale. Stating that boundary in the prompt fixes this case 3/3 — and makes the agent shape
-    // off-product chatter into a feature, which is worse. The categories are coupled; see the issue.
+    // SKIPPED, and NOT because the agent is wrong (#11). It returns `shaping`, asking whether the auth
+    // layer is abstracted or a refactor comes first. In Shape Up an unknown that can blow the appetite
+    // is exactly what blocks a bet, so that is defensible — the expectation here is the arguable half.
+    //
+    // What is worth investigating is narrower: "is the auth layer abstracted?" is a RESEARCH task, not
+    // a team decision, and Cairn can answer it — the intake greps the linked repo (`codeGroundingFor`).
+    // No repo was linked in any of these runs, so the agent could only ask. Whether it resolves such
+    // unknowns from the code when one IS linked is untested, and is the real open question.
+    //
+    // Forcing this case green by stating an open_questions/rabbit_holes boundary in the prompt works
+    // 3/3 — and makes the agent shape off-product chatter into a feature 3/3. The categories are
+    // coupled; that trade was measured and rejected.
     known: true,
     name: 'named integration, scope stated', want: 'shaped',
     raw: 'Les clients enterprise réclament le SSO via Okta/SAML 2.0 ; deux deals sont bloqués dessus. '
@@ -76,7 +83,7 @@ describe.runIf(REAL)('intake maturity — the shaped / shaping / discard boundar
   for (const c of CASES) {
     // Skipped, not `it.fails`: the assertion is non-deterministic, so encoding "must fail" would go
     // red on a lucky draw and add noise to a suite that is already non-blocking — the exact disease
-    // this work diagnosed. The defect is documented in #11; unskip when someone attacks it.
+    // this work diagnosed. See #11; unskip when someone tests it against a linked repo.
     const run = c.known ? it.skip : it
     run(`${c.want}: ${c.name}`, async () => {
       const got: Outcome[] = []
@@ -86,7 +93,8 @@ describe.runIf(REAL)('intake maturity — the shaped / shaping / discard boundar
     }, 180_000 * REPS)
   }
 
-  // Same root cause as the case above (#11) — kept as the product-level statement of the defect.
+  // Same case as above (#11) — kept because it states the consequence that actually matters: a bet
+  // candidate has to reach the betting table, not merely carry the right label.
   it.skip('a shaped feature is actually bettable — the whole point of the distinction', async () => {
     const res = await converse(CASES[0]!.raw)
     const commit = await intakeCommit(res.session_id, ACTOR)
